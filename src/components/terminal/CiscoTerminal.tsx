@@ -1,0 +1,275 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useNetworkStore } from '../../store/useNetworkStore';
+import { CliParser } from '../../core/cli/Parser';
+import { CommandHelpItem } from '../../types/cli';
+import { 
+  Terminal as TerminalIcon, 
+  X, 
+  Trash2, 
+  HelpCircle, 
+  Maximize2, 
+  Minimize2,
+  ChevronRight,
+  Zap
+} from 'lucide-react';
+
+export const CiscoTerminal: React.FC = () => {
+  const { 
+    devices, 
+    activeTerminalDeviceId, 
+    openTerminalTabs, 
+    closeTerminalTab, 
+    setActiveTerminalTab,
+    cliContexts,
+    terminalOutputs,
+    executeCommand,
+    clearTerminalOutput
+  } = useNetworkStore();
+
+  const [inputVal, setInputVal] = useState('');
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [helpList, setHelpList] = useState<CommandHelpItem[] | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const terminalEndRef = useRef<HTMLDivElement>(null);
+
+  const activeDevice = devices.find(d => d.id === activeTerminalDeviceId);
+  const activeContext = activeTerminalDeviceId ? cliContexts[activeTerminalDeviceId] : null;
+  const currentOutputs = activeTerminalDeviceId ? (terminalOutputs[activeTerminalDeviceId] || []) : [];
+
+  // Auto-scroll on new output
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentOutputs]);
+
+  // Focus input when active tab changes
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [activeTerminalDeviceId]);
+
+  if (!activeDevice || !activeContext) {
+    return null;
+  }
+
+  const prompt = activeDevice.getPrompt(activeContext);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // 1. Enter Key
+    if (e.key === 'Enter') {
+      executeCommand(activeDevice.id, inputVal);
+      setInputVal('');
+      setHistoryIndex(-1);
+      setHelpList(null);
+      return;
+    }
+
+    // 2. Tab Key (Autocompletion)
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const completion = CliParser.complete(inputVal, activeContext, activeDevice);
+      setInputVal(completion.completedText);
+      if (completion.candidates.length > 1) {
+        // Show candidates
+        executeCommand(activeDevice.id, inputVal);
+        const candidateHelp: CommandHelpItem[] = completion.candidates.map(c => ({
+          command: c,
+          description: ''
+        }));
+        setHelpList(candidateHelp);
+      }
+      return;
+    }
+
+    // 3. Question Mark '?' Key (Contextual Help)
+    if (e.key === '?') {
+      e.preventDefault();
+      const items = CliParser.getHelp(inputVal, activeContext, activeDevice);
+      setHelpList(items);
+      return;
+    }
+
+    // 4. Arrow Up (History Previous)
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const history = activeDevice.commandHistory;
+      if (history.length === 0) return;
+      const nextIndex = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
+      setHistoryIndex(nextIndex);
+      setInputVal(history[nextIndex] || '');
+      return;
+    }
+
+    // 5. Arrow Down (History Next)
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const history = activeDevice.commandHistory;
+      if (historyIndex === -1) return;
+      const nextIndex = historyIndex + 1;
+      if (nextIndex >= history.length) {
+        setHistoryIndex(-1);
+        setInputVal('');
+      } else {
+        setHistoryIndex(nextIndex);
+        setInputVal(history[nextIndex]);
+      }
+      return;
+    }
+
+    // 6. Ctrl + C (Abort line)
+    if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      executeCommand(activeDevice.id, '^C');
+      setInputVal('');
+      setHelpList(null);
+      return;
+    }
+
+    // Hide help list if user types normal characters
+    if (helpList && e.key.length === 1) {
+      setHelpList(null);
+    }
+  };
+
+  const handleQuickCmd = (cmd: string) => {
+    executeCommand(activeDevice.id, cmd);
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div className={`border-t border-slate-800 bg-cisco-terminal flex flex-col transition-all duration-200 z-20 shadow-2xl ${
+      isExpanded ? 'h-[620px]' : 'h-72'
+    }`}>
+      {/* Tab Bar & Action Controls */}
+      <div className="h-9 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-2 select-none shrink-0">
+        {/* Device Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {openTerminalTabs.map((tabId) => {
+            const dev = devices.find(d => d.id === tabId);
+            if (!dev) return null;
+            const isActive = tabId === activeTerminalDeviceId;
+
+            return (
+              <div
+                key={tabId}
+                onClick={() => setActiveTerminalTab(tabId)}
+                className={`flex items-center gap-2 px-3 py-1 rounded-t-md text-xs font-mono cursor-pointer transition-all border-t border-x ${
+                  isActive
+                    ? 'bg-cisco-terminal text-cyan-400 border-slate-700 font-semibold shadow-sm'
+                    : 'bg-slate-950/60 text-slate-400 border-transparent hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <TerminalIcon className="w-3.5 h-3.5" />
+                <span>{dev.hostname}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTerminalTab(tabId);
+                  }}
+                  className="hover:text-rose-400 ml-1 rounded"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Quick Snippets & Window Controls */}
+        <div className="flex items-center gap-1.5">
+          {/* Quick Command Snippets */}
+          <div className="hidden md:flex items-center gap-1 mr-2 text-[10px]">
+            <button 
+              onClick={() => handleQuickCmd('show ip interface brief')}
+              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+            >
+              sh ip int br
+            </button>
+            <button 
+              onClick={() => handleQuickCmd('show running-config')}
+              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+            >
+              sh run
+            </button>
+            <button 
+              onClick={() => handleQuickCmd('show ip route')}
+              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+            >
+              sh ip ro
+            </button>
+            <button 
+              onClick={() => handleQuickCmd('configure terminal')}
+              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+            >
+              conf t
+            </button>
+          </div>
+
+          <button
+            onClick={() => clearTerminalOutput(activeDevice.id)}
+            title="Clear Console Buffer"
+            className="p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            title={isExpanded ? 'Collapse' : 'Expand'}
+            className="p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800"
+          >
+            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Terminal Screen & Logs */}
+      <div 
+        onClick={() => inputRef.current?.focus()}
+        className="flex-1 p-3 overflow-y-auto font-mono text-xs text-slate-200 space-y-1 select-text cursor-text"
+      >
+        {currentOutputs.map((line, idx) => (
+          <pre key={idx} className="whitespace-pre-wrap leading-relaxed font-mono">
+            {line}
+          </pre>
+        ))}
+
+        {/* Contextual Help Modal / Tooltip */}
+        {helpList && helpList.length > 0 && (
+          <div className="my-2 p-2.5 bg-slate-900/95 border border-cyan-500/50 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+            <div className="text-[10px] text-cyan-400 font-bold uppercase mb-1 flex items-center gap-1">
+              <HelpCircle className="w-3 h-3" />
+              <span>Available Cisco IOS Commands in this mode:</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
+              {helpList.map((item, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-emerald-400 font-bold shrink-0">{item.command}</span>
+                  <span className="text-slate-400">{item.description}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Interactive CLI Input Line */}
+        <div className="flex items-center gap-1.5 text-xs font-mono pt-1">
+          <span className="text-emerald-400 font-bold shrink-0">{prompt}</span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputVal}
+            onChange={(e) => setInputVal(e.target.value)}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            spellCheck={false}
+            autoComplete="off"
+            className="flex-1 bg-transparent text-slate-100 focus:outline-none font-mono caret-cyan-400"
+          />
+        </div>
+
+        <div ref={terminalEndRef} />
+      </div>
+    </div>
+  );
+};

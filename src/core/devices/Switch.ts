@@ -1,0 +1,258 @@
+import { Device } from './Device';
+import { DevicePosition, VlanInfo, MacTableEntry, RouteEntry, DhcpPool } from '../../types/network';
+import { CliContext, CliExecutionResult } from '../../types/cli';
+import { SubnetUtils } from '../network/Subnet';
+
+export class Switch extends Device {
+  vlanDatabase: Map<number, VlanInfo> = new Map();
+  macTable: MacTableEntry[] = [];
+  isLayer3: boolean = false;
+  routingTable: RouteEntry[] = [];
+  spanningTreeMode: 'pvst' | 'rapid-pvst' | 'mst' = 'pvst';
+  defaultGateway?: string;
+  dhcpPools: Map<string, DhcpPool> = new Map();
+  dhcpExcludedAddresses: string[] = [];
+
+  constructor(id: string, hostname: string, position: DevicePosition, isLayer3: boolean = false) {
+    super(id, hostname, isLayer3 ? 'switch-l3' : 'switch', position);
+    this.isLayer3 = isLayer3;
+    this.ipRouting = isLayer3;
+
+    // Default VLAN 1
+    this.vlanDatabase.set(1, { id: 1, name: 'default', status: 'active' });
+
+    // 24 FastEthernet ports
+    for (let i = 1; i <= 24; i++) {
+      const pName = `FastEthernet0/${i}`;
+      const short = `Fa0/${i}`;
+      this.addInterface({
+        name: pName,
+        shortName: short,
+        macAddress: `0002.ba${(i < 10 ? '0' + i : i)}.${Math.floor(Math.random() * 8999 + 1000)}`,
+        status: 'up',
+        isShutdown: false,
+        switchportMode: 'access',
+        accessVlan: 1,
+        trunkAllowedVlans: Array.from({ length: 4094 }, (_, idx) => idx + 1),
+        nativeVlan: 1,
+        speed: '100Mb/s',
+        duplex: 'auto',
+        portSecurity: {
+          enabled: false,
+          maxMacs: 1,
+          violation: 'shutdown',
+          stickyMacs: []
+        }
+      });
+    }
+
+    // 2 GigabitEthernet ports (uplinks)
+    for (let i = 1; i <= 2; i++) {
+      const pName = `GigabitEthernet0/${i}`;
+      const short = `Gi0/${i}`;
+      this.addInterface({
+        name: pName,
+        shortName: short,
+        macAddress: `0002.ba${(24 + i)}.${Math.floor(Math.random() * 8999 + 1000)}`,
+        status: 'up',
+        isShutdown: false,
+        switchportMode: 'access',
+        accessVlan: 1,
+        trunkAllowedVlans: Array.from({ length: 4094 }, (_, idx) => idx + 1),
+        nativeVlan: 1,
+        speed: '1000Mb/s',
+        duplex: 'auto'
+      });
+    }
+
+    // Management Interface Vlan1
+    this.addInterface({
+      name: 'Vlan1',
+      shortName: 'Vl1',
+      macAddress: `0002.ba00.0001`,
+      status: 'down',
+      isShutdown: true
+    });
+  }
+
+  learnMac(vlan: number, macAddress: string, port: string): void {
+    const existing = this.macTable.find(e => e.macAddress.toLowerCase() === macAddress.toLowerCase() && e.vlan === vlan);
+    if (existing) {
+      existing.port = port;
+    } else {
+      this.macTable.push({
+        vlan,
+        macAddress,
+        type: 'DYNAMIC',
+        port
+      });
+    }
+  }
+
+  addVlan(id: number, name?: string): void {
+    const vlanName = name || `VLAN${id.toString().padStart(4, '0')}`;
+    this.vlanDatabase.set(id, { id, name: vlanName, status: 'active' });
+
+    // If L3 switch, allow SVI creation
+    if (this.isLayer3 && !this.interfaces.has(`Vlan${id}`)) {
+      this.addInterface({
+        name: `Vlan${id}`,
+        shortName: `Vl${id}`,
+        macAddress: `0002.ba00.${id.toString(16).padStart(4, '0')}`,
+        status: 'down',
+        isShutdown: true
+      });
+    }
+  }
+
+  updateL3ConnectedRoutes(): void {
+    if (!this.isLayer3 || !this.ipRouting) return;
+    this.routingTable = this.routingTable.filter(r => r.protocol !== 'C' && r.protocol !== 'L');
+
+    for (const iface of this.interfaces.values()) {
+      if (iface.status === 'up' && !iface.isShutdown && iface.ipAddress && iface.subnetMask) {
+        const netAddr = SubnetUtils.getNetworkAddress(iface.ipAddress, iface.subnetMask);
+        const cidr = SubnetUtils.maskToCidr(iface.subnetMask);
+
+        this.routingTable.push({
+          network: netAddr,
+          mask: iface.subnetMask,
+          cidr,
+          exitInterface: iface.name,
+          protocol: 'C',
+          adminDistance: 0,
+          metric: 0
+        });
+
+        this.routingTable.push({
+          network: iface.ipAddress,
+          mask: '255.255.255.255',
+          cidr: 32,
+          exitInterface: iface.name,
+          protocol: 'L',
+          adminDistance: 0,
+          metric: 0
+        });
+      }
+    }
+  }
+
+  executeCli(commandLine: string, context: CliContext): CliExecutionResult {
+    return { output: '' };
+  }
+
+  getRunningConfig(): string {
+    const lines: string[] = [
+      'Building configuration...',
+      'Current configuration : 2410 bytes',
+      '!',
+      'version 15.2',
+      'no service timestamps log datetime msec',
+      'no service timestamps debug datetime msec',
+      this.servicePasswordEncryption ? 'service password-encryption' : 'no service password-encryption',
+      '!',
+      `hostname ${this.hostname}`,
+      '!'
+    ];
+
+    if (this.bannerMotd) {
+      lines.push(`banner motd ^C${this.bannerMotd}^C`, '!');
+    }
+
+    if (this.enableSecret) {
+      lines.push(`enable secret 5 ${this.enableSecret}`, '!');
+    }
+
+    if (this.isLayer3 && this.ipRouting) {
+      lines.push('ip routing', '!');
+    }
+
+    if (this.defaultGateway) {
+      lines.push(`ip default-gateway ${this.defaultGateway}`, '!');
+    }
+
+    // DHCP Pools
+    for (const pool of this.dhcpPools.values()) {
+      lines.push(`ip dhcp pool ${pool.name}`);
+      if (pool.network && pool.mask) lines.push(` network ${pool.network} ${pool.mask}`);
+      if (pool.defaultRouter) lines.push(` default-router ${pool.defaultRouter}`);
+      if (pool.dnsServer) lines.push(` dns-server ${pool.dnsServer}`);
+      lines.push('!');
+    }
+
+    // Spanning Tree
+    lines.push(`spanning-tree mode ${this.spanningTreeMode}`);
+    lines.push('spanning-tree extend system-id', '!');
+
+    // VLANs
+    for (const [vlanId, vlan] of this.vlanDatabase.entries()) {
+      if (vlanId !== 1) {
+        lines.push(`vlan ${vlanId}`);
+        lines.push(` name ${vlan.name}`);
+        lines.push('!');
+      }
+    }
+
+    // Interfaces
+    for (const iface of this.interfaces.values()) {
+      lines.push(`interface ${iface.name}`);
+      if (iface.description) lines.push(` description ${iface.description}`);
+
+      if (iface.isDhcpClient) {
+        lines.push(' ip address dhcp');
+      } else if (iface.ipAddress && iface.subnetMask) {
+        lines.push(` ip address ${iface.ipAddress} ${iface.subnetMask}`);
+      }
+
+      if (!iface.name.startsWith('Vlan')) {
+        if (iface.switchportMode === 'none') {
+          lines.push(' no switchport');
+        } else if (iface.switchportMode === 'trunk') {
+          lines.push(' switchport mode trunk');
+          if (iface.nativeVlan && iface.nativeVlan !== 1) {
+            lines.push(` switchport trunk native vlan ${iface.nativeVlan}`);
+          }
+          if (iface.trunkAllowedVlans && iface.trunkAllowedVlans.length < 4094) {
+            lines.push(` switchport trunk allowed vlan ${iface.trunkAllowedVlans.join(',')}`);
+          }
+        } else if (iface.switchportMode === 'access') {
+          lines.push(' switchport mode access');
+          if (iface.accessVlan && iface.accessVlan !== 1) {
+            lines.push(` switchport access vlan ${iface.accessVlan}`);
+          }
+        }
+
+        if (iface.portSecurity && iface.portSecurity.enabled) {
+          lines.push(' switchport port-security');
+          if (iface.portSecurity.maxMacs > 1) {
+            lines.push(` switchport port-security maximum ${iface.portSecurity.maxMacs}`);
+          }
+          if (iface.portSecurity.violation) {
+            lines.push(` switchport port-security violation ${iface.portSecurity.violation}`);
+          }
+          for (const mac of iface.portSecurity.stickyMacs) {
+            lines.push(` switchport port-security mac-address sticky ${mac}`);
+          }
+        }
+      }
+
+      if (iface.isShutdown) {
+        lines.push(' shutdown');
+      } else {
+        lines.push(' no shutdown');
+      }
+      lines.push('!');
+    }
+
+    // Management lines
+    lines.push('line con 0');
+    if (this.consolePassword) lines.push(` password ${this.consolePassword}`, ' login');
+    lines.push('!');
+    lines.push('line vty 0 4');
+    if (this.vtyPassword) lines.push(` password ${this.vtyPassword}`, ' login');
+    lines.push('!');
+    lines.push('end');
+
+    return lines.join('\n');
+  }
+}
