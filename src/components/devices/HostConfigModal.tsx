@@ -31,8 +31,8 @@ const isHostDevice = (d: any): d is Host => {
 };
 
 export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClose }) => {
-  const { devices, updateHostConfig } = useNetworkStore();
-  const host = devices.find(d => d.id === hostId);
+  const host = useNetworkStore((state) => hostId ? state.devices.find(d => d.id === hostId) : undefined);
+  const updateHostConfig = useNetworkStore((state) => state.updateHostConfig);
 
   const [activeTab, setActiveTab] = useState<'ip' | 'prompt'>('ip');
   
@@ -148,7 +148,8 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
 
     if (val) {
       // Jalankan permohonan DHCP nyata pada domain broadcast Layer 2
-      const dhcpRes = TopologyTraversal.acquireHostDhcp(hostDev, devices);
+      const allDevs = useNetworkStore.getState().devices;
+      const dhcpRes = TopologyTraversal.acquireHostDhcp(hostDev, allDevs);
       setIpAddress(dhcpRes.ipAddress);
       setSubnetMask(dhcpRes.subnetMask);
       setDefaultGateway(dhcpRes.defaultGateway);

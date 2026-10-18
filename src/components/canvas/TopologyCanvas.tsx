@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNetworkStore } from '../../store/useNetworkStore';
 import { Device } from '../../core/devices/Device';
 import { Host } from '../../core/devices/Host';
@@ -16,7 +16,8 @@ import {
   Settings,
   X,
   Radio,
-  Move
+  Move,
+  AlertCircle
 } from 'lucide-react';
 
 interface TopologyCanvasProps {
@@ -55,6 +56,57 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const [selectedTargetPort, setSelectedTargetPort] = useState<string>('');
 
   const svgRef = useRef<SVGSVGElement>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const isPortConnected = useCallback((devId: string, portName: string) => {
+    return links.some(
+      l => (l.sourceDeviceId === devId && l.sourcePort === portName) ||
+           (l.targetDeviceId === devId && l.targetPort === portName)
+    );
+  }, [links]);
+
+  const isPhysicalPort = (portName: string) => {
+    if (!portName) return false;
+    const lower = portName.toLowerCase();
+    return !lower.startsWith('vlan') && !lower.startsWith('loopback') && !lower.startsWith('null');
+  };
+
+  // Ultra-smooth 60fps window-level drag handler
+  useEffect(() => {
+    if (!draggingDeviceId) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      const newX = Math.max(50, Math.min(Math.round(e.clientX - dragOffset.x), 1300));
+      const newY = Math.max(50, Math.min(Math.round(e.clientY - dragOffset.y), 850));
+
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+      rafRef.current = requestAnimationFrame(() => {
+        moveDevice(draggingDeviceId, newX, newY);
+      });
+    };
+
+    const handleWindowMouseUp = () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      setDraggingDeviceId(null);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [draggingDeviceId, dragOffset, moveDevice]);
 
   // Drag handlers
   const handleMouseDown = (e: React.MouseEvent, dev: Device) => {
@@ -64,12 +116,17 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     if (connectingCable) {
       if (!cableSourceDevId) {
         setCableSourceDevId(dev.id);
-      } else if (cableSourceDevId !== dev.id) {
+      } else if (cableSourceDevId === dev.id) {
+        // Klik perangkat yang sama -> batalkan pemilihan sumber
+        setCableSourceDevId(null);
+      } else {
         // Open port selection modal
         const src = devices.find(d => d.id === cableSourceDevId);
         if (src) {
-          const availSrcPorts = Array.from(src.interfaces?.values?.() || []).filter(p => !isPortConnected(src.id, p.name));
-          const availDstPorts = Array.from(dev.interfaces?.values?.() || []).filter(p => !isPortConnected(dev.id, p.name));
+          const availSrcPorts = Array.from(src.interfaces?.values?.() || [])
+            .filter(p => isPhysicalPort(p.name) && !isPortConnected(src.id, p.name));
+          const availDstPorts = Array.from(dev.interfaces?.values?.() || [])
+            .filter(p => isPhysicalPort(p.name) && !isPortConnected(dev.id, p.name));
 
           setSelectedSourcePort(availSrcPorts[0]?.name || '');
           setSelectedTargetPort(availDstPorts[0]?.name || '');
@@ -80,33 +137,14 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       return;
     }
 
-    const posX = typeof dev.position?.x === 'number' ? dev.position.x : 200;
-    const posY = typeof dev.position?.y === 'number' ? dev.position.y : 200;
+    const posX = typeof dev.position?.x === 'number' && !isNaN(dev.position.x) ? dev.position.x : 200;
+    const posY = typeof dev.position?.y === 'number' && !isNaN(dev.position.y) ? dev.position.y : 200;
 
     setDraggingDeviceId(dev.id);
     setDragOffset({
       x: e.clientX - posX,
       y: e.clientY - posY
     });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (draggingDeviceId && svgRef.current) {
-      const newX = Math.max(50, Math.min(e.clientX - dragOffset.x, 1200));
-      const newY = Math.max(50, Math.min(e.clientY - dragOffset.y, 800));
-      moveDevice(draggingDeviceId, newX, newY);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setDraggingDeviceId(null);
-  };
-
-  const isPortConnected = (devId: string, portName: string) => {
-    return links.some(
-      l => (l.sourceDeviceId === devId && l.sourcePort === portName) ||
-           (l.targetDeviceId === devId && l.targetPort === portName)
-    );
   };
 
   const handleConfirmConnection = () => {
@@ -148,8 +186,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   return (
     <div 
       className="relative flex-1 h-full bg-slate-950 overflow-hidden select-none cursor-default"
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
@@ -175,10 +211,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           const dstDev = devices.find(d => d.id === link.targetDeviceId);
           if (!srcDev || !dstDev) return null;
 
-          const x1 = typeof srcDev.position?.x === 'number' ? srcDev.position.x : 200;
-          const y1 = typeof srcDev.position?.y === 'number' ? srcDev.position.y : 200;
-          const x2 = typeof dstDev.position?.x === 'number' ? dstDev.position.x : 300;
-          const y2 = typeof dstDev.position?.y === 'number' ? dstDev.position.y : 300;
+          const x1 = typeof srcDev.position?.x === 'number' && !isNaN(srcDev.position.x) ? srcDev.position.x : 200;
+          const y1 = typeof srcDev.position?.y === 'number' && !isNaN(srcDev.position.y) ? srcDev.position.y : 200;
+          const x2 = typeof dstDev.position?.x === 'number' && !isNaN(dstDev.position.x) ? dstDev.position.x : 300;
+          const y2 = typeof dstDev.position?.y === 'number' && !isNaN(dstDev.position.y) ? dstDev.position.y : 300;
 
           // Midpoint for port labels
           const mx1 = x1 + (x2 - x1) * 0.28;
@@ -388,80 +424,100 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       )}
 
       {/* Port Selection Dialog */}
-      {connectionModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <span>Connect Interfaces</span>
-              </h3>
-              <button 
-                onClick={() => setConnectionModal(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {connectionModal && (() => {
+        const availSrc = Array.from(connectionModal.sourceDev.interfaces?.values?.() || [])
+          .filter(p => isPhysicalPort(p.name) && !isPortConnected(connectionModal.sourceDev.id, p.name));
+        const availDst = Array.from(connectionModal.targetDev.interfaces?.values?.() || [])
+          .filter(p => isPhysicalPort(p.name) && !isPortConnected(connectionModal.targetDev.id, p.name));
+        const hasNoPorts = availSrc.length === 0 || availDst.length === 0;
 
-            <div className="grid grid-cols-2 gap-4">
-              {/* Source Device Ports */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-cyan-400">
-                  {connectionModal.sourceDev.hostname} (Source):
-                </label>
-                <select
-                  value={selectedSourcePort}
-                  onChange={(e) => setSelectedSourcePort(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <span>Connect Interfaces</span>
+                </h3>
+                <button 
+                  onClick={() => setConnectionModal(null)}
+                  className="text-slate-400 hover:text-white"
                 >
-                  {Array.from(connectionModal.sourceDev.interfaces?.values?.() || [])
-                    .filter(p => !isPortConnected(connectionModal.sourceDev.id, p.name))
-                    .map(p => (
-                      <option key={p.name} value={p.name}>
-                        {p.shortName || p.name} ({p.name})
-                      </option>
-                    ))}
-                </select>
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              {/* Target Device Ports */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-cyan-400">
-                  {connectionModal.targetDev.hostname} (Target):
-                </label>
-                <select
-                  value={selectedTargetPort}
-                  onChange={(e) => setSelectedTargetPort(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-                >
-                  {Array.from(connectionModal.targetDev.interfaces?.values?.() || [])
-                    .filter(p => !isPortConnected(connectionModal.targetDev.id, p.name))
-                    .map(p => (
-                      <option key={p.name} value={p.name}>
-                        {p.shortName || p.name} ({p.name})
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
+              {hasNoPorts ? (
+                <div className="p-3 bg-rose-950/40 border border-rose-500/50 rounded-xl text-xs text-rose-300 space-y-1">
+                  <div className="font-semibold flex items-center gap-1.5 text-rose-400">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Tidak dapat menghubungkan kabel</span>
+                  </div>
+                  {availSrc.length === 0 && (
+                    <p>• {connectionModal.sourceDev.hostname} tidak memiliki port fisik bebas (semua port sudah terhubung).</p>
+                  )}
+                  {availDst.length === 0 && (
+                    <p>• {connectionModal.targetDev.hostname} tidak memiliki port fisik bebas (semua port sudah terhubung).</p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Source Device Ports */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-cyan-400">
+                      {connectionModal.sourceDev.hostname} (Source):
+                    </label>
+                    <select
+                      value={selectedSourcePort}
+                      onChange={(e) => setSelectedSourcePort(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                    >
+                      {availSrc.map(p => (
+                        <option key={p.name} value={p.name}>
+                          {p.shortName || p.name} ({p.name})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                onClick={() => setConnectionModal(null)}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-medium rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmConnection}
-                className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-cyan-950/50"
-              >
-                Connect Cable
-              </button>
+                  {/* Target Device Ports */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-cyan-400">
+                      {connectionModal.targetDev.hostname} (Target):
+                    </label>
+                    <select
+                      value={selectedTargetPort}
+                      onChange={(e) => setSelectedTargetPort(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                    >
+                      {availDst.map(p => (
+                        <option key={p.name} value={p.name}>
+                          {p.shortName || p.name} ({p.name})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  onClick={() => setConnectionModal(null)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-medium rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={hasNoPorts || !selectedSourcePort || !selectedTargetPort}
+                  onClick={handleConfirmConnection}
+                  className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg shadow-lg shadow-cyan-950/50"
+                >
+                  Connect Cable
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

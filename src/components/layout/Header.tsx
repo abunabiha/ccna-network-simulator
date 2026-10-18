@@ -21,18 +21,16 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
-  const { 
-    currentLab, 
-    loadLab, 
-    gradeCurrentLab, 
-    gradeReport, 
-    simulationMode, 
-    setSimulationMode,
-    openExamModal,
-    openLiveConnector,
-    exportTopologyJson,
-    importTopologyJson
-  } = useNetworkStore();
+  const currentLab = useNetworkStore((state) => state.currentLab);
+  const loadLab = useNetworkStore((state) => state.loadLab);
+  const gradeCurrentLab = useNetworkStore((state) => state.gradeCurrentLab);
+  const gradeReport = useNetworkStore((state) => state.gradeReport);
+  const simulationMode = useNetworkStore((state) => state.simulationMode);
+  const setSimulationMode = useNetworkStore((state) => state.setSimulationMode);
+  const openExamModal = useNetworkStore((state) => state.openExamModal);
+  const openLiveConnector = useNetworkStore((state) => state.openLiveConnector);
+  const exportTopologyJson = useNetworkStore((state) => state.exportTopologyJson);
+  const importTopologyJson = useNetworkStore((state) => state.importTopologyJson);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 

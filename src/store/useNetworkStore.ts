@@ -173,7 +173,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
     },
 
     addDevice: (type: DeviceType, x: number, y: number, customName?: string) => {
-      const { devices, cliContexts, terminalOutputs, openTerminalTabs } = get();
+      const { devices, cliContexts, terminalOutputs, openTerminalTabs, activeTerminalDeviceId } = get();
       
       // Collision-free unique ID using timestamp and random string
       const randSuffix = Math.random().toString(36).substring(2, 8);
@@ -218,14 +218,15 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
         }
       }
 
-      const updatedTabs = openTerminalTabs.includes(dev.id)
-        ? openTerminalTabs
-        : [...openTerminalTabs, dev.id];
+      // Only set activeTerminalDeviceId if none exists
+      const nextActiveTerminalId = activeTerminalDeviceId || dev.id;
+      // Do not clutter openTerminalTabs unless user specifically opens terminal
+      const updatedTabs = openTerminalTabs.length === 0 ? [dev.id] : openTerminalTabs;
 
       set({
         devices: [...devices, dev],
         selectedDeviceId: dev.id,
-        activeTerminalDeviceId: dev.id,
+        activeTerminalDeviceId: nextActiveTerminalId,
         openTerminalTabs: updatedTabs,
         cliContexts: {
           ...cliContexts,
@@ -258,6 +259,10 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
 
     moveDevice: (id: string, x: number, y: number) => {
       const { devices } = get();
+      const dev = devices.find(d => d.id === id);
+      if (!dev) return;
+      if (dev.position?.x === x && dev.position?.y === y) return;
+
       const updated = devices.map(d => {
         if (d.id === id) {
           d.position = { x, y };
@@ -382,12 +387,13 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
         ...(result.contextUpdates || {})
       };
 
-      // Format baris output
+      // Format baris output (dibatasi 200 baris terbaru agar memori dan DOM tetap ringan)
       const deviceOutputs = terminalOutputs[deviceId] || [];
       const newLines = [...deviceOutputs, `${prompt} ${command}`];
       if (result.output) {
         newLines.push(result.output);
       }
+      const boundedLines = newLines.length > 200 ? newLines.slice(-200) : newLines;
 
       set({
         devices: [...devices],
@@ -397,7 +403,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
         },
         terminalOutputs: {
           ...terminalOutputs,
-          [deviceId]: newLines
+          [deviceId]: boundedLines
         }
       });
     },

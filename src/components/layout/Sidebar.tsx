@@ -26,7 +26,14 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnectingCable }) => {
-  const { addDevice, selectedDeviceId, removeDevice, devices, openHostConfig } = useNetworkStore();
+  const addDevice = useNetworkStore((state) => state.addDevice);
+  const selectedDeviceId = useNetworkStore((state) => state.selectedDeviceId);
+  const removeDevice = useNetworkStore((state) => state.removeDevice);
+  const openHostConfig = useNetworkStore((state) => state.openHostConfig);
+  const deviceCount = useNetworkStore((state) => state.devices.length);
+  const selectedDev = useNetworkStore((state) => 
+    state.selectedDeviceId ? state.devices.find(d => d.id === state.selectedDeviceId) : undefined
+  );
 
   const isDraggingRef = React.useRef(false);
 
@@ -54,8 +61,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
       isDraggingRef.current = false;
     }, 150);
   };
-
-  const selectedDev = devices.find(d => d.id === selectedDeviceId);
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between select-none z-20 shrink-0">
@@ -240,14 +245,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div className="space-y-1 pt-1 border-t border-slate-800/60">
               <div className="text-[10px] font-semibold text-slate-400">Ports & Interfaces:</div>
               <div className="max-h-28 overflow-y-auto space-y-0.5 pr-1">
-                {Array.from(selectedDev.interfaces?.values?.() ?? []).slice(0, 6).map((iface) => (
-                  <div key={iface.name} className="flex items-center justify-between text-[10px] text-slate-300 bg-slate-900/60 px-1.5 py-0.5 rounded">
+                {Array.from(selectedDev.interfaces?.values?.() ?? []).slice(0, 6).map((iface, idx) => (
+                  <div key={iface?.name || idx} className="flex items-center justify-between text-[10px] text-slate-300 bg-slate-900/60 px-1.5 py-0.5 rounded">
                     <span>
-                      {iface.shortName || iface.name}
-                      {iface.ipAddress ? ` (${iface.ipAddress})` : ''}
+                      {iface?.shortName || iface?.name || 'Port'}
+                      {iface?.ipAddress ? ` (${iface.ipAddress})` : ''}
                     </span>
-                    <span className={iface.isShutdown ? 'text-rose-400' : iface.status === 'up' ? 'text-emerald-400' : 'text-slate-500'}>
-                      {iface.isShutdown ? 'Admin Down' : (iface.status || 'down')}
+                    <span className={iface?.isShutdown ? 'text-rose-400' : iface?.status === 'up' ? 'text-emerald-400' : 'text-slate-500'}>
+                      {iface?.isShutdown ? 'Admin Down' : (iface?.status || 'down')}
                     </span>
                   </div>
                 ))}
@@ -270,7 +275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
 
       {/* Footer Info */}
       <div className="p-3 border-t border-slate-800/80 bg-slate-950/40 text-[10px] text-slate-500 flex items-center justify-between">
-        <span>Topology Nodes: {devices.length}</span>
+        <span>Topology Nodes: {deviceCount}</span>
         <span className="text-cyan-500 font-medium">Auto-Sync</span>
       </div>
     </aside>

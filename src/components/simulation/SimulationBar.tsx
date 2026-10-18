@@ -10,16 +10,13 @@ import {
 } from 'lucide-react';
 
 export const SimulationBar: React.FC = () => {
-  const { 
-    simulationMode, 
-    simulationEvents, 
-    currentEventIndex, 
-    stepSimulation, 
-    resetSimulation, 
-    setSelectedPduEvent,
-    selectedPduEvent,
-    devices
-  } = useNetworkStore();
+  const simulationMode = useNetworkStore((state) => state.simulationMode);
+  const simulationEvents = useNetworkStore((state) => state.simulationEvents);
+  const currentEventIndex = useNetworkStore((state) => state.currentEventIndex);
+  const stepSimulation = useNetworkStore((state) => state.stepSimulation);
+  const resetSimulation = useNetworkStore((state) => state.resetSimulation);
+  const setSelectedPduEvent = useNetworkStore((state) => state.setSelectedPduEvent);
+  const firstDeviceId = useNetworkStore((state) => state.devices[0]?.id || 'R1');
 
   if (simulationMode !== 'simulation') return null;
 
@@ -70,11 +67,10 @@ export const SimulationBar: React.FC = () => {
           onClick={() => {
             // Generate a sample PDU event if none exists to allow exploration
             if (!currentEvent) {
-              const sampleDev = devices[0];
               setSelectedPduEvent({
                 id: 'evt-sample',
                 step: 1,
-                currentDeviceId: sampleDev?.id || 'R1',
+                currentDeviceId: firstDeviceId,
                 packet: {
                   sourceIp: '192.168.1.10',
                   destIp: '192.168.1.1',

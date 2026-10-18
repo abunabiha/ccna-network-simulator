@@ -8,6 +8,18 @@ export default defineConfig({
     port: 3000,
     host: true,
     cors: true,
-    open: false
+    open: false,
+    watch: {
+      ignored: [
+        '**/.git/**',
+        '**/dist/**',
+        '**/.tmp/**',
+        '**/scripts/**',
+        '**/.user_uploaded/**',
+        '**/.system_generated/**',
+        '**/.DS_Store',
+        '**/*.log'
+      ]
+    }
   }
 });

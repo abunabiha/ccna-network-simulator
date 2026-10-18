@@ -14,17 +14,22 @@ import {
 } from 'lucide-react';
 
 export const CiscoTerminal: React.FC = () => {
-  const { 
-    devices, 
-    activeTerminalDeviceId, 
-    openTerminalTabs, 
-    closeTerminalTab, 
-    setActiveTerminalTab,
-    cliContexts,
-    terminalOutputs,
-    executeCommand,
-    clearTerminalOutput
-  } = useNetworkStore();
+  const activeTerminalDeviceId = useNetworkStore((state) => state.activeTerminalDeviceId);
+  const openTerminalTabs = useNetworkStore((state) => state.openTerminalTabs);
+  const closeTerminalTab = useNetworkStore((state) => state.closeTerminalTab);
+  const setActiveTerminalTab = useNetworkStore((state) => state.setActiveTerminalTab);
+  const executeCommand = useNetworkStore((state) => state.executeCommand);
+  const clearTerminalOutput = useNetworkStore((state) => state.clearTerminalOutput);
+  const activeDevice = useNetworkStore((state) => 
+    state.activeTerminalDeviceId ? state.devices.find(d => d.id === state.activeTerminalDeviceId) : undefined
+  );
+  const activeContext = useNetworkStore((state) => 
+    state.activeTerminalDeviceId ? state.cliContexts[state.activeTerminalDeviceId] : null
+  );
+  const currentOutputs = useNetworkStore((state) => 
+    state.activeTerminalDeviceId ? (state.terminalOutputs[state.activeTerminalDeviceId] || []) : []
+  );
+  const devices = useNetworkStore((state) => state.devices);
 
   const [inputVal, setInputVal] = useState('');
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
@@ -33,10 +38,6 @@ export const CiscoTerminal: React.FC = () => {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
-
-  const activeDevice = devices.find(d => d.id === activeTerminalDeviceId);
-  const activeContext = activeTerminalDeviceId ? cliContexts[activeTerminalDeviceId] : null;
-  const currentOutputs = activeTerminalDeviceId ? (terminalOutputs[activeTerminalDeviceId] || []) : [];
 
   // Auto-scroll on new output
   useEffect(() => {

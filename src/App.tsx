@@ -32,18 +32,24 @@ export const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100">
       {/* Top Application Header */}
-      <Header onOpenDocs={() => setIsDocsOpen(true)} />
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Header">
+        <Header onOpenDocs={() => setIsDocsOpen(true)} />
+      </ErrorBoundary>
 
       {/* Simulation Timeline Bar (Only visible when in Simulation mode) */}
-      <SimulationBar />
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Simulation Bar">
+        <SimulationBar />
+      </ErrorBoundary>
 
       {/* Main Workspace Body */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Left: Device Palette & Cabling Sidebar */}
-        <Sidebar 
-          connectingCable={connectingCable}
-          setConnectingCable={setConnectingCable}
-        />
+        <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Device Palette">
+          <Sidebar 
+            connectingCable={connectingCable}
+            setConnectingCable={setConnectingCable}
+          />
+        </ErrorBoundary>
 
         {/* Center: Canvas & Bottom Terminal */}
         <main className="flex-1 flex flex-col h-full overflow-hidden relative">
@@ -62,40 +68,54 @@ export const App: React.FC = () => {
         </main>
 
         {/* Right: CCNA Lab Guide & Task Checklist */}
-        <LabPanel />
+        <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Lab Guide">
+          <LabPanel />
+        </ErrorBoundary>
       </div>
 
       {/* Visual PC IP Configuration Modal */}
       {isHostConfigOpen && (
-        <HostConfigModal 
-          hostId={activeHostConfigId} 
-          onClose={closeHostConfig} 
-        />
+        <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Konfigurasi Host">
+          <HostConfigModal 
+            hostId={activeHostConfigId} 
+            onClose={closeHostConfig} 
+          />
+        </ErrorBoundary>
       )}
 
       {/* Pearson VUE CCNA 200-301 Exam Simulator Modal */}
-      <PearsonVueExamModal 
-        isOpen={isExamModalOpen} 
-        onClose={closeExamModal} 
-      />
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Exam Simulator">
+        <PearsonVueExamModal 
+          isOpen={isExamModalOpen} 
+          onClose={closeExamModal} 
+        />
+      </ErrorBoundary>
 
       {/* Real-time Physical Hardware / Host NIC Connector Modal */}
-      <LiveDeviceConnectorModal 
-        isOpen={isLiveConnectorOpen} 
-        onClose={closeLiveConnector} 
-      />
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Live Device Connector">
+        <LiveDeviceConnectorModal 
+          isOpen={isLiveConnectorOpen} 
+          onClose={closeLiveConnector} 
+        />
+      </ErrorBoundary>
 
       {/* OSI 7-Layer PDU Inspector Modal */}
-      <PduInspector />
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada PDU Inspector">
+        <PduInspector />
+      </ErrorBoundary>
 
       {/* Lab Assessment Grade Report Card Modal */}
-      <GradeModal />
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Grade Modal">
+        <GradeModal />
+      </ErrorBoundary>
 
       {/* Scientific SDLC Documentation Modal */}
-      <DocsModal 
-        isOpen={isDocsOpen} 
-        onClose={() => setIsDocsOpen(false)} 
-      />
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Dokumentasi">
+        <DocsModal 
+          isOpen={isDocsOpen} 
+          onClose={() => setIsDocsOpen(false)} 
+        />
+      </ErrorBoundary>
     </div>
   );
 };

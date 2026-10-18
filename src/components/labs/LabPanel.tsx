@@ -13,7 +13,9 @@ import {
 } from 'lucide-react';
 
 export const LabPanel: React.FC = () => {
-  const { currentLab, gradeReport, gradeCurrentLab } = useNetworkStore();
+  const currentLab = useNetworkStore((state) => state.currentLab);
+  const gradeReport = useNetworkStore((state) => state.gradeReport);
+  const gradeCurrentLab = useNetworkStore((state) => state.gradeCurrentLab);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
