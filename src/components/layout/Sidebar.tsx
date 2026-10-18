@@ -28,6 +28,8 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnectingCable }) => {
   const { addDevice, selectedDeviceId, removeDevice, devices, openHostConfig } = useNetworkStore();
 
+  const isDraggingRef = React.useRef(false);
+
   const handleAdd = (type: DeviceType) => {
     // Menempatkan node di tengah kanvas secara acak sedikit agar tidak menumpuk
     const x = 320 + Math.floor(Math.random() * 120 - 60);
@@ -35,10 +37,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
     addDevice(type, x, y);
   };
 
+  const handleCardClick = (type: DeviceType) => {
+    if (isDraggingRef.current) return;
+    handleAdd(type);
+  };
+
   const handleDragStart = (e: React.DragEvent, type: DeviceType) => {
+    isDraggingRef.current = true;
     e.dataTransfer.setData('application/json', JSON.stringify({ type }));
     e.dataTransfer.setData('text/plain', JSON.stringify({ type }));
     e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleDragEnd = () => {
+    setTimeout(() => {
+      isDraggingRef.current = false;
+    }, 150);
   };
 
   const selectedDev = devices.find(d => d.id === selectedDeviceId);
@@ -63,7 +77,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div
               draggable
               onDragStart={(e) => handleDragStart(e, 'router')}
-              onClick={() => handleAdd('router')}
+              onDragEnd={handleDragEnd}
+              onClick={() => handleCardClick('router')}
               title="Drag ke canvas atau klik untuk menambahkan"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
@@ -78,7 +93,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div
               draggable
               onDragStart={(e) => handleDragStart(e, 'switch')}
-              onClick={() => handleAdd('switch')}
+              onDragEnd={handleDragEnd}
+              onClick={() => handleCardClick('switch')}
               title="Drag ke canvas atau klik untuk menambahkan"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-teal-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
@@ -93,7 +109,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div
               draggable
               onDragStart={(e) => handleDragStart(e, 'switch-l3')}
-              onClick={() => handleAdd('switch-l3')}
+              onDragEnd={handleDragEnd}
+              onClick={() => handleCardClick('switch-l3')}
               title="Drag ke canvas atau klik untuk menambahkan"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
@@ -108,7 +125,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div
               draggable
               onDragStart={(e) => handleDragStart(e, 'pc')}
-              onClick={() => handleAdd('pc')}
+              onDragEnd={handleDragEnd}
+              onClick={() => handleCardClick('pc')}
               title="Drag ke canvas atau klik untuk menambahkan"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
@@ -123,7 +141,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div
               draggable
               onDragStart={(e) => handleDragStart(e, 'server')}
-              onClick={() => handleAdd('server')}
+              onDragEnd={handleDragEnd}
+              onClick={() => handleCardClick('server')}
               title="Drag ke canvas atau klik untuk menambahkan"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-purple-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
@@ -138,7 +157,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div
               draggable
               onDragStart={(e) => handleDragStart(e, 'cloud')}
-              onClick={() => handleAdd('cloud')}
+              onDragEnd={handleDragEnd}
+              onClick={() => handleCardClick('cloud')}
               title="Drag ke canvas atau klik untuk menjembatani jaringan fisik PC"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
@@ -210,9 +230,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             </div>
 
             <div>
-              <div className="text-sm font-bold text-cyan-400">{selectedDev.hostname}</div>
+              <div className="text-sm font-bold text-cyan-400">{selectedDev.hostname || selectedDev.id}</div>
               <div className="text-[11px] text-slate-400 uppercase tracking-wide">
-                Type: {selectedDev.deviceType} ({selectedDev.id})
+                Type: {selectedDev.deviceType || 'Device'} ({selectedDev.id})
               </div>
             </div>
 
@@ -220,11 +240,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             <div className="space-y-1 pt-1 border-t border-slate-800/60">
               <div className="text-[10px] font-semibold text-slate-400">Ports & Interfaces:</div>
               <div className="max-h-28 overflow-y-auto space-y-0.5 pr-1">
-                {Array.from(selectedDev.interfaces.values()).slice(0, 6).map((iface) => (
+                {Array.from(selectedDev.interfaces?.values?.() ?? []).slice(0, 6).map((iface) => (
                   <div key={iface.name} className="flex items-center justify-between text-[10px] text-slate-300 bg-slate-900/60 px-1.5 py-0.5 rounded">
-                    <span>{iface.shortName}</span>
+                    <span>
+                      {iface.shortName || iface.name}
+                      {iface.ipAddress ? ` (${iface.ipAddress})` : ''}
+                    </span>
                     <span className={iface.isShutdown ? 'text-rose-400' : iface.status === 'up' ? 'text-emerald-400' : 'text-slate-500'}>
-                      {iface.isShutdown ? 'Admin Down' : iface.status}
+                      {iface.isShutdown ? 'Admin Down' : (iface.status || 'down')}
                     </span>
                   </div>
                 ))}
@@ -232,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
             </div>
 
             {/* Quick action for Host IP config */}
-            {(selectedDev.deviceType === 'pc' || selectedDev instanceof Host) && (
+            {(selectedDev.deviceType === 'pc' || selectedDev.deviceType === 'server' || selectedDev instanceof Host) && (
               <button
                 onClick={() => openHostConfig(selectedDev.id)}
                 className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-sky-950/80 hover:bg-sky-900 border border-sky-600/50 text-sky-300 rounded-lg text-xs font-semibold transition-colors mt-2"

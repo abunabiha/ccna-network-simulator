@@ -52,7 +52,12 @@ export const CiscoTerminal: React.FC = () => {
     return null;
   }
 
-  const prompt = activeDevice.getPrompt(activeContext);
+  let prompt = 'Router>';
+  try {
+    prompt = activeDevice.getPrompt(activeContext);
+  } catch (err) {
+    prompt = `${activeDevice.hostname || 'Device'}>`;
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // 1. Enter Key
@@ -144,7 +149,7 @@ export const CiscoTerminal: React.FC = () => {
       <div className="h-9 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-2 select-none shrink-0">
         {/* Device Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto">
-          {openTerminalTabs.map((tabId) => {
+          {Array.from(new Set(openTerminalTabs)).map((tabId) => {
             const dev = devices.find(d => d.id === tabId);
             if (!dev) return null;
             const isActive = tabId === activeTerminalDeviceId;
@@ -160,7 +165,7 @@ export const CiscoTerminal: React.FC = () => {
                 }`}
               >
                 <TerminalIcon className="w-3.5 h-3.5" />
-                <span>{dev.hostname}</span>
+                <span>{dev.hostname || dev.id}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

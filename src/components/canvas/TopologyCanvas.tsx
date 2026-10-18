@@ -68,8 +68,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         // Open port selection modal
         const src = devices.find(d => d.id === cableSourceDevId);
         if (src) {
-          const availSrcPorts = Array.from(src.interfaces.values()).filter(p => !isPortConnected(src.id, p.name));
-          const availDstPorts = Array.from(dev.interfaces.values()).filter(p => !isPortConnected(dev.id, p.name));
+          const availSrcPorts = Array.from(src.interfaces?.values?.() || []).filter(p => !isPortConnected(src.id, p.name));
+          const availDstPorts = Array.from(dev.interfaces?.values?.() || []).filter(p => !isPortConnected(dev.id, p.name));
 
           setSelectedSourcePort(availSrcPorts[0]?.name || '');
           setSelectedTargetPort(availDstPorts[0]?.name || '');
@@ -80,10 +80,13 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       return;
     }
 
+    const posX = typeof dev.position?.x === 'number' ? dev.position.x : 200;
+    const posY = typeof dev.position?.y === 'number' ? dev.position.y : 200;
+
     setDraggingDeviceId(dev.id);
     setDragOffset({
-      x: e.clientX - dev.position.x,
-      y: e.clientY - dev.position.y
+      x: e.clientX - posX,
+      y: e.clientY - posY
     });
   };
 
@@ -172,10 +175,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           const dstDev = devices.find(d => d.id === link.targetDeviceId);
           if (!srcDev || !dstDev) return null;
 
-          const x1 = srcDev.position.x;
-          const y1 = srcDev.position.y;
-          const x2 = dstDev.position.x;
-          const y2 = dstDev.position.y;
+          const x1 = typeof srcDev.position?.x === 'number' ? srcDev.position.x : 200;
+          const y1 = typeof srcDev.position?.y === 'number' ? srcDev.position.y : 200;
+          const x2 = typeof dstDev.position?.x === 'number' ? dstDev.position.x : 300;
+          const y2 = typeof dstDev.position?.y === 'number' ? dstDev.position.y : 300;
 
           // Midpoint for port labels
           const mx1 = x1 + (x2 - x1) * 0.28;
@@ -183,8 +186,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           const mx2 = x1 + (x2 - x1) * 0.72;
           const my2 = y1 + (y2 - y1) * 0.72;
 
-          const srcPort = srcDev.interfaces.get(link.sourcePort);
-          const dstPort = dstDev.interfaces.get(link.targetPort);
+          const srcPort = srcDev.interfaces?.get?.(link.sourcePort);
+          const dstPort = dstDev.interfaces?.get?.(link.targetPort);
 
           const isSrcUp = srcPort?.status === 'up' && !srcPort.isShutdown;
           const isDstUp = dstPort?.status === 'up' && !dstPort.isShutdown;
@@ -224,31 +227,35 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       {/* Device Nodes Rendering with Cisco Standard Icons */}
       {devices.map((dev) => {
+        if (!dev || !dev.id) return null;
         const isSelected = selectedDeviceId === dev.id;
         const isCableSource = cableSourceDevId === dev.id;
-        const isHostDev = dev.deviceType === 'pc' || dev instanceof Host;
+        const dType = dev.deviceType || 'pc';
+        const isHostDev = dType === 'pc' || dType === 'server' || dev instanceof Host;
+        const posX = typeof dev.position?.x === 'number' ? dev.position.x : 200;
+        const posY = typeof dev.position?.y === 'number' ? dev.position.y : 200;
 
         let icon = <CiscoRouterIcon size={46} />;
         let borderColor = 'border-sky-500/60';
         let bgGlow = 'from-sky-950/40 to-slate-900';
 
-        if (dev.deviceType === 'router') {
+        if (dType === 'router') {
           icon = <CiscoRouterIcon size={46} />;
           borderColor = 'border-sky-500/60';
           bgGlow = 'from-sky-950/40 to-slate-900';
-        } else if (dev.deviceType === 'switch') {
+        } else if (dType === 'switch') {
           icon = <CiscoSwitchIcon size={46} />;
           borderColor = 'border-teal-500/60';
           bgGlow = 'from-teal-950/40 to-slate-900';
-        } else if (dev.deviceType === 'switch-l3') {
+        } else if (dType === 'switch-l3') {
           icon = <CiscoL3SwitchIcon size={46} />;
           borderColor = 'border-indigo-500/60';
           bgGlow = 'from-indigo-950/40 to-slate-900';
-        } else if (dev.deviceType === 'server') {
+        } else if (dType === 'server') {
           icon = <CiscoServerIcon size={44} />;
           borderColor = 'border-purple-500/60';
           bgGlow = 'from-purple-950/40 to-slate-900';
-        } else if (dev.deviceType === 'cloud') {
+        } else if (dType === 'cloud') {
           icon = <CiscoCloudIcon size={46} />;
           borderColor = 'border-cyan-500/60';
           bgGlow = 'from-cyan-950/40 to-slate-900';
@@ -259,9 +266,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         }
 
         // Subtitle text (e.g. IP address for host, or model for router)
-        let subText = dev.deviceType.toUpperCase();
-        if (dev instanceof Host && dev.ipAddress) {
-          subText = dev.ipAddress;
+        let subText = String(dType).toUpperCase();
+        if ((dev as any).ipAddress) {
+          subText = (dev as any).ipAddress;
         }
 
         return (
@@ -277,8 +284,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               }
             }}
             style={{
-              left: `${dev.position.x}px`,
-              top: `${dev.position.y}px`,
+              left: `${posX}px`,
+              top: `${posY}px`,
               transform: 'translate(-50%, -50%)'
             }}
             className={`absolute flex flex-col items-center select-none cursor-move group transition-shadow ${
@@ -407,11 +414,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   onChange={(e) => setSelectedSourcePort(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
                 >
-                  {Array.from(connectionModal.sourceDev.interfaces.values())
+                  {Array.from(connectionModal.sourceDev.interfaces?.values?.() || [])
                     .filter(p => !isPortConnected(connectionModal.sourceDev.id, p.name))
                     .map(p => (
                       <option key={p.name} value={p.name}>
-                        {p.shortName} ({p.name})
+                        {p.shortName || p.name} ({p.name})
                       </option>
                     ))}
                 </select>
@@ -427,11 +434,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   onChange={(e) => setSelectedTargetPort(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
                 >
-                  {Array.from(connectionModal.targetDev.interfaces.values())
+                  {Array.from(connectionModal.targetDev.interfaces?.values?.() || [])
                     .filter(p => !isPortConnected(connectionModal.targetDev.id, p.name))
                     .map(p => (
                       <option key={p.name} value={p.name}>
-                        {p.shortName} ({p.name})
+                        {p.shortName || p.name} ({p.name})
                       </option>
                     ))}
                 </select>

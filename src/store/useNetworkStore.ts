@@ -54,6 +54,15 @@ interface NetworkState {
   setSelectedPduEvent: (event: SimulationEvent | null) => void;
   openHostConfig: (id: string) => void;
   closeHostConfig: () => void;
+  updateHostConfig: (id: string, config: {
+    isDhcp: boolean;
+    ipAddress: string;
+    subnetMask: string;
+    defaultGateway: string;
+    dnsServer: string;
+    ipv6Address?: string;
+    ipv6Gateway?: string;
+  }) => void;
   openExamModal: () => void;
   closeExamModal: () => void;
   exportTopologyJson: () => string;
@@ -165,16 +174,33 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
 
     addDevice: (type: DeviceType, x: number, y: number, customName?: string) => {
       const { devices, cliContexts, terminalOutputs, openTerminalTabs } = get();
-      const count = devices.filter(d => d.deviceType === type).length + 1;
-      const id = `${type.toUpperCase()}_${Date.now().toString().slice(-4)}`;
-      const name = customName || (
-        type === 'router' ? `Router${count}` :
-        type === 'switch' ? `Switch${count}` :
-        type === 'switch-l3' ? `SwitchL3_${count}` :
-        type === 'server' ? `Server${count}` :
-        type === 'cloud' ? `LiveHostBridge` :
-        `PC${count}`
-      );
+      
+      // Collision-free unique ID using timestamp and random string
+      const randSuffix = Math.random().toString(36).substring(2, 8);
+      const ts = Date.now().toString(36);
+      const id = `${type.toUpperCase()}_${ts}_${randSuffix}`;
+
+      // Calculate next available unique hostname
+      let name = customName;
+      if (!name) {
+        if (type === 'cloud') {
+          const cloudCount = devices.filter(d => d.deviceType === 'cloud').length;
+          name = cloudCount === 0 ? 'LiveHostBridge' : `LiveHostBridge_${cloudCount + 1}`;
+        } else {
+          const prefixName = 
+            type === 'router' ? 'Router' :
+            type === 'switch' ? 'Switch' :
+            type === 'switch-l3' ? 'SwitchL3_' :
+            type === 'server' ? 'Server' :
+            'PC';
+
+          let nextNum = 1;
+          while (devices.some(d => d.hostname?.toLowerCase() === `${prefixName}${nextNum}`.toLowerCase())) {
+            nextNum++;
+          }
+          name = `${prefixName}${nextNum}`;
+        }
+      }
 
       let dev: Device;
       if (type === 'router') {
@@ -192,11 +218,15 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
         }
       }
 
+      const updatedTabs = openTerminalTabs.includes(dev.id)
+        ? openTerminalTabs
+        : [...openTerminalTabs, dev.id];
+
       set({
         devices: [...devices, dev],
         selectedDeviceId: dev.id,
         activeTerminalDeviceId: dev.id,
-        openTerminalTabs: [...openTerminalTabs, dev.id],
+        openTerminalTabs: updatedTabs,
         cliContexts: {
           ...cliContexts,
           [dev.id]: { deviceId: dev.id, mode: 'user-exec' }
@@ -249,7 +279,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
       if (exists) return false;
 
       const newLink: PhysicalLink = {
-        id: `link_${Date.now()}`,
+        id: `link_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         sourceDeviceId: sourceId,
         sourcePort,
         targetDeviceId: targetId,
@@ -444,6 +474,41 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
 
     closeHostConfig: () => {
       set({ isHostConfigOpen: false, activeHostConfigId: null });
+    },
+
+    updateHostConfig: (id: string, config: {
+      isDhcp: boolean;
+      ipAddress: string;
+      subnetMask: string;
+      defaultGateway: string;
+      dnsServer: string;
+      ipv6Address?: string;
+      ipv6Gateway?: string;
+    }) => {
+      const { devices } = get();
+      const updated = devices.map(d => {
+        if (d.id === id) {
+          const h = d as Host;
+          h.isDhcp = config.isDhcp;
+          h.ipAddress = config.ipAddress;
+          h.subnetMask = config.subnetMask;
+          h.defaultGateway = config.defaultGateway;
+          h.dnsServer = config.dnsServer;
+
+          // Update network adapter interface FastEthernet0
+          const ifc = h.interfaces?.get('FastEthernet0') || Array.from(h.interfaces?.values() || [])[0];
+          if (ifc) {
+            ifc.ipAddress = config.ipAddress;
+            ifc.subnetMask = config.subnetMask;
+            if (config.ipAddress && config.ipAddress !== '0.0.0.0') {
+              ifc.status = 'up';
+            }
+          }
+        }
+        return d;
+      });
+
+      set({ devices: [...updated] });
     },
 
     openExamModal: () => {

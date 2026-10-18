@@ -47,7 +47,7 @@ export class TopologyTraversal {
     const endpoints: L2Endpoint[] = [];
     const visitedSwitches = new Set<string>();
 
-    const iface = device.interfaces.get(ifaceName);
+    const iface = device.interfaces.get(ifaceName) || Array.from(device.interfaces.values())[0];
     if (!iface) return endpoints;
 
     // Cari perangkat yang terhubung langsung pada port ini
@@ -76,9 +76,11 @@ export class TopologyTraversal {
     const directPeer = allDevices.find(d => d.id === directPeerId);
     if (!directPeer) return endpoints;
 
-    if (directPeer instanceof Switch) {
+    const isSwitchDev = (d: Device) => d instanceof Switch || (d as any).deviceType === 'switch' || (d as any).deviceType === 'switch-l3';
+
+    if (isSwitchDev(directPeer)) {
       // Telusuri domain broadcast switch (Layer 2)
-      const queue: Switch[] = [directPeer];
+      const queue: Switch[] = [directPeer as Switch];
       visitedSwitches.add(directPeer.id);
 
       while (queue.length > 0) {
@@ -91,10 +93,10 @@ export class TopologyTraversal {
             const neighbor = allDevices.find(d => d.id === swIface.connectedDeviceId);
             if (!neighbor) continue;
 
-            if (neighbor instanceof Switch) {
+            if (isSwitchDev(neighbor)) {
               if (!visitedSwitches.has(neighbor.id)) {
                 visitedSwitches.add(neighbor.id);
-                queue.push(neighbor);
+                queue.push(neighbor as Switch);
               }
             } else {
               // Router, Host, Server, Cloud: berhenti di sini (ujung L2 domain)
@@ -126,7 +128,12 @@ export class TopologyTraversal {
 
     // 1. Cek apakah ada Router atau L3 Switch di domain broadcast lokal yang memiliki DHCP pool
     for (const ep of endpoints) {
-      if (ep.device instanceof Router || (ep.device instanceof Switch && ep.device.isLayer3)) {
+      if (
+        ep.device instanceof Router || 
+        (ep.device as any).deviceType === 'router' || 
+        (ep.device as any).deviceType === 'switch-l3' || 
+        (ep.device instanceof Switch && ep.device.isLayer3)
+      ) {
         const routerDev = ep.device as Router | Switch;
         const targetIfaceName = ep.interfaceName;
         const routerIface = routerDev.interfaces.get(targetIfaceName) ||

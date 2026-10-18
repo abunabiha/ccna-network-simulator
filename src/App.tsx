@@ -12,6 +12,7 @@ import { HostConfigModal } from './components/devices/HostConfigModal';
 import { PearsonVueExamModal } from './components/exam/PearsonVueExamModal';
 import { LiveDeviceConnectorModal } from './components/devices/LiveDeviceConnectorModal';
 import { useNetworkStore } from './store/useNetworkStore';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { CableType } from './types/network';
 
 export const App: React.FC = () => {
@@ -47,13 +48,17 @@ export const App: React.FC = () => {
         {/* Center: Canvas & Bottom Terminal */}
         <main className="flex-1 flex flex-col h-full overflow-hidden relative">
           {/* Interactive Topology Canvas */}
-          <TopologyCanvas 
-            connectingCable={connectingCable}
-            setConnectingCable={setConnectingCable}
-          />
+          <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Topology Canvas">
+            <TopologyCanvas 
+              connectingCable={connectingCable}
+              setConnectingCable={setConnectingCable}
+            />
+          </ErrorBoundary>
 
           {/* Cisco IOS Terminal Emulator */}
-          <CiscoTerminal />
+          <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Terminal Cisco">
+            <CiscoTerminal />
+          </ErrorBoundary>
         </main>
 
         {/* Right: CCNA Lab Guide & Task Checklist */}

@@ -139,4 +139,20 @@ export class SubnetUtils {
     const inverted = (~maskLong) >>> 0;
     return ((inverted + 1) & inverted) === 0;
   }
+
+  /**
+   * Mengembalikan default subnet mask berdasarkan kelas IPv4 (Classful default mask)
+   * Kelas A (1-126): 255.0.0.0 (/8)
+   * Kelas B (128-191): 255.255.0.0 (/16)
+   * Kelas C (192-223): 255.255.255.0 (/24)
+   */
+  static getDefaultSubnetMask(ip: string): string {
+    if (!this.isValidIpv4(ip)) return '255.255.255.0';
+    const firstOctet = parseInt(ip.split('.')[0], 10);
+    if (firstOctet >= 1 && firstOctet <= 126) return '255.0.0.0';
+    if (firstOctet >= 128 && firstOctet <= 191) return '255.255.0.0';
+    if (firstOctet >= 192 && firstOctet <= 223) return '255.255.255.0';
+    return '255.255.255.0';
+  }
 }
+
