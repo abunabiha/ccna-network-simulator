@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="background-color: #020617; color: #f8fafc;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,8 +7,33 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      html, body {
+        background-color: #020617 !important;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+      #root:empty {
+        display: flex;
+        height: 100vh;
+        width: 100vw;
+        align-items: center;
+        justify-content: center;
+        background-color: #020617;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      #root:empty::before {
+        content: "Memuat CCNA NetSim Pro...";
+        color: #38bdf8;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+    </style>
   </head>
-  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500 selection:text-white overflow-hidden">
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500 selection:text-white overflow-hidden" style="background-color: #020617; color: #f8fafc;">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

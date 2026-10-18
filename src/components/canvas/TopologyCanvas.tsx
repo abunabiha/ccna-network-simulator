@@ -29,18 +29,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   connectingCable,
   setConnectingCable
 }) => {
-  const { 
-    devices, 
-    links, 
-    selectedDeviceId, 
-    selectDevice, 
-    moveDevice, 
-    openTerminal, 
-    openHostConfig,
-    addDevice,
-    connectPorts,
-    removeLink 
-  } = useNetworkStore();
+  const devices = useNetworkStore((state) => state.devices);
+  const links = useNetworkStore((state) => state.links);
+  const selectedDeviceId = useNetworkStore((state) => state.selectedDeviceId);
+  const selectDevice = useNetworkStore((state) => state.selectDevice);
+  const moveDevice = useNetworkStore((state) => state.moveDevice);
+  const openTerminal = useNetworkStore((state) => state.openTerminal);
+  const openHostConfig = useNetworkStore((state) => state.openHostConfig);
+  const addDevice = useNetworkStore((state) => state.addDevice);
+  const connectPorts = useNetworkStore((state) => state.connectPorts);
+  const removeLink = useNetworkStore((state) => state.removeLink);
 
   const [draggingDeviceId, setDraggingDeviceId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -340,18 +338,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             >
               {icon}
 
-              {/* Quick action buttons on hover */}
-              <div className="absolute -top-3 -right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Quick action buttons on hover / selected */}
+              <div className={`absolute -top-3 -right-3 flex items-center gap-1 transition-opacity ${
+                isSelected ? 'opacity-100 z-30' : 'opacity-0 group-hover:opacity-100'
+              }`}>
                 {isHostDev && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       openHostConfig(dev.id);
                     }}
-                    title="Visual IP Configuration"
-                    className="w-6 h-6 rounded-full bg-sky-700 hover:bg-sky-500 text-white border border-sky-400 flex items-center justify-center shadow transition-colors"
+                    title="Visual IP Configuration (Atur IP PC)"
+                    className="w-7 h-7 rounded-full bg-sky-600 hover:bg-sky-500 text-white border border-sky-400 flex items-center justify-center shadow-lg transition-transform hover:scale-110 cursor-pointer"
                   >
-                    <Settings className="w-3 h-3" />
+                    <Settings className="w-3.5 h-3.5" />
                   </button>
                 )}
 
@@ -361,9 +361,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     openTerminal(dev.id);
                   }}
                   title={isHostDev ? 'Command Prompt' : 'Cisco IOS CLI Console'}
-                  className="w-6 h-6 rounded-full bg-slate-800 hover:bg-cyan-500 text-slate-200 hover:text-slate-950 border border-slate-700 flex items-center justify-center shadow transition-colors"
+                  className="w-7 h-7 rounded-full bg-slate-800 hover:bg-cyan-500 text-slate-200 hover:text-slate-950 border border-slate-700 flex items-center justify-center shadow-lg transition-transform hover:scale-110 cursor-pointer"
                 >
-                  <Terminal className="w-3 h-3" />
+                  <Terminal className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -376,6 +376,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               <span className="text-[10px] font-mono text-cyan-400/90 mt-0.5">
                 {subText}
               </span>
+              {isSelected && isHostDev && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openHostConfig(dev.id);
+                  }}
+                  className="mt-1 px-2 py-0.5 bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-semibold rounded shadow flex items-center gap-1 cursor-pointer transition-transform hover:scale-105"
+                  title="Klik untuk membuka Pengaturan IP Visual"
+                >
+                  <Settings className="w-3 h-3" />
+                  <span>Atur IP Visual</span>
+                </button>
+              )}
             </div>
           </div>
         );

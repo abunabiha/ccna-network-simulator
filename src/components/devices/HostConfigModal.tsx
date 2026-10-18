@@ -31,7 +31,10 @@ const isHostDevice = (d: any): d is Host => {
 };
 
 export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClose }) => {
-  const host = useNetworkStore((state) => hostId ? state.devices.find(d => d.id === hostId) : undefined);
+  const host = useNetworkStore((state) => {
+    if (!hostId) return undefined;
+    return state.devices.find(d => d.id === hostId) || useNetworkStore.getState().devices.find(d => d.id === hostId);
+  });
   const updateHostConfig = useNetworkStore((state) => state.updateHostConfig);
 
   const [activeTab, setActiveTab] = useState<'ip' | 'prompt'>('ip');
@@ -198,11 +201,11 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
 
   return (
     <div 
-      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 select-none animate-in fade-in"
+      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in"
       onClick={onClose}
     >
       <div 
-        className="bg-slate-900 border border-slate-700 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 relative"
+        className="bg-slate-900 border border-slate-700 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 relative select-text"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -317,7 +320,9 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
                     onChange={(e) => handleIpChange(e.target.value)}
                     onBlur={handleIpBlur}
                     placeholder="192.168.1.10"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono select-text cursor-text focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
                   />
                 </div>
 
@@ -329,7 +334,9 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
                     value={subnetMask}
                     onChange={(e) => setSubnetMask(e.target.value)}
                     placeholder="255.255.255.0"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono select-text cursor-text focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
                   />
                 </div>
 
@@ -341,7 +348,9 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
                     value={defaultGateway}
                     onChange={(e) => setDefaultGateway(e.target.value)}
                     placeholder="192.168.1.1"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono select-text cursor-text focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
                   />
                 </div>
 
@@ -353,7 +362,9 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
                     value={dnsServer}
                     onChange={(e) => setDnsServer(e.target.value)}
                     placeholder="8.8.8.8"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono select-text cursor-text focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -399,7 +410,9 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
                     value={ipv6Address}
                     onChange={(e) => setIpv6Address(e.target.value)}
                     placeholder="2001:db8:acad:1::10/64"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono select-text cursor-text focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -410,7 +423,9 @@ export const HostConfigModal: React.FC<HostConfigModalProps> = ({ hostId, onClos
                     value={ipv6Gateway}
                     onChange={(e) => setIpv6Gateway(e.target.value)}
                     placeholder="fe80::1"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono select-text cursor-text focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
                   />
                 </div>
               </div>

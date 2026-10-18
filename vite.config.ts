@@ -10,7 +10,13 @@ export default defineConfig({
     cors: true,
     open: false,
     watch: {
+      usePolling: false,
+      awaitWriteFinish: {
+        stabilityThreshold: 500,
+        pollInterval: 100
+      },
       ignored: [
+        '**/CCTV/**',
         '**/.git/**',
         '**/dist/**',
         '**/.tmp/**',
@@ -18,7 +24,13 @@ export default defineConfig({
         '**/.user_uploaded/**',
         '**/.system_generated/**',
         '**/.DS_Store',
-        '**/*.log'
+        '**/*.log',
+        '**/*.mp4',
+        '**/*.jpg',
+        '**/*.png',
+        '**/*.pt',
+        '**/docs/**',
+        '**/node_modules/**'
       ]
     }
   }

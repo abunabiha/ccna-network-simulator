@@ -10,7 +10,8 @@ import {
   Maximize2, 
   Minimize2,
   ChevronRight,
-  Zap
+  Zap,
+  Settings
 } from 'lucide-react';
 
 const EMPTY_OUTPUTS: string[] = [];
@@ -22,6 +23,7 @@ export const CiscoTerminal: React.FC = () => {
   const setActiveTerminalTab = useNetworkStore((state) => state.setActiveTerminalTab);
   const executeCommand = useNetworkStore((state) => state.executeCommand);
   const clearTerminalOutput = useNetworkStore((state) => state.clearTerminalOutput);
+  const openHostConfig = useNetworkStore((state) => state.openHostConfig);
   const activeDevice = useNetworkStore((state) => 
     state.activeTerminalDeviceId ? state.devices.find(d => d.id === state.activeTerminalDeviceId) : undefined
   );
@@ -186,33 +188,63 @@ export const CiscoTerminal: React.FC = () => {
 
         {/* Quick Snippets & Window Controls */}
         <div className="flex items-center gap-1.5">
-          {/* Quick Command Snippets */}
-          <div className="hidden md:flex items-center gap-1 mr-2 text-[10px]">
-            <button 
-              onClick={() => handleQuickCmd('show ip interface brief')}
-              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
-            >
-              sh ip int br
-            </button>
-            <button 
-              onClick={() => handleQuickCmd('show running-config')}
-              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
-            >
-              sh run
-            </button>
-            <button 
-              onClick={() => handleQuickCmd('show ip route')}
-              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
-            >
-              sh ip ro
-            </button>
-            <button 
-              onClick={() => handleQuickCmd('configure terminal')}
-              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
-            >
-              conf t
-            </button>
-          </div>
+          {activeDevice.deviceType === 'pc' || activeDevice.deviceType === 'server' || activeDevice.deviceType === 'cloud' ? (
+            <div className="flex items-center gap-1 mr-2 text-[10px]">
+              <button
+                onClick={() => openHostConfig(activeDevice.id)}
+                className="flex items-center gap-1 px-2.5 py-0.5 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-semibold shadow transition-colors cursor-pointer mr-1"
+                title="Buka Pengaturan IP Visual"
+              >
+                <Settings className="w-3 h-3" />
+                <span>Desktop IP Config</span>
+              </button>
+              <button 
+                onClick={() => handleQuickCmd('ipconfig /all')}
+                className="hidden sm:inline px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                ipconfig /all
+              </button>
+              <button 
+                onClick={() => handleQuickCmd('ping 192.168.1.1')}
+                className="hidden sm:inline px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                ping gw
+              </button>
+              <button 
+                onClick={() => handleQuickCmd('arp -a')}
+                className="hidden md:inline px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                arp -a
+              </button>
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-1 mr-2 text-[10px]">
+              <button 
+                onClick={() => handleQuickCmd('show ip interface brief')}
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                sh ip int br
+              </button>
+              <button 
+                onClick={() => handleQuickCmd('show running-config')}
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                sh run
+              </button>
+              <button 
+                onClick={() => handleQuickCmd('show ip route')}
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                sh ip ro
+              </button>
+              <button 
+                onClick={() => handleQuickCmd('configure terminal')}
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                conf t
+              </button>
+            </div>
+          )}
 
           <button
             onClick={() => clearTerminalOutput(activeDevice.id)}

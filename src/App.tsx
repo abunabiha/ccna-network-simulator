@@ -19,15 +19,13 @@ export const App: React.FC = () => {
   const [connectingCable, setConnectingCable] = useState<CableType | null>(null);
   const [isDocsOpen, setIsDocsOpen] = useState<boolean>(false);
 
-  const { 
-    isHostConfigOpen, 
-    activeHostConfigId, 
-    closeHostConfig,
-    isExamModalOpen,
-    closeExamModal,
-    isLiveConnectorOpen,
-    closeLiveConnector
-  } = useNetworkStore();
+  const isHostConfigOpen = useNetworkStore((state) => state.isHostConfigOpen);
+  const activeHostConfigId = useNetworkStore((state) => state.activeHostConfigId);
+  const closeHostConfig = useNetworkStore((state) => state.closeHostConfig);
+  const isExamModalOpen = useNetworkStore((state) => state.isExamModalOpen);
+  const closeExamModal = useNetworkStore((state) => state.closeExamModal);
+  const isLiveConnectorOpen = useNetworkStore((state) => state.isLiveConnectorOpen);
+  const closeLiveConnector = useNetworkStore((state) => state.closeLiveConnector);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100">
