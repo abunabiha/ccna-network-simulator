@@ -7,7 +7,9 @@ export type CliMode =
   | 'vlan-config'        // Switch(config-vlan)#
   | 'router-config'      // Router(config-router)#
   | 'line-config'        // Router(config-line)#
-  | 'dhcp-config';       // Router(dhcp-config)#
+  | 'dhcp-config'        // Router(dhcp-config)#
+  | 'route-map-config'   // Router(config-route-map)#
+  | 'ip-sla-config';     // Router(config-sla-echo)#
 
 export interface CliContext {
   deviceId: string;
@@ -20,6 +22,9 @@ export interface CliContext {
   targetProcessId?: number;
   targetLine?: string;
   targetDhcpPool?: string;
+  targetRouteMapName?: string;
+  targetRouteMapSeq?: number;
+  targetIpSlaId?: number;
 }
 
 export interface CommandHelpItem {

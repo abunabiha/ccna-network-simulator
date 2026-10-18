@@ -10,6 +10,9 @@ import { Host } from '../src/core/devices/Host';
 import { CliParser } from '../src/core/cli/Parser';
 import { LabGrader } from '../src/core/grader/LabGrader';
 import { CCNA_LABS } from '../src/data/ccnaLabs';
+import { RoutingProtocolEngine } from '../src/core/network/RoutingProtocolEngine';
+import { PolicyEngine } from '../src/core/network/PolicyEngine';
+import { TopologyTraversal } from '../src/core/network/TopologyTraversal';
 
 console.log('=== [1] PENGUJIAN MATEMATIKA PENGALAMATAN IP & SUBNETTING ===');
 const ip1 = '192.168.1.130';
@@ -743,7 +746,226 @@ const rV1Priv = { deviceId: 'R_V1', mode: 'priv-exec' as const };
 const vrrpShowRes = CliParser.execute('show vrrp brief', rV1Priv, rV1, vrrpDevs);
 console.log(`VRRP R_V1 Master state: ${vrrpShowRes.output.includes('Master') && vrrpShowRes.output.includes('192.168.200.254') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, & 3 SELESAI DENGAN SUKSES! ===');
+console.log('\n=== [13] CCNP ENCOR/ENARSI TAHAP 4: ADVANCED ROUTING POLICY & TRAFFIC CONTROL ===');
+
+// 1. Uji IP Prefix-List dengan le / ge evaluation
+const rPol = new Router('R_POLICY', 'R-Policy', { x: 100, y: 900 });
+const rPolGlobal = { deviceId: 'R_POLICY', mode: 'global-config' as const };
+
+// ip prefix-list PL_WEB permit 10.0.0.0/8 ge 16 le 24
+CliParser.execute('ip prefix-list PL_WEB seq 5 permit 10.0.0.0/8 ge 16 le 24', rPolGlobal, rPol);
+CliParser.execute('ip prefix-list PL_DEFAULT seq 10 permit 0.0.0.0/0', rPolGlobal, rPol);
+
+const plWeb = rPol.prefixLists.get('PL_WEB')!;
+console.log(`Prefix-list PL_WEB exists: ${plWeb && plWeb.entries.length === 1 ? 'PASS' : 'FAIL'}`);
+
+// Test PolicyEngine.matchPrefixList
+const match1 = PolicyEngine.matchPrefixList(plWeb, '10.1.0.0', 16); // True (ge 16)
+const match2 = PolicyEngine.matchPrefixList(plWeb, '10.1.1.0', 24); // True (le 24)
+const match3 = PolicyEngine.matchPrefixList(plWeb, '10.0.0.0', 8);  // False (cidr 8 < ge 16)
+const match4 = PolicyEngine.matchPrefixList(plWeb, '10.1.1.1', 32); // False (cidr 32 > le 24)
+const match5 = PolicyEngine.matchPrefixList(plWeb, '192.168.1.0', 24); // False (different net)
+console.log(`Prefix-list Match (10.1.0.0/16 in /8 ge 16 le 24): ${match1 ? 'PASS' : 'FAIL'}`);
+console.log(`Prefix-list Match (10.1.1.0/24 in /8 ge 16 le 24): ${match2 ? 'PASS' : 'FAIL'}`);
+console.log(`Prefix-list Deny (/8 < ge 16): ${!match3 ? 'PASS' : 'FAIL'}`);
+console.log(`Prefix-list Deny (/32 > le 24): ${!match4 ? 'PASS' : 'FAIL'}`);
+console.log(`Prefix-list Deny (192.168.1.0/24 not in 10.0.0.0/8): ${!match5 ? 'PASS' : 'FAIL'}`);
+
+const plShowRes = CliParser.execute('show ip prefix-list PL_WEB', { deviceId: 'R_POLICY', mode: 'priv-exec' as const }, rPol);
+console.log(`'show ip prefix-list PL_WEB': ${plShowRes.output.includes('ge 16 le 24') ? 'PASS' : 'FAIL'}`);
+
+// 2. Uji Route-Map & Mutual Redistribution (EIGRP <-> OSPF with Tags & Metric Types)
+const rRed1 = new Router('R_RED1', 'R-Red1', { x: 300, y: 900 });
+const rRed2 = new Router('R_RED2', 'R-Red2', { x: 500, y: 900 });
+
+// Connect R_RED1 Gi0/0/0 to R_RED2 Gi0/0/0
+rRed1.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '10.1.12.1';
+rRed1.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rRed1.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rRed1.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rRed1.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_RED2';
+rRed1.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/0';
+
+rRed2.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '10.1.12.2';
+rRed2.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rRed2.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rRed2.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rRed2.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_RED1';
+rRed2.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/0';
+
+// LAN on R_RED1 (EIGRP domain)
+rRed1.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '10.10.10.1';
+rRed1.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rRed1.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+rRed1.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+
+// LAN on R_RED2 (OSPF domain)
+rRed2.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '172.16.1.1';
+rRed2.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rRed2.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+rRed2.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+
+rRed1.updateConnectedRoutes();
+rRed2.updateConnectedRoutes();
+
+const redisDevs = [rRed1, rRed2];
+
+// Configure EIGRP 100 on R_RED1
+CliParser.execute('router eigrp 100', { deviceId: 'R_RED1', mode: 'global-config' as const }, rRed1, redisDevs);
+const r1EigrpCtx = { deviceId: 'R_RED1', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAsNumber: 100 };
+CliParser.execute('network 10.10.10.0 0.0.0.255', r1EigrpCtx, rRed1, redisDevs);
+CliParser.execute('network 10.1.12.0 0.0.0.255', r1EigrpCtx, rRed1, redisDevs);
+
+// Configure OSPF 1 on R_RED2
+CliParser.execute('router ospf 1', { deviceId: 'R_RED2', mode: 'global-config' as const }, rRed2, redisDevs);
+const r2OspfCtx = { deviceId: 'R_RED2', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 };
+CliParser.execute('network 172.16.1.0 0.0.0.255 area 0', r2OspfCtx, rRed2, redisDevs);
+CliParser.execute('network 10.1.12.0 0.0.0.255 area 0', r2OspfCtx, rRed2, redisDevs);
+
+// On R_RED1, also run OSPF 1 for redistribution
+CliParser.execute('router ospf 1', { deviceId: 'R_RED1', mode: 'global-config' as const }, rRed1, redisDevs);
+const r1OspfCtx = { deviceId: 'R_RED1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 };
+CliParser.execute('network 10.1.12.0 0.0.0.255 area 0', r1OspfCtx, rRed1, redisDevs);
+
+// Configure Route-Map on R_RED1: EIGRP into OSPF with Tag 999, Metric 30, Type 1
+CliParser.execute('route-map EIGRP_TO_OSPF permit 10', { deviceId: 'R_RED1', mode: 'global-config' as const }, rRed1, redisDevs);
+const r1RmCtx = { deviceId: 'R_RED1', mode: 'route-map-config' as const, targetRouteMapName: 'EIGRP_TO_OSPF', targetRouteMapSeq: 10 };
+CliParser.execute('set metric 30', r1RmCtx, rRed1, redisDevs);
+CliParser.execute('set metric-type type-1', r1RmCtx, rRed1, redisDevs);
+CliParser.execute('set tag 999', r1RmCtx, rRed1, redisDevs);
+
+// Apply redistribution under router ospf 1 on R_RED1
+CliParser.execute('redistribute eigrp 100 metric 30 metric-type 1 route-map EIGRP_TO_OSPF subnets', r1OspfCtx, rRed1, redisDevs);
+
+// Show route-map on R_RED1
+const showRmRes = CliParser.execute('show route-map EIGRP_TO_OSPF', { deviceId: 'R_RED1', mode: 'priv-exec' as const }, rRed1, redisDevs);
+console.log(`'show route-map' on R_RED1: ${showRmRes.output.includes('tag 999') && showRmRes.output.includes('metric 30') ? 'PASS' : 'FAIL'}`);
+
+// Converge routing protocols and check that R_RED2 receives O E1 route 10.10.10.0/24 with tag 999
+RoutingProtocolEngine.convergeRoutingProtocols(redisDevs);
+const r2Routes = rRed2.routingTable;
+const redisRoute = r2Routes.find(r => r.network === '10.10.10.0');
+console.log(`OSPF Redistributed Route (O E1) on R_RED2: ${redisRoute && redisRoute.protocol === 'O E1' && redisRoute.tag === 999 && redisRoute.metric === 30 ? 'PASS' : 'FAIL'}`);
+
+// 3. Uji Policy-Based Routing (PBR) & IP SLA Object Tracking with Dynamic Failover
+const rPbr = new Router('R_PBR', 'R-PBR', { x: 700, y: 900 });
+const isp1 = new Router('ISP1', 'ISP1', { x: 900, y: 850 });
+const isp2 = new Router('ISP2', 'ISP2', { x: 900, y: 950 });
+const pcPbr = new Host('PC_PBR', 'PC-PBR', 'pc', { x: 550, y: 900 });
+
+// R_PBR Gi0/0/0 (LAN - PC)
+rPbr.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '192.168.1.1';
+rPbr.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rPbr.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rPbr.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rPbr.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'PC_PBR';
+rPbr.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'FastEthernet0';
+
+// R_PBR Gi0/0/1 (WAN to ISP1)
+rPbr.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '198.51.100.1';
+rPbr.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rPbr.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+rPbr.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+rPbr.interfaces.get('GigabitEthernet0/0/1')!.connectedDeviceId = 'ISP1';
+rPbr.interfaces.get('GigabitEthernet0/0/1')!.connectedPort = 'GigabitEthernet0/0/0';
+
+// R_PBR Gi0/0/2 (WAN to ISP2)
+rPbr.interfaces.get('GigabitEthernet0/0/2')!.ipAddress = '203.0.113.1';
+rPbr.interfaces.get('GigabitEthernet0/0/2')!.subnetMask = '255.255.255.0';
+rPbr.interfaces.get('GigabitEthernet0/0/2')!.status = 'up';
+rPbr.interfaces.get('GigabitEthernet0/0/2')!.isShutdown = false;
+rPbr.interfaces.get('GigabitEthernet0/0/2')!.connectedDeviceId = 'ISP2';
+rPbr.interfaces.get('GigabitEthernet0/0/2')!.connectedPort = 'GigabitEthernet0/0/0';
+
+// ISP1 Gi0/0/0
+isp1.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '198.51.100.2';
+isp1.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+isp1.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+isp1.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+isp1.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_PBR';
+isp1.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/1';
+
+// ISP2 Gi0/0/0
+isp2.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '203.0.113.2';
+isp2.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+isp2.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+isp2.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+isp2.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_PBR';
+isp2.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/2';
+
+// PC_PBR config
+pcPbr.ipAddress = '192.168.1.100';
+pcPbr.subnetMask = '255.255.255.0';
+pcPbr.defaultGateway = '192.168.1.1';
+pcPbr.interfaces.get('FastEthernet0')!.connectedDeviceId = 'R_PBR';
+pcPbr.interfaces.get('FastEthernet0')!.connectedPort = 'GigabitEthernet0/0/0';
+
+rPbr.updateConnectedRoutes();
+isp1.updateConnectedRoutes();
+isp2.updateConnectedRoutes();
+
+const pbrDevs = [rPbr, isp1, isp2, pcPbr];
+
+// Default route on R_PBR points to ISP2 (203.0.113.2)
+CliParser.execute('ip route 0.0.0.0 0.0.0.0 203.0.113.2', { deviceId: 'R_PBR', mode: 'global-config' as const }, rPbr, pbrDevs);
+
+// Configure IP SLA 1 to monitor ISP1 (198.51.100.2)
+CliParser.execute('ip sla 1', { deviceId: 'R_PBR', mode: 'global-config' as const }, rPbr, pbrDevs);
+const slaCtx = { deviceId: 'R_PBR', mode: 'ip-sla-config' as const, targetIpSlaId: 1 };
+CliParser.execute('icmp-echo 198.51.100.2', slaCtx, rPbr, pbrDevs);
+CliParser.execute('frequency 5', slaCtx, rPbr, pbrDevs);
+
+// Configure Track 1 monitoring IP SLA 1
+CliParser.execute('track 1 ip sla 1 state', { deviceId: 'R_PBR', mode: 'global-config' as const }, rPbr, pbrDevs);
+
+// Configure ACL 10 matching LAN traffic
+CliParser.execute('access-list 10 permit 192.168.1.0 0.0.0.255', { deviceId: 'R_PBR', mode: 'global-config' as const }, rPbr, pbrDevs);
+
+// Configure Route-Map PBR_POLICY
+CliParser.execute('route-map PBR_POLICY permit 10', { deviceId: 'R_PBR', mode: 'global-config' as const }, rPbr, pbrDevs);
+const pbrRmCtx = { deviceId: 'R_PBR', mode: 'route-map-config' as const, targetRouteMapName: 'PBR_POLICY', targetRouteMapSeq: 10 };
+CliParser.execute('match ip address 10', pbrRmCtx, rPbr, pbrDevs);
+CliParser.execute('set ip next-hop verify-availability 198.51.100.2 1 track 1', pbrRmCtx, rPbr, pbrDevs);
+
+// Apply PBR to ingress interface Gi0/0/0
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R_PBR', mode: 'global-config' as const }, rPbr, pbrDevs);
+const rPbrGi0Ctx = { deviceId: 'R_PBR', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' };
+CliParser.execute('ip policy route-map PBR_POLICY', rPbrGi0Ctx, rPbr, pbrDevs);
+
+// Initial Evaluation: ISP1 is up -> SLA 1 is OK -> Track 1 is UP
+PolicyEngine.evaluateIpSla(pbrDevs);
+const track1 = rPbr.trackObjects.get(1);
+console.log(`Track 1 State (Initial, ISP1 UP): ${track1?.state} -> ${track1?.state === 'UP' ? 'PASS' : 'FAIL'}`);
+
+const showSlaRes = CliParser.execute('show ip sla summary', { deviceId: 'R_PBR', mode: 'priv-exec' as const }, rPbr, pbrDevs);
+console.log(`'show ip sla summary': ${showSlaRes.output.includes('198.51.100.2') && showSlaRes.output.includes('OK') ? 'PASS' : 'FAIL'}`);
+
+const showTrackRes = CliParser.execute('show track 1', { deviceId: 'R_PBR', mode: 'priv-exec' as const }, rPbr, pbrDevs);
+console.log(`'show track 1': ${showTrackRes.output.includes('State is UP') ? 'PASS' : 'FAIL'}`);
+
+// Test PC Reachability with PBR: Destination behind ISP1 (198.51.100.2)
+const reachPbr1 = TopologyTraversal.evaluateHostReachability(pcPbr, '198.51.100.2', pbrDevs);
+console.log(`PBR Packet forwarded to ISP1 (Track UP): ${reachPbr1.isReachable ? 'PASS' : 'FAIL'}`);
+
+// Simulate ISP1 failure: Shutdown ISP1 Gi0/0/0
+isp1.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = true;
+isp1.interfaces.get('GigabitEthernet0/0/0')!.status = 'down';
+
+// Evaluate IP SLA: SLA 1 must timeout -> Track 1 transitions to DOWN
+PolicyEngine.evaluateIpSla(pbrDevs);
+console.log(`Track 1 State after ISP1 link failure: ${track1?.state} -> ${track1?.state === 'DOWN' ? 'PASS' : 'FAIL'}`);
+
+// Now test PC Reachability to ISP2 (203.0.113.2) via fallback to standard default route
+const reachFallback = TopologyTraversal.evaluateHostReachability(pcPbr, '203.0.113.2', pbrDevs);
+console.log(`PBR Automatic Fallback to Default Route (ISP2) on Track DOWN: ${reachFallback.isReachable ? 'PASS' : 'FAIL'}`);
+
+// Restore ISP1 link
+isp1.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+isp1.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+PolicyEngine.evaluateIpSla(pbrDevs);
+console.log(`Track 1 State after ISP1 recovery: ${track1?.state} -> ${track1?.state === 'UP' ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, & 4 SELESAI DENGAN SUKSES! ===');
 
 
 

@@ -11,6 +11,7 @@ import { Router } from '../devices/Router';
 import { Switch } from '../devices/Switch';
 import { SubnetUtils } from './Subnet';
 import { RouteEntry } from '../../types/network';
+import { PolicyEngine } from './PolicyEngine';
 
 export class RoutingProtocolEngine {
   /**
@@ -19,14 +20,24 @@ export class RoutingProtocolEngine {
   static convergeRoutingProtocols(allDevices: Device[]): void {
     const l3Nodes = allDevices.filter(d => d instanceof Router || (d instanceof Switch && d.isLayer3 && d.ipRouting)) as (Router | Switch)[];
 
-    // Bersihkan rute dinamis lama (O, O IA, D, D EX, B) sebelum kalkulasi ulang
+    // Bersihkan rute dinamis lama (O, O IA, O E1, O E2, D, D EX, B) sebelum kalkulasi ulang
     for (const node of l3Nodes) {
-      node.routingTable = node.routingTable.filter(r => r.protocol !== 'O' && r.protocol !== 'O IA' && r.protocol !== 'D' && r.protocol !== 'D EX' && r.protocol !== 'B');
+      node.routingTable = node.routingTable.filter(r => 
+        r.protocol !== 'O' && 
+        r.protocol !== 'O IA' && 
+        r.protocol !== 'O E1' && 
+        r.protocol !== 'O E2' && 
+        r.protocol !== 'D' && 
+        r.protocol !== 'D EX' && 
+        r.protocol !== 'B'
+      );
     }
 
     this.convergeOspf(l3Nodes, allDevices);
     this.convergeEigrp(l3Nodes, allDevices);
     this.convergeBgp(l3Nodes, allDevices);
+    PolicyEngine.evaluateIpSla(allDevices);
+    this.convergeRedistributions(l3Nodes, allDevices);
   }
 
   // ===================== OSPF MULTI-AREA CONVERGENCE =====================
@@ -297,6 +308,310 @@ export class RoutingProtocolEngine {
                   adminDistance: ad,
                   metric: 0
                 });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ===================== MUTUAL ROUTE REDISTRIBUTION =====================
+  private static convergeRedistributions(l3Nodes: (Router | Switch)[], allDevices: Device[]): void {
+    for (const node of l3Nodes) {
+      // 1. OSPF Redistribution
+      if (node.ospfConfig && node.ospfConfig.enabled && node.ospfConfig.redistributions) {
+        for (const redist of node.ospfConfig.redistributions) {
+          const proto = redist.protocol;
+          const candidateRoutes: RouteEntry[] = [];
+
+          if (proto === 'connected') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'C'));
+          } else if (proto === 'static') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'S'));
+          } else if (proto === 'eigrp') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'D' || r.protocol === 'D EX'));
+            if (node.eigrpConfig && node.eigrpConfig.enabled) {
+              for (const r of node.routingTable) {
+                if (r.protocol === 'C') {
+                  const isEigrpNet = node.eigrpConfig.networks.some(netRule => {
+                    const mask = netRule.wildcard ? SubnetUtils.wildcardToMask(netRule.wildcard) : '255.255.255.0';
+                    return SubnetUtils.isIpInSubnet(r.network, netRule.network, mask) || r.network === netRule.network;
+                  });
+                  if (isEigrpNet && !candidateRoutes.some(c => c.network === r.network && c.mask === r.mask)) {
+                    candidateRoutes.push(r);
+                  }
+                }
+              }
+            }
+          } else if (proto === 'bgp') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'B'));
+          }
+
+          for (const cand of candidateRoutes) {
+            let permitted = true;
+            let metric = redist.metric !== undefined ? redist.metric : 20;
+            let metricType: 'O E1' | 'O E2' = (redist.metricType === '1' || redist.metricType === 'type-1') ? 'O E1' : 'O E2';
+            let tag = cand.tag;
+
+            if (redist.routeMap) {
+              const rm = node.routeMaps?.get(redist.routeMap);
+              if (rm) {
+                const evalRes = PolicyEngine.evaluateRouteMap(rm, cand, node);
+                permitted = evalRes.permitted;
+                if (evalRes.setMetric !== undefined) metric = evalRes.setMetric;
+                if (evalRes.setMetricType === 'type-1') metricType = 'O E1';
+                if (evalRes.setMetricType === 'type-2') metricType = 'O E2';
+                if (evalRes.setTag !== undefined) tag = evalRes.setTag;
+              } else {
+                permitted = false;
+              }
+            }
+
+            if (permitted) {
+              // Sebarkan rute OSPF External ke seluruh domain OSPF
+              for (const ospfPeer of l3Nodes) {
+                if (!ospfPeer.ospfConfig || !ospfPeer.ospfConfig.enabled) continue;
+
+                // Jangan pasang pada node asal jika rute tersebut sudah ada di tabel routing
+                if (ospfPeer.id === node.id) {
+                  const hasLocal = ospfPeer.routingTable.some(r => r.network === cand.network && r.mask === cand.mask && (r.protocol === 'O E1' || r.protocol === 'O E2'));
+                  if (!hasLocal) {
+                    ospfPeer.routingTable.push({
+                      network: cand.network,
+                      mask: cand.mask,
+                      cidr: cand.cidr,
+                      nextHop: cand.nextHop || '0.0.0.0',
+                      exitInterface: cand.exitInterface || 'Null0',
+                      protocol: metricType,
+                      adminDistance: 110,
+                      metric,
+                      tag
+                    });
+                  }
+                  continue;
+                }
+
+                // Temukan antarmuka penghubung ke ASBR
+                for (const pIf of ospfPeer.interfaces.values()) {
+                  if (pIf.isShutdown || pIf.status !== 'up' || !pIf.ipAddress || !pIf.subnetMask) continue;
+                  for (const nIf of node.interfaces.values()) {
+                    if (nIf.isShutdown || nIf.status !== 'up' || !nIf.ipAddress || !nIf.subnetMask) continue;
+
+                    if (SubnetUtils.isSameSubnet(pIf.ipAddress, nIf.ipAddress, pIf.subnetMask)) {
+                      let isDirect = false;
+                      for (const ifc of ospfPeer.interfaces.values()) {
+                        if (ifc.ipAddress && ifc.subnetMask && SubnetUtils.isSameSubnet(ifc.ipAddress, cand.network, ifc.subnetMask)) {
+                          isDirect = true;
+                          break;
+                        }
+                      }
+                      if (isDirect) continue;
+
+                      const exIdx = ospfPeer.routingTable.findIndex(r => r.network === cand.network && r.mask === cand.mask);
+                      if (exIdx >= 0) {
+                        if (ospfPeer.routingTable[exIdx].protocol === 'O E1' || ospfPeer.routingTable[exIdx].protocol === 'O E2') {
+                          ospfPeer.routingTable[exIdx] = {
+                            network: cand.network,
+                            mask: cand.mask,
+                            cidr: cand.cidr,
+                            nextHop: nIf.ipAddress,
+                            exitInterface: pIf.name,
+                            protocol: metricType,
+                            adminDistance: 110,
+                            metric,
+                            tag
+                          };
+                        }
+                      } else {
+                        ospfPeer.routingTable.push({
+                          network: cand.network,
+                          mask: cand.mask,
+                          cidr: cand.cidr,
+                          nextHop: nIf.ipAddress,
+                          exitInterface: pIf.name,
+                          protocol: metricType,
+                          adminDistance: 110,
+                          metric,
+                          tag
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 2. EIGRP Redistribution
+      if (node.eigrpConfig && node.eigrpConfig.enabled && node.eigrpConfig.redistributions) {
+        for (const redist of node.eigrpConfig.redistributions) {
+          const proto = redist.protocol;
+          const candidateRoutes: RouteEntry[] = [];
+
+          if (proto === 'connected') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'C'));
+          } else if (proto === 'static') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'S'));
+          } else if (proto === 'ospf') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'O' || r.protocol === 'O IA' || r.protocol === 'O E1' || r.protocol === 'O E2'));
+          } else if (proto === 'bgp') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'B'));
+          }
+
+          for (const cand of candidateRoutes) {
+            let permitted = true;
+            let metric = redist.metric !== undefined ? redist.metric : (redist.bandwidth && redist.delay ? Math.round(256 * (10000000 / redist.bandwidth + redist.delay)) : 307200);
+            let tag = cand.tag;
+
+            if (redist.routeMap) {
+              const rm = node.routeMaps?.get(redist.routeMap);
+              if (rm) {
+                const evalRes = PolicyEngine.evaluateRouteMap(rm, cand, node);
+                permitted = evalRes.permitted;
+                if (evalRes.setMetric !== undefined) metric = evalRes.setMetric;
+                if (evalRes.setTag !== undefined) tag = evalRes.setTag;
+              } else {
+                permitted = false;
+              }
+            }
+
+            if (permitted) {
+              for (const eigrpPeer of l3Nodes) {
+                if (!eigrpPeer.eigrpConfig || !eigrpPeer.eigrpConfig.enabled) continue;
+                if (eigrpPeer.eigrpConfig.asNumber !== node.eigrpConfig.asNumber) continue;
+
+                if (eigrpPeer.id === node.id) {
+                  const hasLocal = eigrpPeer.routingTable.some(r => r.network === cand.network && r.mask === cand.mask && r.protocol === 'D EX');
+                  if (!hasLocal) {
+                    eigrpPeer.routingTable.push({
+                      network: cand.network,
+                      mask: cand.mask,
+                      cidr: cand.cidr,
+                      nextHop: cand.nextHop || '0.0.0.0',
+                      exitInterface: cand.exitInterface || 'Null0',
+                      protocol: 'D EX',
+                      adminDistance: 170,
+                      metric,
+                      tag
+                    });
+                  }
+                  continue;
+                }
+
+                for (const pIf of eigrpPeer.interfaces.values()) {
+                  if (pIf.isShutdown || pIf.status !== 'up' || !pIf.ipAddress || !pIf.subnetMask) continue;
+                  for (const nIf of node.interfaces.values()) {
+                    if (nIf.isShutdown || nIf.status !== 'up' || !nIf.ipAddress || !nIf.subnetMask) continue;
+
+                    if (SubnetUtils.isSameSubnet(pIf.ipAddress, nIf.ipAddress, pIf.subnetMask)) {
+                      let isDirect = false;
+                      for (const ifc of eigrpPeer.interfaces.values()) {
+                        if (ifc.ipAddress && ifc.subnetMask && SubnetUtils.isSameSubnet(ifc.ipAddress, cand.network, ifc.subnetMask)) {
+                          isDirect = true;
+                          break;
+                        }
+                      }
+                      if (isDirect) continue;
+
+                      const exists = eigrpPeer.routingTable.some(r => r.network === cand.network && r.mask === cand.mask && r.protocol === 'D EX');
+                      if (!exists) {
+                        eigrpPeer.routingTable.push({
+                          network: cand.network,
+                          mask: cand.mask,
+                          cidr: cand.cidr,
+                          nextHop: nIf.ipAddress,
+                          exitInterface: pIf.name,
+                          protocol: 'D EX',
+                          adminDistance: 170,
+                          metric,
+                          tag
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 3. BGP Redistribution
+      if (node.bgpConfig && node.bgpConfig.enabled && node.bgpConfig.redistributions) {
+        for (const redist of node.bgpConfig.redistributions) {
+          const proto = redist.protocol;
+          const candidateRoutes: RouteEntry[] = [];
+
+          if (proto === 'connected') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'C'));
+          } else if (proto === 'static') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'S'));
+          } else if (proto === 'ospf') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'O' || r.protocol === 'O IA'));
+          } else if (proto === 'eigrp') {
+            candidateRoutes.push(...node.routingTable.filter(r => r.protocol === 'D'));
+          }
+
+          for (const cand of candidateRoutes) {
+            let permitted = true;
+            let metric = redist.metric !== undefined ? redist.metric : 0;
+            let tag = cand.tag;
+
+            if (redist.routeMap) {
+              const rm = node.routeMaps?.get(redist.routeMap);
+              if (rm) {
+                const evalRes = PolicyEngine.evaluateRouteMap(rm, cand, node);
+                permitted = evalRes.permitted;
+                if (evalRes.setMetric !== undefined) metric = evalRes.setMetric;
+                if (evalRes.setTag !== undefined) tag = evalRes.setTag;
+              } else {
+                permitted = false;
+              }
+            }
+
+            if (permitted) {
+              for (const bgpPeer of l3Nodes) {
+                if (!bgpPeer.bgpConfig || !bgpPeer.bgpConfig.enabled) continue;
+                if (bgpPeer.id === node.id) continue;
+
+                for (const pIf of bgpPeer.interfaces.values()) {
+                  if (pIf.isShutdown || pIf.status !== 'up' || !pIf.ipAddress || !pIf.subnetMask) continue;
+                  for (const nIf of node.interfaces.values()) {
+                    if (nIf.isShutdown || nIf.status !== 'up' || !nIf.ipAddress || !nIf.subnetMask) continue;
+
+                    if (SubnetUtils.isSameSubnet(pIf.ipAddress, nIf.ipAddress, pIf.subnetMask)) {
+                      let isDirect = false;
+                      for (const ifc of bgpPeer.interfaces.values()) {
+                        if (ifc.ipAddress && ifc.subnetMask && SubnetUtils.isSameSubnet(ifc.ipAddress, cand.network, ifc.subnetMask)) {
+                          isDirect = true;
+                          break;
+                        }
+                      }
+                      if (isDirect) continue;
+
+                      const isEbgp = node.bgpConfig.asNumber !== bgpPeer.bgpConfig.asNumber;
+                      const adminDistance = isEbgp ? 20 : 200;
+
+                      const exists = bgpPeer.routingTable.some(r => r.network === cand.network && r.mask === cand.mask && r.protocol === 'B');
+                      if (!exists) {
+                        bgpPeer.routingTable.push({
+                          network: cand.network,
+                          mask: cand.mask,
+                          cidr: cand.cidr,
+                          nextHop: nIf.ipAddress,
+                          exitInterface: pIf.name,
+                          protocol: 'B',
+                          adminDistance,
+                          metric,
+                          tag
+                        });
+                      }
+                    }
+                  }
+                }
               }
             }
           }

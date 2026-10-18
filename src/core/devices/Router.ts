@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule } from '../../types/network';
+import { DevicePosition, RouteEntry, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -12,6 +12,10 @@ export class Router extends Device {
   dhcpExcludedAddresses: string[] = [];
   accessLists: Map<number, AclRule[]> = new Map();
   natRules: NatRule[] = [];
+  routeMaps: Map<string, RouteMap> = new Map();
+  prefixLists: Map<string, IpPrefixList> = new Map();
+  ipSlas: Map<number, IpSlaConfig> = new Map();
+  trackObjects: Map<number, TrackObject> = new Map();
 
   constructor(id: string, hostname: string, position: DevicePosition) {
     super(id, hostname, 'router', position);
@@ -245,6 +249,9 @@ export class Router extends Device {
         if (iface.vrrp.priority !== 100) lines.push(` vrrp ${iface.vrrp.group} priority ${iface.vrrp.priority}`);
         if (iface.vrrp.preempt) lines.push(` vrrp ${iface.vrrp.group} preempt`);
       }
+      if (iface.ipPolicyRouteMap) {
+        lines.push(` ip policy route-map ${iface.ipPolicyRouteMap}`);
+      }
       if (iface.natType) {
         lines.push(` ip nat ${iface.natType}`);
       }
@@ -276,6 +283,17 @@ export class Router extends Device {
       for (const p of this.ospfConfig.passiveInterfaces) {
         lines.push(` passive-interface ${p}`);
       }
+      if (this.ospfConfig.redistributions) {
+        for (const r of this.ospfConfig.redistributions) {
+          let cmd = ` redistribute ${r.protocol}`;
+          if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+          if (r.metric !== undefined) cmd += ` metric ${r.metric}`;
+          if (r.metricType) cmd += ` metric-type ${r.metricType}`;
+          if (r.subnets) cmd += ` subnets`;
+          if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+          lines.push(cmd);
+        }
+      }
       lines.push('!');
     }
 
@@ -288,6 +306,19 @@ export class Router extends Device {
       }
       for (const p of this.eigrpConfig.passiveInterfaces) {
         lines.push(` passive-interface ${p}`);
+      }
+      if (this.eigrpConfig.redistributions) {
+        for (const r of this.eigrpConfig.redistributions) {
+          let cmd = ` redistribute ${r.protocol}`;
+          if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+          if (r.bandwidth && r.delay) {
+            cmd += ` metric ${r.bandwidth} ${r.delay} ${r.reliability || 255} ${r.load || 1} ${r.mtu || 1500}`;
+          } else if (r.metric) {
+            cmd += ` metric ${r.metric}`;
+          }
+          if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+          lines.push(cmd);
+        }
       }
       lines.push('!');
     }
@@ -304,7 +335,54 @@ export class Router extends Device {
       for (const net of this.bgpConfig.networks) {
         lines.push(` network ${net.network}${net.mask ? ' mask ' + net.mask : ''}`);
       }
+      if (this.bgpConfig.redistributions) {
+        for (const r of this.bgpConfig.redistributions) {
+          let cmd = ` redistribute ${r.protocol}`;
+          if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+          if (r.metric !== undefined) cmd += ` metric ${r.metric}`;
+          if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+          lines.push(cmd);
+        }
+      }
       lines.push('!');
+    }
+
+    // IP Prefix Lists
+    for (const pl of this.prefixLists.values()) {
+      for (const e of pl.entries) {
+        let cmd = `ip prefix-list ${pl.name} seq ${e.seq} ${e.action} ${e.prefix}`;
+        if (e.ge) cmd += ` ge ${e.ge}`;
+        if (e.le) cmd += ` le ${e.le}`;
+        lines.push(cmd);
+      }
+    }
+
+    // Route Maps
+    for (const rm of this.routeMaps.values()) {
+      for (const c of rm.clauses) {
+        lines.push(`route-map ${rm.name} ${c.action} ${c.sequence}`);
+        if (c.matchAcl) lines.push(` match ip address ${c.matchAcl}`);
+        if (c.matchPrefixList) lines.push(` match ip address prefix-list ${c.matchPrefixList}`);
+        if (c.matchTag) lines.push(` match tag ${c.matchTag}`);
+        if (c.matchInterface) lines.push(` match interface ${c.matchInterface}`);
+        if (c.setMetric !== undefined) lines.push(` set metric ${c.setMetric}`);
+        if (c.setMetricType) lines.push(` set metric-type ${c.setMetricType}`);
+        if (c.setTag !== undefined) lines.push(` set tag ${c.setTag}`);
+        if (c.setIpNextHop) lines.push(` set ip next-hop ${c.setIpNextHop}`);
+        if (c.setIpNextHopTrack) lines.push(` set ip next-hop verify-availability ${c.setIpNextHopTrack.nextHop} 1 track ${c.setIpNextHopTrack.trackId}`);
+        lines.push('!');
+      }
+    }
+
+    // IP SLA & Track
+    for (const sla of this.ipSlas.values()) {
+      lines.push(`ip sla ${sla.id}`);
+      lines.push(` icmp-echo ${sla.targetIp}`);
+      if (sla.frequency) lines.push(` frequency ${sla.frequency}`);
+      lines.push('!');
+    }
+    for (const trk of this.trackObjects.values()) {
+      lines.push(`track ${trk.id} ip sla ${trk.slaId} state`);
     }
 
     // Static routes

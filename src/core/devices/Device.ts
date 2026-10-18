@@ -120,6 +120,10 @@ export abstract class Device {
         return `${host}(config-line)#`;
       case 'dhcp-config':
         return `${host}(dhcp-config)#`;
+      case 'route-map-config':
+        return `${host}(config-route-map)#`;
+      case 'ip-sla-config':
+        return `${host}(config-sla-echo)#`;
       default:
         return `${host}>`;
     }

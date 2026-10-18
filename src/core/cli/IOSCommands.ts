@@ -1,5 +1,5 @@
 import { CliContext, CliExecutionResult, CommandHelpItem } from '../../types/cli';
-import { RouteEntry, DhcpPool, InterfaceConfig } from '../../types/network';
+import { RouteEntry, DhcpPool, InterfaceConfig, RedistributionConfig } from '../../types/network';
 import { Router } from '../devices/Router';
 import { Switch } from '../devices/Switch';
 import { Device } from '../devices/Device';
@@ -10,6 +10,7 @@ import { SpanningTreeEngine } from '../network/SpanningTreeEngine';
 import { EtherChannelEngine } from '../network/EtherChannelEngine';
 import { RoutingProtocolEngine } from '../network/RoutingProtocolEngine';
 import { FhrpEngine } from '../network/FhrpEngine';
+import { PolicyEngine } from '../network/PolicyEngine';
 
 export class IOSCommands {
   /**
@@ -197,6 +198,28 @@ export class IOSCommands {
           { command: 'end', description: 'Exit to privileged EXEC mode' }
         );
         break;
+
+      case 'route-map-config':
+        list.push(
+          { command: 'match ip address', description: 'Match address of route or packet' },
+          { command: 'match tag', description: 'Match tag of route' },
+          { command: 'set metric', description: 'Set metric for destination routing protocol' },
+          { command: 'set metric-type', description: 'Set metric type for destination routing protocol' },
+          { command: 'set tag', description: 'Set tag for destination routing protocol' },
+          { command: 'set ip next-hop', description: 'Set next hop to which the packet is forwarded' },
+          { command: 'exit', description: 'Exit from route-map configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'ip-sla-config':
+        list.push(
+          { command: 'icmp-echo', description: 'ICMP echo request to target IP' },
+          { command: 'frequency', description: 'Frequency of an operation' },
+          { command: 'exit', description: 'Exit from IP SLA configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
     }
 
     return list;
@@ -230,7 +253,7 @@ export class IOSCommands {
       if (context.mode === 'priv-exec') {
         return { output: '', newMode: 'user-exec' };
       }
-      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config'].includes(context.mode)) {
+      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config'].includes(context.mode)) {
         return { output: '', newMode: 'global-config' };
       }
       if (context.mode === 'global-config') {
@@ -270,6 +293,10 @@ export class IOSCommands {
         return this.execLineConfigMode(tokens, context, device);
       case 'dhcp-config':
         return this.execDhcpConfigMode(tokens, raw, context, device);
+      case 'route-map-config':
+        return this.execRouteMapConfigMode(tokens, raw, context, device);
+      case 'ip-sla-config':
+        return this.execIpSlaConfigMode(tokens, raw, context, device);
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -320,13 +347,35 @@ export class IOSCommands {
         const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
         return { output: FhrpEngine.renderShowStandby(device, isBrief) };
       }
+      if ('standby'.startsWith(cmd1)) {
+        FhrpEngine.convergeFhrp(allDevices);
+        const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
+        return { output: FhrpEngine.renderShowStandby(device, isBrief) };
+      }
       if ('vrrp'.startsWith(cmd1)) {
         FhrpEngine.convergeFhrp(allDevices);
         const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
         return { output: FhrpEngine.renderShowVrrp(device, isBrief) };
       }
+      if ('route-map'.startsWith(cmd1)) {
+        const rmName = tokens.length >= 3 ? tokens[2] : undefined;
+        return { output: PolicyEngine.renderShowRouteMap(device, rmName) };
+      }
+      if ('track'.startsWith(cmd1)) {
+        PolicyEngine.evaluateIpSla(allDevices);
+        const trkId = tokens.length >= 3 ? parseInt(tokens[2], 10) : undefined;
+        return { output: PolicyEngine.renderShowTrack(device, trkId) };
+      }
       if ('ip'.startsWith(cmd1) && tokens.length > 2) {
         const cmd2 = tokens[2].toLowerCase();
+        if ('prefix-list'.startsWith(cmd2)) {
+          const plName = tokens.length >= 4 ? tokens[3] : undefined;
+          return { output: PolicyEngine.renderShowIpPrefixList(device, plName) };
+        }
+        if ('sla'.startsWith(cmd2)) {
+          PolicyEngine.evaluateIpSla(allDevices);
+          return { output: PolicyEngine.renderShowIpSla(device) };
+        }
         if ('ospf'.startsWith(cmd2)) {
           RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
           return { output: RoutingProtocolEngine.renderShowIpOspfNeighbor(device, allDevices) };
@@ -438,6 +487,18 @@ export class IOSCommands {
           if (tokens.length >= 4 && 'brief'.startsWith(tokens[3].toLowerCase())) {
             return { output: this.renderIpInterfaceBrief(device) };
           }
+        }
+
+        // show ip prefix-list ...
+        if ('prefix-list'.startsWith(cmd2)) {
+          const plName = tokens.length >= 4 ? tokens[3] : undefined;
+          return { output: PolicyEngine.renderShowIpPrefixList(device, plName) };
+        }
+
+        // show ip sla ...
+        if ('sla'.startsWith(cmd2)) {
+          PolicyEngine.evaluateIpSla(allDevices);
+          return { output: PolicyEngine.renderShowIpSla(device) };
         }
 
         // show ip route
@@ -577,6 +638,19 @@ export class IOSCommands {
         FhrpEngine.convergeFhrp(allDevices);
         const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
         return { output: FhrpEngine.renderShowVrrp(device, isBrief) };
+      }
+
+      // show route-map ...
+      if ('route-map'.startsWith(cmd1)) {
+        const rmName = tokens.length >= 3 ? tokens[2] : undefined;
+        return { output: PolicyEngine.renderShowRouteMap(device, rmName) };
+      }
+
+      // show track ...
+      if ('track'.startsWith(cmd1)) {
+        PolicyEngine.evaluateIpSla(allDevices);
+        const trkId = tokens.length >= 3 ? parseInt(tokens[2], 10) : undefined;
+        return { output: PolicyEngine.renderShowTrack(device, trkId) };
       }
     }
 
@@ -829,6 +903,195 @@ export class IOSCommands {
         target.bgpConfig = undefined;
         return { output: '' };
       }
+    }
+
+    // route-map <name> [permit | deny] [sequence]
+    if ('route-map'.startsWith(cmd0) && tokens.length >= 2) {
+      const mapName = tokens[1];
+      let action: 'permit' | 'deny' = 'permit';
+      let seq = 10;
+      if (tokens.length >= 3) {
+        const a3 = tokens[2].toLowerCase();
+        if (a3 === 'deny') action = 'deny';
+        else if (a3 === 'permit') action = 'permit';
+        else if (!isNaN(parseInt(a3, 10))) seq = parseInt(a3, 10);
+      }
+      if (tokens.length >= 4) {
+        const a4 = tokens[3].toLowerCase();
+        if (a4 === 'deny') action = 'deny';
+        else if (a4 === 'permit') action = 'permit';
+        else if (!isNaN(parseInt(a4, 10))) seq = parseInt(a4, 10);
+      }
+
+      const target = device as Router | Switch;
+      if (!target.routeMaps) target.routeMaps = new Map();
+      let rm = target.routeMaps.get(mapName);
+      if (!rm) {
+        rm = { name: mapName, clauses: [] };
+        target.routeMaps.set(mapName, rm);
+      }
+      let clause = rm.clauses.find(c => c.sequence === seq);
+      if (!clause) {
+        clause = { sequence: seq, action };
+        rm.clauses.push(clause);
+      } else {
+        clause.action = action;
+      }
+
+      return {
+        output: '',
+        newMode: 'route-map-config',
+        contextUpdates: {
+          targetRouteMapName: mapName,
+          targetRouteMapSeq: seq
+        }
+      };
+    }
+
+    // no route-map <name> [permit | deny] [sequence]
+    if (cmd0 === 'no' && tokens.length >= 3 && 'route-map'.startsWith(tokens[1].toLowerCase())) {
+      const mapName = tokens[2];
+      const target = device as Router | Switch;
+      if (target.routeMaps) {
+        if (tokens.length >= 4) {
+          const lastTok = tokens[tokens.length - 1];
+          const seqNum = parseInt(lastTok, 10);
+          if (!isNaN(seqNum)) {
+            const rm = target.routeMaps.get(mapName);
+            if (rm) {
+              rm.clauses = rm.clauses.filter(c => c.sequence !== seqNum);
+              if (rm.clauses.length === 0) target.routeMaps.delete(mapName);
+            }
+            return { output: '' };
+          }
+        }
+        target.routeMaps.delete(mapName);
+      }
+      return { output: '' };
+    }
+
+    // ip prefix-list <name> [seq <seq>] {permit | deny} <network/len> [ge <ge>] [le <le>]
+    if ('ip'.startsWith(cmd0) && tokens.length >= 3 && 'prefix-list'.startsWith(tokens[1].toLowerCase())) {
+      const listName = tokens[2];
+      let seq = 10;
+      let action: 'permit' | 'deny' = 'permit';
+      let prefix = '';
+      let ge: number | undefined;
+      let le: number | undefined;
+
+      let idx = 3;
+      if (idx < tokens.length && 'seq'.startsWith(tokens[idx].toLowerCase())) {
+        idx++;
+        seq = parseInt(tokens[idx], 10) || 10;
+        idx++;
+      }
+      if (idx < tokens.length) {
+        const act = tokens[idx].toLowerCase();
+        if (act === 'permit' || act === 'deny') {
+          action = act;
+          idx++;
+        }
+      }
+      if (idx < tokens.length) {
+        prefix = tokens[idx];
+        idx++;
+      }
+      while (idx < tokens.length) {
+        if ('ge'.startsWith(tokens[idx].toLowerCase()) && idx + 1 < tokens.length) {
+          ge = parseInt(tokens[idx + 1], 10);
+          idx += 2;
+        } else if ('le'.startsWith(tokens[idx].toLowerCase()) && idx + 1 < tokens.length) {
+          le = parseInt(tokens[idx + 1], 10);
+          idx += 2;
+        } else {
+          idx++;
+        }
+      }
+
+      if (prefix && prefix.includes('/')) {
+        const target = device as Router | Switch;
+        if (!target.prefixLists) target.prefixLists = new Map();
+        let pl = target.prefixLists.get(listName);
+        if (!pl) {
+          pl = { name: listName, entries: [] };
+          target.prefixLists.set(listName, pl);
+        }
+        if (!tokens.some(t => t.toLowerCase() === 'seq') && pl.entries.length > 0) {
+          const maxSeq = Math.max(...pl.entries.map(e => e.seq));
+          seq = maxSeq + 10;
+        }
+        pl.entries = pl.entries.filter(e => e.seq !== seq);
+        pl.entries.push({ seq, action, prefix, ge, le });
+        pl.entries.sort((a, b) => a.seq - b.seq);
+        return { output: '' };
+      }
+    }
+
+    // no ip prefix-list <name> [seq <seq>]
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'prefix-list'.startsWith(tokens[2].toLowerCase())) {
+      const listName = tokens[3];
+      const target = device as Router | Switch;
+      if (target.prefixLists) {
+        if (tokens.length >= 6 && 'seq'.startsWith(tokens[4].toLowerCase())) {
+          const seqNum = parseInt(tokens[5], 10);
+          const pl = target.prefixLists.get(listName);
+          if (pl) {
+            pl.entries = pl.entries.filter(e => e.seq !== seqNum);
+            if (pl.entries.length === 0) target.prefixLists.delete(listName);
+          }
+          return { output: '' };
+        }
+        target.prefixLists.delete(listName);
+      }
+      return { output: '' };
+    }
+
+    // ip sla <id>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 3 && 'sla'.startsWith(tokens[1].toLowerCase()) && !tokens[1].toLowerCase().includes('schedule')) {
+      const slaId = parseInt(tokens[2], 10);
+      if (isNaN(slaId)) return { output: '% Invalid SLA ID' };
+      const target = device as Router | Switch;
+      if (!target.ipSlas) target.ipSlas = new Map();
+      let sla = target.ipSlas.get(slaId);
+      if (!sla) {
+        sla = { id: slaId, type: 'icmp-echo', targetIp: '', state: 'Timeout' };
+        target.ipSlas.set(slaId, sla);
+      }
+      return {
+        output: '',
+        newMode: 'ip-sla-config',
+        contextUpdates: { targetIpSlaId: slaId }
+      };
+    }
+
+    // no ip sla <id>
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'sla'.startsWith(tokens[2].toLowerCase())) {
+      const slaId = parseInt(tokens[3], 10);
+      const target = device as Router | Switch;
+      if (target.ipSlas) target.ipSlas.delete(slaId);
+      return { output: '' };
+    }
+
+    // track <id> ip sla <slaId> state
+    if ('track'.startsWith(cmd0) && tokens.length >= 5 && 'ip'.startsWith(tokens[2].toLowerCase()) && 'sla'.startsWith(tokens[3].toLowerCase())) {
+      const trkId = parseInt(tokens[1], 10);
+      const slaId = parseInt(tokens[4], 10);
+      const target = device as Router | Switch;
+      if (!target.trackObjects) target.trackObjects = new Map();
+      target.trackObjects.set(trkId, {
+        id: trkId,
+        slaId,
+        state: 'DOWN'
+      });
+      return { output: '' };
+    }
+
+    // no track <id>
+    if (cmd0 === 'no' && tokens.length >= 3 && 'track'.startsWith(tokens[1].toLowerCase())) {
+      const trkId = parseInt(tokens[2], 10);
+      const target = device as Router | Switch;
+      if (target.trackObjects) target.trackObjects.delete(trkId);
+      return { output: '' };
     }
 
     // ip route <network> <mask> <next-hop>
@@ -1247,6 +1510,18 @@ export class IOSCommands {
     }
     if (cmd0 === 'no' && tokens.length >= 3 && 'cdp'.startsWith(tokens[1].toLowerCase()) && 'enable'.startsWith(tokens[2].toLowerCase())) {
       iface.cdpEnabled = false;
+      return { output: '' };
+    }
+
+    // ip policy route-map <name>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 4 && 'policy'.startsWith(tokens[1].toLowerCase()) && 'route-map'.startsWith(tokens[2].toLowerCase())) {
+      iface.ipPolicyRouteMap = tokens[3];
+      return { output: '' };
+    }
+
+    // no ip policy route-map
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'policy'.startsWith(tokens[2].toLowerCase()) && 'route-map'.startsWith(tokens[3].toLowerCase())) {
+      iface.ipPolicyRouteMap = undefined;
       return { output: '' };
     }
 
@@ -1813,6 +2088,90 @@ export class IOSCommands {
       }
     }
 
+    // redistribute <protocol> [asOrPid] [metric ...] [metric-type <1|2>] [route-map <name>] [subnets]
+    if ('redistribute'.startsWith(cmd0) && tokens.length >= 2) {
+      const redisProto = tokens[1].toLowerCase();
+      let asOrPid: number | undefined;
+      let metric: number | undefined;
+      let metricType: 'type-1' | 'type-2' | undefined;
+      let routeMap: string | undefined;
+      let subnets = false;
+
+      let idx = 2;
+      // If next token is numeric (AS or Process ID for ospf, eigrp, bgp)
+      if (idx < tokens.length && !isNaN(parseInt(tokens[idx], 10)) && ['ospf', 'eigrp', 'bgp'].includes(redisProto)) {
+        asOrPid = parseInt(tokens[idx], 10);
+        idx++;
+      }
+
+      while (idx < tokens.length) {
+        const t = tokens[idx].toLowerCase();
+        if ('subnets'.startsWith(t)) {
+          subnets = true;
+          idx++;
+        } else if ('metric-type'.startsWith(t) && idx + 1 < tokens.length) {
+          const mt = tokens[idx + 1].toLowerCase();
+          if (mt === '1' || mt === 'type-1') metricType = 'type-1';
+          else if (mt === '2' || mt === 'type-2') metricType = 'type-2';
+          idx += 2;
+        } else if ('metric'.startsWith(t) && idx + 1 < tokens.length) {
+          metric = parseInt(tokens[idx + 1], 10);
+          idx += 2;
+          while (idx < tokens.length && !isNaN(parseInt(tokens[idx], 10))) {
+            idx++;
+          }
+        } else if ('route-map'.startsWith(t) && idx + 1 < tokens.length) {
+          routeMap = tokens[idx + 1];
+          idx += 2;
+        } else {
+          idx++;
+        }
+      }
+
+      const redisEntry: RedistributionConfig = {
+        protocol: redisProto as any,
+        asOrProcessId: asOrPid,
+        metric,
+        metricType,
+        routeMap,
+        subnets
+      };
+
+      if (target.ospfConfig && (proto === 'ospf' || (!target.eigrpConfig && !target.bgpConfig))) {
+        if (!target.ospfConfig.redistributions) target.ospfConfig.redistributions = [];
+        target.ospfConfig.redistributions = target.ospfConfig.redistributions.filter(r => r.protocol !== redisProto);
+        target.ospfConfig.redistributions.push(redisEntry);
+        return { output: '' };
+      }
+      if (target.eigrpConfig && (proto === 'eigrp' || (!target.ospfConfig && !target.bgpConfig))) {
+        if (!target.eigrpConfig.redistributions) target.eigrpConfig.redistributions = [];
+        target.eigrpConfig.redistributions = target.eigrpConfig.redistributions.filter(r => r.protocol !== redisProto);
+        target.eigrpConfig.redistributions.push(redisEntry);
+        return { output: '' };
+      }
+      if (target.bgpConfig && (proto === 'bgp' || (!target.ospfConfig && !target.eigrpConfig))) {
+        if (!target.bgpConfig.redistributions) target.bgpConfig.redistributions = [];
+        target.bgpConfig.redistributions = target.bgpConfig.redistributions.filter(r => r.protocol !== redisProto);
+        target.bgpConfig.redistributions.push(redisEntry);
+        return { output: '' };
+      }
+    }
+
+    // no redistribute <protocol> [asOrPid]
+    if (cmd0 === 'no' && tokens.length >= 3 && 'redistribute'.startsWith(tokens[1].toLowerCase())) {
+      const redisProto = tokens[2].toLowerCase();
+      if (target.ospfConfig && target.ospfConfig.redistributions) {
+        target.ospfConfig.redistributions = target.ospfConfig.redistributions.filter(r => r.protocol !== redisProto);
+      }
+      if (target.eigrpConfig && target.eigrpConfig.redistributions) {
+        target.eigrpConfig.redistributions = target.eigrpConfig.redistributions.filter(r => r.protocol !== redisProto);
+      }
+      if (target.bgpConfig && target.bgpConfig.redistributions) {
+        target.bgpConfig.redistributions = target.bgpConfig.redistributions.filter(r => r.protocol !== redisProto);
+      }
+      return { output: '' };
+    }
+
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
@@ -1923,6 +2282,160 @@ export class IOSCommands {
     // end
     if (cmd0 === 'end') {
       return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== ROUTE-MAP CONFIG MODE =====================
+  private static execRouteMapConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const mapName = context.targetRouteMapName;
+    const seq = context.targetRouteMapSeq || 10;
+    const target = device as Router | Switch;
+
+    if (!mapName || !target.routeMaps) {
+      return { output: '% No route-map currently being edited.' };
+    }
+
+    let rm = target.routeMaps.get(mapName);
+    if (!rm) {
+      rm = { name: mapName, clauses: [] };
+      target.routeMaps.set(mapName, rm);
+    }
+
+    let clause = rm.clauses.find(c => c.sequence === seq);
+    if (!clause) {
+      clause = { sequence: seq, action: 'permit' };
+      rm.clauses.push(clause);
+    }
+
+    // match ip address prefix-list <name>
+    if ('match'.startsWith(cmd0) && tokens.length >= 5 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase()) && 'prefix-list'.startsWith(tokens[3].toLowerCase())) {
+      clause.matchPrefixList = tokens[4];
+      return { output: '' };
+    }
+
+    // match ip address <acl-id>
+    if ('match'.startsWith(cmd0) && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase())) {
+      const aclId = parseInt(tokens[3], 10);
+      if (!isNaN(aclId)) {
+        clause.matchAcl = aclId;
+        return { output: '' };
+      }
+    }
+
+    // match tag <tag>
+    if ('match'.startsWith(cmd0) && tokens.length >= 3 && 'tag'.startsWith(tokens[1].toLowerCase())) {
+      const tagVal = parseInt(tokens[2], 10);
+      if (!isNaN(tagVal)) {
+        clause.matchTag = tagVal;
+        return { output: '' };
+      }
+    }
+
+    // set metric <val>
+    if ('set'.startsWith(cmd0) && tokens.length >= 3 && 'metric'.startsWith(tokens[1].toLowerCase()) && !tokens[1].toLowerCase().includes('type')) {
+      const mVal = parseInt(tokens[2], 10);
+      if (!isNaN(mVal)) {
+        clause.setMetric = mVal;
+        return { output: '' };
+      }
+    }
+
+    // set metric-type <type-1 | type-2 | 1 | 2>
+    if ('set'.startsWith(cmd0) && tokens.length >= 3 && 'metric-type'.startsWith(tokens[1].toLowerCase())) {
+      const mt = tokens[2].toLowerCase();
+      clause.setMetricType = (mt === 'type-1' || mt === '1') ? 'type-1' : 'type-2';
+      return { output: '' };
+    }
+
+    // set tag <tag>
+    if ('set'.startsWith(cmd0) && tokens.length >= 3 && 'tag'.startsWith(tokens[1].toLowerCase())) {
+      const tagVal = parseInt(tokens[2], 10);
+      if (!isNaN(tagVal)) {
+        clause.setTag = tagVal;
+        return { output: '' };
+      }
+    }
+
+    // set ip next-hop verify-availability <ip> 1 track <trackId>
+    if ('set'.startsWith(cmd0) && tokens.length >= 7 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'next-hop'.startsWith(tokens[2].toLowerCase()) && 'verify-availability'.startsWith(tokens[3].toLowerCase())) {
+      const nextHop = tokens[4];
+      let trackId = 1;
+      const trackIdx = tokens.findIndex(t => t.toLowerCase() === 'track');
+      if (trackIdx !== -1 && trackIdx + 1 < tokens.length) {
+        trackId = parseInt(tokens[trackIdx + 1], 10) || 1;
+      }
+      clause.setIpNextHopTrack = { nextHop, trackId };
+      clause.setIpNextHop = nextHop;
+      return { output: '' };
+    }
+
+    // set ip next-hop <ip>
+    if ('set'.startsWith(cmd0) && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'next-hop'.startsWith(tokens[2].toLowerCase())) {
+      clause.setIpNextHop = tokens[3];
+      return { output: '' };
+    }
+
+    // no match ...
+    if (cmd0 === 'no' && tokens.length >= 2) {
+      const sub = tokens[1].toLowerCase();
+      if ('match'.startsWith(sub)) {
+        clause.matchPrefixList = undefined;
+        clause.matchAcl = undefined;
+        clause.matchTag = undefined;
+        return { output: '' };
+      }
+      if ('set'.startsWith(sub)) {
+        clause.setMetric = undefined;
+        clause.setMetricType = undefined;
+        clause.setTag = undefined;
+        clause.setIpNextHop = undefined;
+        clause.setIpNextHopTrack = undefined;
+        return { output: '' };
+      }
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== IP SLA CONFIG MODE =====================
+  private static execIpSlaConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const slaId = context.targetIpSlaId;
+    const target = device as Router | Switch;
+
+    if (!slaId || !target.ipSlas) {
+      return { output: '% No IP SLA currently being edited.' };
+    }
+
+    let sla = target.ipSlas.get(slaId);
+    if (!sla) {
+      sla = { id: slaId, type: 'icmp-echo', targetIp: '', state: 'Timeout' };
+      target.ipSlas.set(slaId, sla);
+    }
+
+    // icmp-echo <targetIp>
+    if ('icmp-echo'.startsWith(cmd0) && tokens.length >= 2) {
+      sla.targetIp = tokens[1];
+      return { output: '' };
+    }
+
+    // frequency <sec>
+    if ('frequency'.startsWith(cmd0) && tokens.length >= 2) {
+      sla.frequency = parseInt(tokens[1], 10) || 10;
+      return { output: '' };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };

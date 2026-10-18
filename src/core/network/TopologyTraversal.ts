@@ -15,6 +15,7 @@ import { SubnetUtils } from './Subnet';
 import { DhcpPool } from '../../types/network';
 import { RoutingProtocolEngine } from './RoutingProtocolEngine';
 import { FhrpEngine } from './FhrpEngine';
+import { PolicyEngine } from './PolicyEngine';
 
 export interface L2Endpoint {
   device: Device;
@@ -470,26 +471,79 @@ export class TopologyTraversal {
     if (gwDevice instanceof Router || (gwDevice instanceof Switch && gwDevice.isLayer3)) {
       const router = gwDevice as Router;
 
-      // Cari rute ke IP tujuan di tabel routing Router
-      const route = router.lookupRoute(destIp);
-      if (!route) {
-        return {
-          isReachable: false,
-          icmpType: 'dest-net-unreachable',
-          respondingIp: sourceHost.defaultGateway,
-          reason: `Router (${router.hostname}) tidak memiliki rute (atau default route 0.0.0.0/0) ke jaringan tujuan ${destIp}.`
+      // 1. Cek Policy-Based Routing (PBR) pada antarmuka masuk gateway (gwIface)
+      let pbrNextHop: string | undefined;
+      if (gwIface?.ipPolicyRouteMap && router.routeMaps && router.routeMaps.has(gwIface.ipPolicyRouteMap)) {
+        const rmap = router.routeMaps.get(gwIface.ipPolicyRouteMap)!;
+        const candidate = {
+          network: sourceHost.ipAddress,
+          mask: '255.255.255.255',
+          cidr: 32
         };
+        const pbrRes = PolicyEngine.evaluateRouteMap(rmap, candidate, router);
+        if (pbrRes.permitted) {
+          if (pbrRes.setIpNextHopTrack) {
+            const trk = router.trackObjects?.get(pbrRes.setIpNextHopTrack.trackId);
+            if (trk && trk.state === 'UP') {
+              pbrNextHop = pbrRes.setIpNextHopTrack.nextHop;
+            }
+          } else if (pbrRes.setIpNextHop) {
+            pbrNextHop = pbrRes.setIpNextHop;
+          }
+        }
       }
 
-      // Pastikan antarmuka keluar router aktif dan memiliki IP
-      let exitIface = route.exitInterface ? router.interfaces.get(route.exitInterface) : undefined;
-      if (!exitIface && route.nextHop) {
-        // Resolusi rekursif standar Cisco: Cari antarmuka router yang berada di subnet yang sama dengan nextHop
+      // Tentukan exit interface awal
+      let exitIface: any = undefined;
+      let targetForwardIp: string = destIp;
+
+      if (pbrNextHop) {
+        targetForwardIp = pbrNextHop;
         for (const ifc of router.interfaces.values()) {
           if (!ifc.isShutdown && ifc.status === 'up' && ifc.ipAddress && ifc.subnetMask) {
-            if (SubnetUtils.isSameSubnet(ifc.ipAddress, route.nextHop, ifc.subnetMask)) {
+            if (SubnetUtils.isSameSubnet(ifc.ipAddress, pbrNextHop, ifc.subnetMask)) {
               exitIface = ifc;
               break;
+            }
+          }
+        }
+        if (!exitIface) {
+          const rHop = router.lookupRoute(pbrNextHop);
+          if (rHop) {
+            exitIface = rHop.exitInterface ? router.interfaces.get(rHop.exitInterface) : undefined;
+            if (!exitIface && rHop.nextHop) {
+              for (const ifc of router.interfaces.values()) {
+                if (!ifc.isShutdown && ifc.status === 'up' && ifc.ipAddress && ifc.subnetMask) {
+                  if (SubnetUtils.isSameSubnet(ifc.ipAddress, rHop.nextHop, ifc.subnetMask)) {
+                    exitIface = ifc;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (!exitIface) {
+        const route = router.lookupRoute(destIp);
+        if (!route) {
+          return {
+            isReachable: false,
+            icmpType: 'dest-net-unreachable',
+            respondingIp: sourceHost.defaultGateway,
+            reason: `Router (${router.hostname}) tidak memiliki rute (atau default route 0.0.0.0/0) ke jaringan tujuan ${destIp}.`
+          };
+        }
+
+        exitIface = route.exitInterface ? router.interfaces.get(route.exitInterface) : undefined;
+        if (!exitIface && route.nextHop) {
+          for (const ifc of router.interfaces.values()) {
+            if (!ifc.isShutdown && ifc.status === 'up' && ifc.ipAddress && ifc.subnetMask) {
+              if (SubnetUtils.isSameSubnet(ifc.ipAddress, route.nextHop, ifc.subnetMask)) {
+                exitIface = ifc;
+                break;
+              }
             }
           }
         }
@@ -499,7 +553,7 @@ export class TopologyTraversal {
         return {
           isReachable: false,
           icmpType: 'timed-out',
-          reason: `Antarmuka keluar router (${route.exitInterface || route.nextHop || 'unknown'}) tidak dapat ditentukan, berstatus shutdown, atau down.`
+          reason: `Antarmuka keluar router (${exitIface?.name || 'unknown'}) tidak dapat ditentukan, berstatus shutdown, atau down.`
         };
       }
 
@@ -511,67 +565,156 @@ export class TopologyTraversal {
         };
       }
 
-      // Telusuri segmen L2 di antarmuka keluar router
-      const exitEndpoints = this.getL2BroadcastDomain(router, exitIface.name, allDevices);
+      let currentRouter = router;
+      let currentExitIface = exitIface;
+      const visitedRouters = new Set<string>([router.id]);
+      const hops: string[] = [sourceHost.defaultGateway];
 
-      // Cek apakah segmen keluar terhubung ke LiveHostBridge (Internet)
-      const hasLiveBridge = exitEndpoints.some(ep => ep.device.deviceType === 'cloud');
-      if (hasLiveBridge) {
-        return {
-          isReachable: true,
-          icmpType: 'reply',
-          respondingIp: destIp,
-          hops: [sourceHost.defaultGateway, exitIface.ipAddress, destIp]
-        };
-      }
-
-      // Cek apakah tujuan berada di segmen keluar router (LAN lain)
-      for (const ep of exitEndpoints) {
-        if (ep.device instanceof Host && ep.device.ipAddress === destIp) {
-          const remoteMac = ep.device.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6800';
-          router.addArpEntry({
-            ipAddress: destIp,
-            macAddress: remoteMac,
-            interfaceName: exitIface.name,
-            type: 'ARPA',
-            age: 0
-          });
-          ep.device.addArpEntry({
-            ipAddress: exitIface.ipAddress,
-            macAddress: exitIface.macAddress,
-            interfaceName: 'FastEthernet0',
-            type: 'dynamic',
-            age: 0
-          });
-          return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [sourceHost.defaultGateway, destIp] };
+      while (currentRouter && currentExitIface) {
+        if (currentExitIface.isShutdown || currentExitIface.status !== 'up') {
+          return {
+            isReachable: false,
+            icmpType: 'timed-out',
+            reason: `Antarmuka keluar router (${currentExitIface.name}) berstatus shutdown atau down.`
+          };
         }
-        for (const ifc of ep.device.interfaces.values()) {
-          if (ifc.ipAddress === destIp && !ifc.isShutdown && ifc.status === 'up') {
-            router.addArpEntry({
+
+        const exitEndpoints = this.getL2BroadcastDomain(currentRouter, currentExitIface.name, allDevices);
+
+        // Cek apakah segmen keluar terhubung ke LiveHostBridge (Internet)
+        const hasLiveBridge = exitEndpoints.some(ep => ep.device.deviceType === 'cloud');
+        if (hasLiveBridge) {
+          return {
+            isReachable: true,
+            icmpType: 'reply',
+            respondingIp: destIp,
+            hops: [...hops, currentExitIface.ipAddress || '', destIp]
+          };
+        }
+
+        // Cek apakah tujuan berada di segmen keluar router (LAN lain / Host / Router interface)
+        for (const ep of exitEndpoints) {
+          if (ep.device instanceof Host && ep.device.ipAddress === destIp) {
+            const remoteMac = ep.device.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6800';
+            currentRouter.addArpEntry({
               ipAddress: destIp,
-              macAddress: ifc.macAddress,
-              interfaceName: exitIface.name,
+              macAddress: remoteMac,
+              interfaceName: currentExitIface.name,
               type: 'ARPA',
               age: 0
             });
             ep.device.addArpEntry({
-              ipAddress: exitIface.ipAddress,
-              macAddress: exitIface.macAddress,
-              interfaceName: ifc.name,
-              type: 'ARPA',
+              ipAddress: currentExitIface.ipAddress || '',
+              macAddress: currentExitIface.macAddress,
+              interfaceName: 'FastEthernet0',
+              type: 'dynamic',
               age: 0
             });
-            return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [sourceHost.defaultGateway, destIp] };
+            return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [...hops, destIp] };
+          }
+          for (const ifc of ep.device.interfaces.values()) {
+            if (ifc.ipAddress === destIp && !ifc.isShutdown && ifc.status === 'up') {
+              currentRouter.addArpEntry({
+                ipAddress: destIp,
+                macAddress: ifc.macAddress,
+                interfaceName: currentExitIface.name,
+                type: 'ARPA',
+                age: 0
+              });
+              ep.device.addArpEntry({
+                ipAddress: currentExitIface.ipAddress || '',
+                macAddress: currentExitIface.macAddress,
+                interfaceName: ifc.name,
+                type: 'ARPA',
+                age: 0
+              });
+              return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [...hops, destIp] };
+            }
           }
         }
-      }
 
-      // Jika rute ada tetapi tidak ada node tujuan di hop berikutnya
-      return {
-        isReachable: false,
-        icmpType: 'timed-out',
-        reason: `Paket diteruskan keluar ${exitIface.name}, tetapi tidak ada respon dari next-hop.`
-      };
+        // Jika tujuan bukan host/interface di segmen ini, cari router next hop
+        let nextHopRouter: Router | Switch | null = null;
+        let nextHopIfaceOnNextRouter: any = null;
+
+        for (const ep of exitEndpoints) {
+          if (
+            (ep.device instanceof Router || (ep.device instanceof Switch && ep.device.isLayer3)) &&
+            !visitedRouters.has(ep.device.id)
+          ) {
+            const rDev = ep.device as Router | Switch;
+            for (const rIfc of rDev.interfaces.values()) {
+              if (
+                !rIfc.isShutdown &&
+                rIfc.status === 'up' &&
+                rIfc.ipAddress &&
+                (rIfc.ipAddress === targetForwardIp ||
+                 (currentExitIface.subnetMask && SubnetUtils.isSameSubnet(currentExitIface.ipAddress, rIfc.ipAddress, currentExitIface.subnetMask)))
+              ) {
+                nextHopRouter = rDev;
+                nextHopIfaceOnNextRouter = rIfc;
+                break;
+              }
+            }
+            if (nextHopRouter) break;
+          }
+        }
+
+        if (!nextHopRouter) {
+          return {
+            isReachable: false,
+            icmpType: 'timed-out',
+            reason: `Paket diteruskan keluar ${currentExitIface.name}, tetapi tidak ada respon dari next-hop.`
+          };
+        }
+
+        visitedRouters.add(nextHopRouter.id);
+        if (nextHopIfaceOnNextRouter?.ipAddress) {
+          hops.push(nextHopIfaceOnNextRouter.ipAddress);
+        }
+
+        const nextRoute = (nextHopRouter as Router).lookupRoute(destIp);
+        if (!nextRoute) {
+          return {
+            isReachable: false,
+            icmpType: 'dest-net-unreachable',
+            respondingIp: nextHopIfaceOnNextRouter?.ipAddress || currentExitIface.ipAddress,
+            reason: `Router (${nextHopRouter.hostname}) tidak memiliki rute ke jaringan tujuan ${destIp}.`
+          };
+        }
+
+        let nextExit = nextRoute.exitInterface ? nextHopRouter.interfaces.get(nextRoute.exitInterface) : undefined;
+        if (!nextExit && nextRoute.nextHop) {
+          for (const ifc of nextHopRouter.interfaces.values()) {
+            if (!ifc.isShutdown && ifc.status === 'up' && ifc.ipAddress && ifc.subnetMask) {
+              if (SubnetUtils.isSameSubnet(ifc.ipAddress, nextRoute.nextHop, ifc.subnetMask)) {
+                nextExit = ifc;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!nextExit) {
+          return {
+            isReachable: false,
+            icmpType: 'timed-out',
+            reason: `Antarmuka keluar router (${nextHopRouter.hostname}) tidak dapat ditentukan.`
+          };
+        }
+
+        currentRouter = nextHopRouter as Router;
+        currentExitIface = nextExit;
+        targetForwardIp = destIp;
+
+        if (visitedRouters.size > 15) {
+          return {
+            isReachable: false,
+            icmpType: 'timed-out',
+            reason: 'TTL expired in transit (routing loop terdeteksi).'
+          };
+        }
+      }
     }
 
     return {

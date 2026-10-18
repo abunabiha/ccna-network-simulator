@@ -102,6 +102,9 @@ export interface InterfaceConfig {
     advertisementInterval?: number;
     state?: 'Master' | 'Backup' | 'Init' | 'Initialize';
   };
+
+  // Policy-Based Routing (PBR) per interface
+  ipPolicyRouteMap?: string;
 }
 
 export interface StpPortStatus {
@@ -138,9 +141,10 @@ export interface RouteEntry {
   cidr: number;                // 24
   nextHop?: string;            // '10.0.0.2'
   exitInterface?: string;      // 'GigabitEthernet0/0'
-  protocol: 'C' | 'S' | 'O' | 'O IA' | 'D' | 'D EX' | 'B' | 'R' | 'L'; // Connected, Static, OSPF Intra, OSPF Inter-Area, EIGRP, EIGRP External, BGP, RIP, Local
-  adminDistance: number;       // C=0, S=1, O=110, D=90, B=20/200
+  protocol: 'C' | 'S' | 'O' | 'O IA' | 'O E1' | 'O E2' | 'D' | 'D EX' | 'B' | 'R' | 'L'; // Connected, Static, OSPF Intra, OSPF Inter-Area, OSPF External 1/2, EIGRP, EIGRP External, BGP, RIP, Local
+  adminDistance: number;       // C=0, S=1, O=110, D=90/170, B=20/200
   metric: number;
+  tag?: number;
 }
 
 export interface VlanInfo {
@@ -180,6 +184,21 @@ export interface OspfConfig {
     mask: string;
   }>;
   passiveInterfaces: string[];
+  redistributions?: RedistributionConfig[];
+}
+
+export interface RedistributionConfig {
+  protocol: 'ospf' | 'eigrp' | 'bgp' | 'static' | 'connected';
+  asOrProcessId?: number;
+  metric?: number;
+  metricType?: '1' | '2' | 'type-1' | 'type-2';
+  subnets?: boolean;
+  bandwidth?: number;
+  delay?: number;
+  reliability?: number;
+  load?: number;
+  mtu?: number;
+  routeMap?: string;
 }
 
 export interface EigrpConfig {
@@ -192,6 +211,7 @@ export interface EigrpConfig {
   }>;
   passiveInterfaces: string[];
   autoSummary?: boolean;
+  redistributions?: RedistributionConfig[];
 }
 
 export interface BgpNeighbor {
@@ -213,6 +233,57 @@ export interface BgpConfig {
     network: string;
     mask?: string;
   }>;
+  redistributions?: RedistributionConfig[];
+}
+
+export interface RouteMapClause {
+  sequence: number;
+  action: 'permit' | 'deny';
+  matchAcl?: number;
+  matchPrefixList?: string;
+  matchTag?: number;
+  matchInterface?: string;
+  setMetric?: number;
+  setMetricType?: 'type-1' | 'type-2';
+  setTag?: number;
+  setIpNextHop?: string;
+  setIpNextHopTrack?: {
+    nextHop: string;
+    trackId: number;
+  };
+}
+
+export interface RouteMap {
+  name: string;
+  clauses: RouteMapClause[];
+}
+
+export interface IpPrefixListEntry {
+  seq: number;
+  action: 'permit' | 'deny';
+  prefix: string; // e.g. "192.168.0.0/16"
+  ge?: number;
+  le?: number;
+}
+
+export interface IpPrefixList {
+  name: string;
+  entries: IpPrefixListEntry[];
+}
+
+export interface IpSlaConfig {
+  id: number;
+  type: 'icmp-echo';
+  targetIp: string;
+  frequency?: number;
+  state: 'OK' | 'Timeout' | 'Down';
+  rtt?: number;
+}
+
+export interface TrackObject {
+  id: number;
+  slaId: number;
+  state: 'UP' | 'DOWN';
 }
 
 export interface AclRule {
