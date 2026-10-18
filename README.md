@@ -4,6 +4,8 @@
 [![React](https://img.shields.io/badge/React-18.3-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-3.4-cyan.svg)](https://tailwindcss.com/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](Dockerfile)
+[![CI/CD Pipeline](https://github.com/abunabiha/ccna-network-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/abunabiha/ccna-network-simulator/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
@@ -23,25 +25,48 @@ Aplikasi ini berbasis web murni (*zero-install client*), deterministik, responsi
 
 ## 🚀 Cara Menjalankan Aplikasi
 
-### 1. Prasyarat
-- **Node.js**: Versi 18 ke atas (direkomendasikan v20 / v22)
-- **NPM**: Versi 9 ke atas
+### 🐳 1. Menjalankan via Docker di Lokal (Direkomendasikan)
+Aplikasi telah dikemas dalam container Docker multi-stage (Node.js 20 Alpine untuk build + Nginx 1.27 Alpine production web server) yang sangat ringan, aman, dan cepat:
 
-### 2. Menjalankan di Lingkungan Pengembangan (Development Server)
 ```bash
-# Masuk ke direktori proyek
-cd "Network Simulator"
+# Bangun dan jalankan container di latar belakang (background)
+docker compose up -d
+
+# Periksa status container & healthcheck
+docker compose ps
+
+# Akses aplikasi di browser
+http://localhost:8080/
+
+# Melihat log container
+docker compose logs -f
+
+# Menghentikan container
+docker compose down
+```
+
+### 💻 2. Menjalankan di Lingkungan Pengembangan Lokal (Node.js)
+```bash
+# Instal dependensi
+npm install
 
 # Jalankan Vite Development Server
 npm run dev
-```
-Buka peramban di alamat: `http://localhost:3000`
+# Buka di: http://localhost:3000
 
-### 3. Membangun untuk Produksi (Production Build)
-```bash
+# Jalankan seluruh rangkaian pengujian otomatis (Engine, Render, Stress, PC Config)
+npm test
+
+# Build aset produksi
 npm run build
-npm run preview
 ```
+
+---
+
+## ⚙️ Otomasi CI/CD (GitHub Actions)
+Repository ini dilengkapi dengan pipeline CI/CD otomatis di `.github/workflows/ci.yml`:
+1. **Job 1 (Typecheck, Test & Build)**: Menjalankan `tsc --noEmit`, kompilasi bundle Vite, dan rangkaian pengujian automated lab grading, subnetting math, routing table LPM, serta topology stress tests.
+2. **Job 2 (Docker Build & Smoke Test)**: Membangun image Docker multi-stage menggunakan Docker Buildx, menjalankan container pada runner GitHub, dan memverifikasi endpoint `/healthz` serta HTTP 200 via `curl`.
 
 ---
 

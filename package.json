@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "tsx scripts/verify_engine.ts"
+    "test": "tsx scripts/verify_engine.ts && tsx scripts/test_render.tsx && tsx scripts/test_pc_config.tsx && tsx scripts/verify_stress_topology.ts",
+    "test:engine": "tsx scripts/verify_engine.ts",
+    "test:render": "tsx scripts/test_render.tsx",
+    "test:pc": "tsx scripts/test_pc_config.tsx",
+    "test:stress": "tsx scripts/verify_stress_topology.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -1,0 +1,93 @@
+name: CI/CD Pipeline - CCNA NetSim Pro
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================
+  # Job 1: Test & Production Build Verification
+  # ==========================================
+  test-and-build:
+    name: Typecheck, Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck & Build Bundle
+        run: npm run build
+
+      - name: Run Comprehensive Test Suite
+        run: npm test
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccna-dist
+          path: dist/
+          retention-days: 7
+
+  # ==========================================
+  # Job 2: Multi-stage Docker Container Test
+  # ==========================================
+  docker-verify:
+    name: Docker Build & Smoke Test
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: ccna-network-simulator:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Run Docker Container
+        run: |
+          docker run -d --name netsim-smoke-test -p 8080:80 ccna-network-simulator:latest
+          echo "Waiting for container initialization..."
+          sleep 4
+          
+          # Check healthz endpoint
+          echo "Checking /healthz endpoint..."
+          curl -f http://127.0.0.1:8080/healthz || (docker logs netsim-smoke-test && exit 1)
+          
+          # Check index.html serving
+          echo "Checking index.html HTTP 200..."
+          curl -f -I http://127.0.0.1:8080/ || (docker logs netsim-smoke-test && exit 1)
+          
+          docker stop netsim-smoke-test
+          docker rm netsim-smoke-test
+          echo "Docker smoke test passed successfully!"
