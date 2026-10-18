@@ -1,5 +1,6 @@
 services:
   ccna-netsim:
+    image: networksimulator-ccna-netsim:latest
     build:
       context: .
       dockerfile: Dockerfile
