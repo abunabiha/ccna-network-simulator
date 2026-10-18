@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject } from '../../types/network';
+import { DevicePosition, RouteEntry, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -16,6 +16,11 @@ export class Router extends Device {
   prefixLists: Map<string, IpPrefixList> = new Map();
   ipSlas: Map<number, IpSlaConfig> = new Map();
   trackObjects: Map<number, TrackObject> = new Map();
+  vrfInstances: Map<string, VrfConfig> = new Map();
+  mplsEnabled: boolean = false;
+  mplsLdpRouterId?: string;
+  mplsInterfaces: Set<string> = new Set();
+  lfib: MplsLabelEntry[] = [];
 
   constructor(id: string, hostname: string, position: DevicePosition) {
     super(id, hostname, 'router', position);
@@ -100,8 +105,13 @@ export class Router extends Device {
   }
 
   updateConnectedRoutes(): void {
-    // Filter out previous connected and local routes
+    // Filter out previous connected and local routes from global table
     this.routingTable = this.routingTable.filter(r => r.protocol !== 'C' && r.protocol !== 'L');
+
+    // Also clear previous connected and local routes from each VRF table
+    for (const vrf of this.vrfInstances.values()) {
+      vrf.routingTable = vrf.routingTable.filter(r => r.protocol !== 'C' && r.protocol !== 'L');
+    }
 
     const uniqueIfaces = Array.from(new Set(this.interfaces.values()));
     for (const iface of uniqueIfaces) {
@@ -109,8 +119,7 @@ export class Router extends Device {
         const netAddr = SubnetUtils.getNetworkAddress(iface.ipAddress, iface.subnetMask);
         const cidr = SubnetUtils.maskToCidr(iface.subnetMask);
 
-        // Connected route
-        this.routingTable.push({
+        const connRoute: RouteEntry = {
           network: netAddr,
           mask: iface.subnetMask,
           cidr,
@@ -118,10 +127,9 @@ export class Router extends Device {
           protocol: 'C',
           adminDistance: 0,
           metric: 0
-        });
+        };
 
-        // Local route (/32 host route)
-        this.routingTable.push({
+        const localRoute: RouteEntry = {
           network: iface.ipAddress,
           mask: '255.255.255.255',
           cidr: 32,
@@ -129,16 +137,40 @@ export class Router extends Device {
           protocol: 'L',
           adminDistance: 0,
           metric: 0
-        });
+        };
+
+        if (iface.vrf) {
+          let vrf = this.vrfInstances.get(iface.vrf);
+          if (!vrf) {
+            vrf = {
+              name: iface.vrf,
+              routeTargets: [],
+              interfaces: [iface.name],
+              routingTable: [],
+              arpTable: new Map()
+            };
+            this.vrfInstances.set(iface.vrf, vrf);
+          } else if (!vrf.interfaces.includes(iface.name)) {
+            vrf.interfaces.push(iface.name);
+          }
+          vrf.routingTable.push(connRoute, localRoute);
+        } else {
+          this.routingTable.push(connRoute, localRoute);
+        }
       }
     }
   }
 
-  lookupRoute(destIp: string): RouteEntry | null {
+  lookupRoute(destIp: string, vrfName?: string): RouteEntry | null {
+    let targetTable = this.routingTable;
+    if (vrfName && this.vrfInstances.has(vrfName)) {
+      targetTable = this.vrfInstances.get(vrfName)!.routingTable;
+    }
+
     let bestMatch: RouteEntry | null = null;
     let longestPrefix = -1;
 
-    for (const route of this.routingTable) {
+    for (const route of targetTable) {
       if (route.network === '0.0.0.0' && route.mask === '0.0.0.0') {
         // Default route match
         if (longestPrefix < 0) {
@@ -217,11 +249,28 @@ export class Router extends Device {
       lines.push('!');
     }
 
+    // VRF Definitions
+    for (const vrf of this.vrfInstances.values()) {
+      lines.push(`vrf definition ${vrf.name}`);
+      if (vrf.rd) lines.push(` rd ${vrf.rd}`);
+      if (vrf.description) lines.push(` description ${vrf.description}`);
+      if (vrf.routeTargets.length > 0) {
+        lines.push(' address-family ipv4');
+        for (const rt of vrf.routeTargets) {
+          lines.push(`  route-target ${rt.type} ${rt.rt}`);
+        }
+        lines.push(' exit-address-family');
+      }
+      lines.push('!');
+    }
+
     // Interfaces
     const uniqueIfaces = Array.from(new Set(this.interfaces.values()));
     for (const iface of uniqueIfaces) {
       lines.push(`interface ${iface.name}`);
       if (iface.description) lines.push(` description ${iface.description}`);
+      if (iface.vrf) lines.push(` vrf forwarding ${iface.vrf}`);
+      if (iface.mplsEnabled) lines.push(` mpls ip`);
       if (iface.isSubinterface && iface.dot1qVlan) {
         lines.push(` encapsulation dot1Q ${iface.dot1qVlan}`);
       }
@@ -390,6 +439,16 @@ export class Router extends Device {
       if (route.protocol === 'S') {
         const next = route.nextHop || route.exitInterface;
         lines.push(`ip route ${route.network} ${route.mask} ${next}`);
+      }
+    }
+
+    // Static routes per VRF
+    for (const vrf of this.vrfInstances.values()) {
+      for (const route of vrf.routingTable) {
+        if (route.protocol === 'S') {
+          const next = route.nextHop || route.exitInterface;
+          lines.push(`ip route vrf ${vrf.name} ${route.network} ${route.mask} ${next}`);
+        }
       }
     }
 

@@ -9,7 +9,9 @@ export type CliMode =
   | 'line-config'        // Router(config-line)#
   | 'dhcp-config'        // Router(dhcp-config)#
   | 'route-map-config'   // Router(config-route-map)#
-  | 'ip-sla-config';     // Router(config-sla-echo)#
+  | 'ip-sla-config'      // Router(config-sla-echo)#
+  | 'vrf-config'         // Router(config-vrf)#
+  | 'vrf-af-config';     // Router(config-vrf-af)#
 
 export interface CliContext {
   deviceId: string;
@@ -25,6 +27,8 @@ export interface CliContext {
   targetRouteMapName?: string;
   targetRouteMapSeq?: number;
   targetIpSlaId?: number;
+  targetVrfName?: string;
+  targetVrfAf?: string;
 }
 
 export interface CommandHelpItem {

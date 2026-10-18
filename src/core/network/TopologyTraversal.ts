@@ -525,14 +525,17 @@ export class TopologyTraversal {
         }
       }
 
+      const incomingVrf = gwIface?.vrf;
+
       if (!exitIface) {
-        const route = router.lookupRoute(destIp);
+        const route = router.lookupRoute(destIp, incomingVrf);
         if (!route) {
+          const vrfMsg = incomingVrf ? ` di tabel VRF ${incomingVrf}` : '';
           return {
             isReachable: false,
             icmpType: 'dest-net-unreachable',
             respondingIp: sourceHost.defaultGateway,
-            reason: `Router (${router.hostname}) tidak memiliki rute (atau default route 0.0.0.0/0) ke jaringan tujuan ${destIp}.`
+            reason: `Router (${router.hostname}) tidak memiliki rute${vrfMsg} (atau default route 0.0.0.0/0) ke jaringan tujuan ${destIp}.`
           };
         }
 
@@ -673,13 +676,15 @@ export class TopologyTraversal {
           hops.push(nextHopIfaceOnNextRouter.ipAddress);
         }
 
-        const nextRoute = (nextHopRouter as Router).lookupRoute(destIp);
+        const nextVrf = nextHopIfaceOnNextRouter?.vrf;
+        const nextRoute = (nextHopRouter as Router).lookupRoute(destIp, nextVrf);
         if (!nextRoute) {
+          const vrfMsg = nextVrf ? ` di tabel VRF ${nextVrf}` : '';
           return {
             isReachable: false,
             icmpType: 'dest-net-unreachable',
             respondingIp: nextHopIfaceOnNextRouter?.ipAddress || currentExitIface.ipAddress,
-            reason: `Router (${nextHopRouter.hostname}) tidak memiliki rute ke jaringan tujuan ${destIp}.`
+            reason: `Router (${nextHopRouter.hostname}) tidak memiliki rute${vrfMsg} ke jaringan tujuan ${destIp}.`
           };
         }
 

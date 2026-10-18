@@ -124,6 +124,10 @@ export abstract class Device {
         return `${host}(config-route-map)#`;
       case 'ip-sla-config':
         return `${host}(config-sla-echo)#`;
+      case 'vrf-config':
+        return `${host}(config-vrf)#`;
+      case 'vrf-af-config':
+        return `${host}(config-vrf-af)#`;
       default:
         return `${host}>`;
     }

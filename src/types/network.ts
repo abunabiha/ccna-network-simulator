@@ -105,6 +105,44 @@ export interface InterfaceConfig {
 
   // Policy-Based Routing (PBR) per interface
   ipPolicyRouteMap?: string;
+
+  // Virtual Routing and Forwarding (VRF-Lite) per interface
+  vrf?: string;
+
+  // Multiprotocol Label Switching (MPLS) per interface
+  mplsEnabled?: boolean;
+}
+
+export interface VrfRouteTarget {
+  type: 'import' | 'export' | 'both';
+  rt: string; // e.g. "65000:100" or "10.0.0.1:100"
+}
+
+export interface VrfConfig {
+  name: string;
+  description?: string;
+  rd?: string; // Route Distinguisher, e.g. "65000:100" or "10.0.0.1:100"
+  routeTargets: VrfRouteTarget[];
+  interfaces: string[];
+  routingTable: RouteEntry[];
+  arpTable: Map<string, string>; // IP -> MAC
+}
+
+export interface MplsLabelEntry {
+  inLabel: number;
+  prefix: string;
+  outLabel: number | 'Pop Label' | 'Untagged';
+  nextHop?: string;
+  outInterface: string;
+}
+
+export interface MplsLdpNeighbor {
+  peerId: string; // e.g. "192.168.12.2:0"
+  localId: string; // e.g. "192.168.12.1:0"
+  tcpConnection: string;
+  state: 'Oper' | 'Non-Oper';
+  interfaceName: string;
+  peerIp: string;
 }
 
 export interface StpPortStatus {

@@ -206,3 +206,42 @@ $$\text{ForwardAction}(P) = \begin{cases}
 \end{cases}$$
 
 Model ini menjamin pengalihan jalur yang deterministik dan tahan terhadap kegagalan link (*dynamic failover*).
+
+---
+
+## 9. Formulasi Matematika & Teori Graf Multi-Tenant Virtualization (VRF-Lite) dan MPLS Forwarding (LFIB)
+
+### 9.1 Partisi Ruang Alamat dan Tabel Perutean (VRF-Lite)
+Pada router fisik $R$, himpunan antarmuka dinotasikan dengan $\mathcal{I}(R)$. Virtual Routing and Forwarding (VRF) mempartisi $\mathcal{I}(R)$ menjadi sub-himpunan saling lepas (*disjoint sets*):
+$$\mathcal{I}(R) = \mathcal{I}_{global} \cup \bigcup_{k=1}^{n} \mathcal{I}_{V_k}, \quad \text{di mana } \mathcal{I}_{V_j} \cap \mathcal{I}_{V_k} = \emptyset \quad (\forall j \ne k)$$
+
+Setiap instans VRF $V_k$ didefinisikan secara formal sebagai tupel:
+$$V_k = \langle \text{Name}_k, \text{RD}_k, \mathcal{RT}^{imp}_k, \mathcal{RT}^{exp}_k, \mathcal{T}_k, \mathcal{A}_k \rangle$$
+di mana:
+- $\text{RD}_k \in \mathbb{N} : \mathbb{N}$ adalah *Route Distinguisher* yang membuat prefix global menjadi unik ($\text{VPN-IPv4} = \text{RD} \times \text{IPv4}$).
+- $\mathcal{RT}^{imp}_k, \mathcal{RT}^{exp}_k \subset \text{BGP Extended Communities}$ adalah *Route Targets* untuk impor dan ekspor kebijakan rute.
+- $\mathcal{T}_k$ adalah *Routing Information Base* (RIB) terisolasi untuk penyewa $k$.
+- $\mathcal{A}_k$ adalah *ARP Table* independen untuk memetakan IP-ke-MAC dalam domain broadcast penyewa $k$.
+
+#### Teorema Resolusi Alamat Bertumpuk (Overlapping Subnets)
+Untuk sebarang prefix jaringan identik $P = \text{IP}/\mu$ yang dikonfigurasi pada dua antarmuka berbeda $i_1 \in \mathcal{I}_{V_1}$ dan $i_2 \in \mathcal{I}_{V_2}$:
+$$\text{LPM}(P, \mathcal{T}_{V_1}) \ne \text{LPM}(P, \mathcal{T}_{V_2})$$
+Simulator mengevaluasi tabel penerusan berdasarkan konteks antarmuka masuk $i_{in}$:
+$$\text{FIB\_Lookup}(d, i_{in}) = \begin{cases}
+\text{LPM}(d, \mathcal{T}_{V_k}) & \text{jika } i_{in} \in \mathcal{I}_{V_k} \\
+\text{LPM}(d, \mathcal{T}_{global}) & \text{jika } i_{in} \in \mathcal{I}_{global}
+\end{cases}$$
+sehingga tidak terjadi tabrakan rute (*route collision*) antar pelanggan multi-tenant.
+
+### 9.2 Distribusi Label MPLS dan Tabel LFIB (Label Forwarding Information Base)
+Pada jaringan bertransit MPLS, graf topologi direpresentasikan sebagai $G = (V_{LSR}, E_{MPLS})$. Setiap *Label Switching Router* $R_m \in V_{LSR}$ mengalokasikan label lokal $L_{in}(P) \in [16, 2^{20}-1]$ untuk setiap prefix tujuan $P \in \mathcal{T}$.
+
+Melalui sesi peering LDP (*Label Distribution Protocol*), router $R_m$ mempertukarkan label dengan tetangganya $R_n \in \text{Adj}(R_m)$. Entri LFIB dipetakan sebagai fungsi transisi keadaan label:
+$$\text{LFIB}(L_{in}(P)) = \langle \text{OutInterface}, \text{NextHop}, \text{Operation}(L_{out}) \rangle$$
+di mana operasi penerusan ditentukan oleh:
+$$\text{Operation}(L_{out}) = \begin{cases}
+\text{Swap}(L_{out}(P, R_n)) & \text{jika } R_n \text{ adalah transit LSR non-egress} \\
+\text{Pop} \quad (\text{PHP / Implicit Null}) & \text{jika } R_n \text{ adalah Penultimate Hop} \\
+\text{Untagged} & \text{jika tujuan terhubung langsung (egress node)}
+\end{cases}$$
+Formulasi ini memastikan penerusan paket berkecepatan tinggi berbasis label tanpa memerlukan rekursi rute IP pada inti jaringan (*core MPLS*).

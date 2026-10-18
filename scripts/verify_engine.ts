@@ -965,7 +965,138 @@ isp1.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
 PolicyEngine.evaluateIpSla(pbrDevs);
 console.log(`Track 1 State after ISP1 recovery: ${track1?.state} -> ${track1?.state === 'UP' ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, & 4 SELESAI DENGAN SUKSES! ===');
+// =========================================================================
+// 14. PENGUJIAN TAHAP 5 CCNP ENTERPRISE: MULTI-TENANT VIRTUALIZATION & MPLS FORWARDING (VRF-LITE & MPLS LFIB/LDP)
+// =========================================================================
+console.log('\n=== [14] CCNP ENCOR/ENARSI TAHAP 5: MULTI-TENANT VIRTUALIZATION & MPLS FORWARDING (VRF-LITE & MPLS) ===');
+
+// 1. VRF-Lite Setup on Router R_VRF
+const rVrf = new Router('R_VRF', 'R-VRF', { x: 200, y: 100 });
+const rVrfDevs = [rVrf];
+
+// Config VRF RED & BLUE via CLI
+const rVrfGlobal = { deviceId: 'R_VRF', mode: 'global-config' as const };
+CliParser.execute('vrf definition RED', rVrfGlobal, rVrf, rVrfDevs);
+const rVrfRedCtx = { deviceId: 'R_VRF', mode: 'vrf-config' as const, targetVrfName: 'RED' };
+CliParser.execute('rd 65000:10', rVrfRedCtx, rVrf, rVrfDevs);
+CliParser.execute('address-family ipv4', rVrfRedCtx, rVrf, rVrfDevs);
+const rVrfRedAfCtx = { deviceId: 'R_VRF', mode: 'vrf-af-config' as const, targetVrfName: 'RED', targetVrfAf: 'ipv4' };
+CliParser.execute('route-target both 65000:10', rVrfRedAfCtx, rVrf, rVrfDevs);
+
+CliParser.execute('vrf definition BLUE', rVrfGlobal, rVrf, rVrfDevs);
+const rVrfBlueCtx = { deviceId: 'R_VRF', mode: 'vrf-config' as const, targetVrfName: 'BLUE' };
+CliParser.execute('rd 65000:20', rVrfBlueCtx, rVrf, rVrfDevs);
+CliParser.execute('address-family ipv4', rVrfBlueCtx, rVrf, rVrfDevs);
+const rVrfBlueAfCtx = { deviceId: 'R_VRF', mode: 'vrf-af-config' as const, targetVrfName: 'BLUE', targetVrfAf: 'ipv4' };
+CliParser.execute('route-target both 65000:20', rVrfBlueAfCtx, rVrf, rVrfDevs);
+
+// Verify 'show vrf' output
+const showVrfRes = CliParser.execute('show vrf', { deviceId: 'R_VRF', mode: 'priv-exec' as const }, rVrf, rVrfDevs);
+console.log(`VRF RED & BLUE created with RDs: ${showVrfRes.output.includes('RED') && showVrfRes.output.includes('65000:10') && showVrfRes.output.includes('BLUE') && showVrfRes.output.includes('65000:20') ? 'PASS' : 'FAIL'}`);
+
+// Bind Interfaces:
+// Gi0/0/0 -> VRF RED, IP 10.1.1.254/24
+// Gi0/0/2 -> VRF BLUE, IP 10.1.1.254/24 (Overlapping IP Subnet!)
+CliParser.execute('interface GigabitEthernet0/0/0', rVrfGlobal, rVrf, rVrfDevs);
+const ifGi0Ctx = { deviceId: 'R_VRF', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' };
+CliParser.execute('vrf forwarding RED', ifGi0Ctx, rVrf, rVrfDevs);
+CliParser.execute('ip address 10.1.1.254 255.255.255.0', ifGi0Ctx, rVrf, rVrfDevs);
+CliParser.execute('no shutdown', ifGi0Ctx, rVrf, rVrfDevs);
+
+CliParser.execute('interface GigabitEthernet0/0/2', rVrfGlobal, rVrf, rVrfDevs);
+const ifGi2Ctx = { deviceId: 'R_VRF', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/2' };
+CliParser.execute('vrf forwarding BLUE', ifGi2Ctx, rVrf, rVrfDevs);
+CliParser.execute('ip address 10.1.1.254 255.255.255.0', ifGi2Ctx, rVrf, rVrfDevs);
+CliParser.execute('no shutdown', ifGi2Ctx, rVrf, rVrfDevs);
+
+// Add Static Routes per VRF
+CliParser.execute('ip route vrf RED 172.16.1.0 255.255.255.0 10.1.1.1', rVrfGlobal, rVrf, rVrfDevs);
+CliParser.execute('ip route vrf BLUE 172.16.2.0 255.255.255.0 10.1.1.2', rVrfGlobal, rVrf, rVrfDevs);
+
+// Verify 'show ip route vrf RED' & 'show ip route vrf BLUE'
+const showRouteVrfRed = CliParser.execute('show ip route vrf RED', { deviceId: 'R_VRF', mode: 'priv-exec' as const }, rVrf, rVrfDevs);
+const showRouteVrfBlue = CliParser.execute('show ip route vrf BLUE', { deviceId: 'R_VRF', mode: 'priv-exec' as const }, rVrf, rVrfDevs);
+
+const vrfRedValid = showRouteVrfRed.output.includes('10.1.1.0/24') && showRouteVrfRed.output.includes('172.16.1.0/24') && !showRouteVrfRed.output.includes('172.16.2.0/24');
+const vrfBlueValid = showRouteVrfBlue.output.includes('10.1.1.0/24') && showRouteVrfBlue.output.includes('172.16.2.0/24') && !showRouteVrfBlue.output.includes('172.16.1.0/24');
+console.log(`VRF Route Table Isolation (Overlapping Subnets): ${vrfRedValid && vrfBlueValid ? 'PASS' : 'FAIL'}`);
+
+// Connect Hosts: PC_RED (10.1.1.10) to Gi0/0/0, PC_BLUE (10.1.1.10) to Gi0/0/2
+const pcRed = new Host('PC_RED', 'PC-RED', { x: 50, y: 100 });
+pcRed.ipAddress = '10.1.1.10';
+pcRed.subnetMask = '255.255.255.0';
+pcRed.defaultGateway = '10.1.1.254';
+pcRed.interfaces.get('FastEthernet0')!.connectedDeviceId = 'R_VRF';
+pcRed.interfaces.get('FastEthernet0')!.connectedPort = 'GigabitEthernet0/0/0';
+rVrf.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'PC_RED';
+rVrf.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'FastEthernet0';
+
+const pcBlue = new Host('PC_BLUE', 'PC-BLUE', { x: 50, y: 200 });
+pcBlue.ipAddress = '10.1.1.10';
+pcBlue.subnetMask = '255.255.255.0';
+pcBlue.defaultGateway = '10.1.1.254';
+pcBlue.interfaces.get('FastEthernet0')!.connectedDeviceId = 'R_VRF';
+pcBlue.interfaces.get('FastEthernet0')!.connectedPort = 'GigabitEthernet0/0/2';
+rVrf.interfaces.get('GigabitEthernet0/0/2')!.connectedDeviceId = 'PC_BLUE';
+rVrf.interfaces.get('GigabitEthernet0/0/2')!.connectedPort = 'FastEthernet0';
+
+const allVrfDevs = [rVrf, pcRed, pcBlue];
+
+// Ping via VRF from Router
+const pingVrfRedRes = CliParser.execute('ping vrf RED 10.1.1.10', { deviceId: 'R_VRF', mode: 'priv-exec' as const }, rVrf, allVrfDevs);
+console.log(`Ping within VRF RED: ${pingVrfRedRes.output.includes('!!!!!') ? 'PASS' : 'FAIL'}`);
+
+// Verify VRF ARP Table
+const showArpVrfRed = CliParser.execute('show ip arp vrf RED', { deviceId: 'R_VRF', mode: 'priv-exec' as const }, rVrf, allVrfDevs);
+console.log(`VRF RED ARP Table learned PC_RED MAC: ${showArpVrfRed.output.includes('10.1.1.10') && showArpVrfRed.output.includes('GigabitEthernet0/0/0') ? 'PASS' : 'FAIL'}`);
+
+// Verify Host-to-Gateway Reachability in VRF
+const reachPcRedGw = TopologyTraversal.evaluateHostReachability(pcRed, '10.1.1.254', allVrfDevs);
+console.log(`PC_RED reachability to VRF RED Gateway: ${reachPcRedGw.isReachable ? 'PASS' : 'FAIL'}`);
+
+// 2. MPLS & LFIB Testing
+const rMpls1 = new Router('R_MPLS1', 'R-MPLS1', { x: 400, y: 100 });
+const rMpls2 = new Router('R_MPLS2', 'R-MPLS2', { x: 600, y: 100 });
+
+// Point-to-Point link between R_MPLS1 Gi0/0/1 <-> R_MPLS2 Gi0/0/1 (192.168.12.0/24)
+rMpls1.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '192.168.12.1';
+rMpls1.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rMpls1.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+rMpls1.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+rMpls1.interfaces.get('GigabitEthernet0/0/1')!.connectedDeviceId = 'R_MPLS2';
+rMpls1.interfaces.get('GigabitEthernet0/0/1')!.connectedPort = 'GigabitEthernet0/0/1';
+
+rMpls2.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '192.168.12.2';
+rMpls2.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rMpls2.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+rMpls2.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+rMpls2.interfaces.get('GigabitEthernet0/0/1')!.connectedDeviceId = 'R_MPLS1';
+rMpls2.interfaces.get('GigabitEthernet0/0/1')!.connectedPort = 'GigabitEthernet0/0/1';
+
+const mplsDevs = [rMpls1, rMpls2];
+rMpls1.updateConnectedRoutes();
+rMpls2.updateConnectedRoutes();
+
+// Enable MPLS on transit interfaces
+const rMpls1Gi1Ctx = { deviceId: 'R_MPLS1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' };
+CliParser.execute('mpls ip', rMpls1Gi1Ctx, rMpls1, mplsDevs);
+
+const rMpls2Gi1Ctx = { deviceId: 'R_MPLS2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' };
+CliParser.execute('mpls ip', rMpls2Gi1Ctx, rMpls2, mplsDevs);
+
+// Verify 'show mpls interfaces'
+const showMplsIfRes = CliParser.execute('show mpls interfaces', { deviceId: 'R_MPLS1', mode: 'priv-exec' as const }, rMpls1, mplsDevs);
+console.log(`'show mpls interfaces': ${showMplsIfRes.output.includes('Yes (ldp)') ? 'PASS' : 'FAIL'}`);
+
+// Verify 'show mpls ldp neighbor'
+const showMplsNbrRes = CliParser.execute('show mpls ldp neighbor', { deviceId: 'R_MPLS1', mode: 'priv-exec' as const }, rMpls1, mplsDevs);
+console.log(`'show mpls ldp neighbor': ${showMplsNbrRes.output.includes('Peer LDP Ident') && showMplsNbrRes.output.includes('Oper') ? 'PASS' : 'FAIL'}`);
+
+// Verify 'show mpls forwarding-table' (LFIB)
+const showMplsLfibRes = CliParser.execute('show mpls forwarding-table', { deviceId: 'R_MPLS1', mode: 'priv-exec' as const }, rMpls1, mplsDevs);
+console.log(`'show mpls forwarding-table' (LFIB generated): ${showMplsLfibRes.output.includes('16') && showMplsLfibRes.output.includes('192.168.12.0/24') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, 4, & 5 SELESAI DENGAN SUKSES! ===');
 
 
 

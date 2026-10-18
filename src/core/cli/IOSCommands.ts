@@ -11,6 +11,8 @@ import { EtherChannelEngine } from '../network/EtherChannelEngine';
 import { RoutingProtocolEngine } from '../network/RoutingProtocolEngine';
 import { FhrpEngine } from '../network/FhrpEngine';
 import { PolicyEngine } from '../network/PolicyEngine';
+import { VrfEngine } from '../network/VrfEngine';
+import { TopologyTraversal } from '../network/TopologyTraversal';
 
 export class IOSCommands {
   /**
@@ -220,6 +222,25 @@ export class IOSCommands {
           { command: 'end', description: 'Exit to privileged EXEC mode' }
         );
         break;
+
+      case 'vrf-config':
+        list.push(
+          { command: 'rd', description: 'Specify Route Distinguisher' },
+          { command: 'description', description: 'VRF specific description' },
+          { command: 'route-target', description: 'Specify Target VPN Extended Communities' },
+          { command: 'address-family', description: 'Enter Address Family command mode' },
+          { command: 'exit', description: 'Exit from VRF configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'vrf-af-config':
+        list.push(
+          { command: 'route-target', description: 'Specify Target VPN Extended Communities' },
+          { command: 'exit', description: 'Exit from VRF address-family configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
     }
 
     return list;
@@ -253,7 +274,10 @@ export class IOSCommands {
       if (context.mode === 'priv-exec') {
         return { output: '', newMode: 'user-exec' };
       }
-      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config'].includes(context.mode)) {
+      if (context.mode === 'vrf-af-config') {
+        return { output: '', newMode: 'vrf-config' };
+      }
+      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config'].includes(context.mode)) {
         return { output: '', newMode: 'global-config' };
       }
       if (context.mode === 'global-config') {
@@ -297,6 +321,10 @@ export class IOSCommands {
         return this.execRouteMapConfigMode(tokens, raw, context, device);
       case 'ip-sla-config':
         return this.execIpSlaConfigMode(tokens, raw, context, device);
+      case 'vrf-config':
+        return this.execVrfConfigMode(tokens, raw, context, device);
+      case 'vrf-af-config':
+        return this.execVrfAfConfigMode(tokens, raw, context, device);
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -316,6 +344,9 @@ export class IOSCommands {
     }
 
     if ('ping'.startsWith(cmd0) && tokens.length > 1) {
+      if (tokens.length >= 4 && tokens[1].toLowerCase() === 'vrf') {
+        return this.handlePing(tokens[3], device, allDevices, tokens[2]);
+      }
       return this.handlePing(tokens[1], device, allDevices);
     }
 
@@ -420,6 +451,9 @@ export class IOSCommands {
 
     // ping
     if ('ping'.startsWith(cmd0) && tokens.length > 1) {
+      if (tokens.length >= 4 && tokens[1].toLowerCase() === 'vrf') {
+        return this.handlePing(tokens[3], device, allDevices, tokens[2]);
+      }
       return this.handlePing(tokens[1], device, allDevices);
     }
 
@@ -501,8 +535,16 @@ export class IOSCommands {
           return { output: PolicyEngine.renderShowIpSla(device) };
         }
 
+        // show ip vrf
+        if ('vrf'.startsWith(cmd2)) {
+          return { output: VrfEngine.renderShowVrf(device as Router | Switch) };
+        }
+
         // show ip route
         if ('route'.startsWith(cmd2)) {
+          if (tokens.length >= 5 && tokens[3].toLowerCase() === 'vrf') {
+            return { output: VrfEngine.renderShowIpRouteVrf(device as Router | Switch, tokens[4]) };
+          }
           return { output: this.renderIpRoute(device, allDevices) };
         }
 
@@ -651,6 +693,31 @@ export class IOSCommands {
         PolicyEngine.evaluateIpSla(allDevices);
         const trkId = tokens.length >= 3 ? parseInt(tokens[2], 10) : undefined;
         return { output: PolicyEngine.renderShowTrack(device, trkId) };
+      }
+
+      // show vrf ...
+      if ('vrf'.startsWith(cmd1)) {
+        return { output: VrfEngine.renderShowVrf(device as Router | Switch) };
+      }
+
+      // show mpls ...
+      if ('mpls'.startsWith(cmd1)) {
+        VrfEngine.convergeMpls(allDevices);
+        if (tokens.length >= 3) {
+          const cmd2 = tokens[2].toLowerCase();
+          if ('interfaces'.startsWith(cmd2)) {
+            return { output: VrfEngine.renderShowMplsInterfaces(device as Router | Switch) };
+          }
+          if ('forwarding-table'.startsWith(cmd2)) {
+            return { output: VrfEngine.renderShowMplsForwardingTable(device as Router | Switch) };
+          }
+          if ('ldp'.startsWith(cmd2)) {
+            if (tokens.length >= 4 && 'neighbor'.startsWith(tokens[3].toLowerCase())) {
+              return { output: VrfEngine.renderShowMplsLdpNeighbor(device as Router | Switch, allDevices) };
+            }
+          }
+        }
+        return { output: VrfEngine.renderShowMplsInterfaces(device as Router | Switch) };
       }
     }
 
@@ -1094,8 +1161,94 @@ export class IOSCommands {
       return { output: '' };
     }
 
-    // ip route <network> <mask> <next-hop>
-    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'route'.startsWith(tokens[1].toLowerCase())) {
+    // vrf definition <name> / ip vrf <name>
+    if (
+      (cmd0 === 'vrf' && tokens.length >= 3 && 'definition'.startsWith(tokens[1].toLowerCase())) ||
+      (cmd0 === 'ip' && tokens.length >= 3 && 'vrf'.startsWith(tokens[1].toLowerCase()) && !tokens[1].toLowerCase().includes('forwarding'))
+    ) {
+      const vrfName = cmd0 === 'vrf' ? tokens[2] : tokens[2];
+      VrfEngine.getOrCreateVrf(device as Router | Switch, vrfName);
+      return {
+        output: '',
+        newMode: 'vrf-config',
+        contextUpdates: { targetVrfName: vrfName }
+      };
+    }
+
+    // no vrf definition <name> / no ip vrf <name>
+    if (
+      (cmd0 === 'no' && tokens.length >= 4 && 'vrf'.startsWith(tokens[1].toLowerCase()) && 'definition'.startsWith(tokens[2].toLowerCase())) ||
+      (cmd0 === 'no' && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'vrf'.startsWith(tokens[2].toLowerCase()))
+    ) {
+      const vrfName = tokens[1].toLowerCase() === 'vrf' ? tokens[3] : tokens[3];
+      VrfEngine.removeVrf(device as Router | Switch, vrfName);
+      return { output: '' };
+    }
+
+    // mpls ldp router-id <interface> [force]
+    if (cmd0 === 'mpls' && tokens.length >= 4 && 'ldp'.startsWith(tokens[1].toLowerCase()) && 'router-id'.startsWith(tokens[2].toLowerCase())) {
+      (device as Router | Switch).mplsLdpRouterId = tokens[3];
+      return { output: '' };
+    }
+
+    // ip route vrf <name> <network> <mask|cidr> <next-hop>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 7 && 'route'.startsWith(tokens[1].toLowerCase()) && tokens[2].toLowerCase() === 'vrf') {
+      const vrfName = tokens[3];
+      const net = tokens[4];
+      const mask = tokens[5];
+      const next = tokens[6];
+
+      if (!SubnetUtils.isValidIpv4(net) || !SubnetUtils.isValidSubnetMask(mask)) {
+        return { output: `% Invalid IP address or mask.` };
+      }
+
+      const cidr = SubnetUtils.maskToCidr(mask);
+      const isExitIf = next.startsWith('Gi') || next.startsWith('Fa') || next.startsWith('Se');
+      const normExit = isExitIf ? CliLexer.normalizeInterfaceName(next) : undefined;
+
+      const routeEntry = {
+        network: net,
+        mask,
+        cidr,
+        nextHop: isExitIf ? undefined : next,
+        exitInterface: normExit,
+        protocol: 'S' as const,
+        adminDistance: 1,
+        metric: 0
+      };
+
+      const target = device as Router | Switch;
+      const vrf = VrfEngine.getOrCreateVrf(target, vrfName);
+      vrf.routingTable = vrf.routingTable.filter(r => !(r.network === net && r.mask === mask));
+      vrf.routingTable.push(routeEntry);
+      return { output: '' };
+    }
+
+    // no ip route vrf <name> <network> <mask|cidr> [next-hop]
+    if (cmd0 === 'no' && tokens.length >= 6 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'route'.startsWith(tokens[2].toLowerCase()) && tokens[3].toLowerCase() === 'vrf') {
+      const vrfName = tokens[4];
+      const net = tokens[5];
+      const mask = tokens[6];
+      const target = device as Router | Switch;
+      if (target.vrfInstances && target.vrfInstances.has(vrfName)) {
+        const vrf = target.vrfInstances.get(vrfName)!;
+        vrf.routingTable = vrf.routingTable.filter(r => !(r.network === net && r.mask === mask));
+      }
+      return { output: '' };
+    }
+
+    // no ip route <network> <mask|cidr> [next-hop]
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'route'.startsWith(tokens[2].toLowerCase()) && tokens[3].toLowerCase() !== 'vrf') {
+      const net = tokens[3];
+      const mask = tokens[4];
+      if (device instanceof Router || (device instanceof Switch && device.isLayer3)) {
+        device.routingTable = device.routingTable.filter(r => !(r.network === net && r.mask === mask));
+      }
+      return { output: '' };
+    }
+
+    // ip route <network> <mask|cidr> <next-hop>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'route'.startsWith(tokens[1].toLowerCase()) && tokens[2].toLowerCase() !== 'vrf') {
       const net = tokens[2];
       const mask = tokens[3];
       const next = tokens[4];
@@ -1873,9 +2026,34 @@ export class IOSCommands {
       return { output: '' };
     }
 
-    // no vrrp <group> ...
-    if (cmd0 === 'no' && tokens.length >= 3 && 'vrrp'.startsWith(tokens[1].toLowerCase())) {
-      iface.vrrp = undefined;
+    // vrf forwarding <name> / ip vrf forwarding <name>
+    if (
+      (cmd0 === 'vrf' && tokens.length >= 3 && 'forwarding'.startsWith(tokens[1].toLowerCase())) ||
+      (cmd0 === 'ip' && tokens.length >= 4 && 'vrf'.startsWith(tokens[1].toLowerCase()) && 'forwarding'.startsWith(tokens[2].toLowerCase()))
+    ) {
+      const vrfName = cmd0 === 'vrf' ? tokens[2] : tokens[3];
+      VrfEngine.assignInterfaceToVrf(device as Router | Switch, iface.name, vrfName);
+      return { output: `% Interface ${iface.name} bound to VRF ${vrfName}` };
+    }
+
+    // no vrf forwarding / no ip vrf forwarding
+    if (
+      (cmd0 === 'no' && tokens.length >= 3 && 'vrf'.startsWith(tokens[1].toLowerCase()) && 'forwarding'.startsWith(tokens[2].toLowerCase())) ||
+      (cmd0 === 'no' && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'vrf'.startsWith(tokens[2].toLowerCase()) && 'forwarding'.startsWith(tokens[3].toLowerCase()))
+    ) {
+      VrfEngine.unassignInterfaceFromVrf(device as Router | Switch, iface.name);
+      return { output: '' };
+    }
+
+    // mpls ip
+    if (cmd0 === 'mpls' && tokens.length >= 2 && 'ip'.startsWith(tokens[1].toLowerCase())) {
+      VrfEngine.enableMplsOnInterface(device as Router | Switch, iface.name);
+      return { output: '' };
+    }
+
+    // no mpls ip
+    if (cmd0 === 'no' && tokens.length >= 3 && 'mpls'.startsWith(tokens[1].toLowerCase()) && 'ip'.startsWith(tokens[2].toLowerCase())) {
+      VrfEngine.disableMplsOnInterface(device as Router | Switch, iface.name);
       return { output: '' };
     }
 
@@ -2436,6 +2614,89 @@ export class IOSCommands {
     if ('frequency'.startsWith(cmd0) && tokens.length >= 2) {
       sla.frequency = parseInt(tokens[1], 10) || 10;
       return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== VRF CONFIG MODE =====================
+  private static execVrfConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const vrfName = context.targetVrfName;
+    if (!vrfName) return { output: '% No VRF selected.' };
+
+    const target = device as Router | Switch;
+    const vrf = VrfEngine.getOrCreateVrf(target, vrfName);
+
+    // rd <ASN:nn | IP:nn>
+    if ('rd'.startsWith(cmd0) && tokens.length >= 2) {
+      vrf.rd = tokens[1];
+      return { output: '' };
+    }
+
+    // description <text>
+    if ('description'.startsWith(cmd0) && tokens.length >= 2) {
+      vrf.description = tokens.slice(1).join(' ');
+      return { output: '' };
+    }
+
+    // route-target {export|import|both} <rt>
+    if ('route-target'.startsWith(cmd0) && tokens.length >= 3) {
+      const type = tokens[1].toLowerCase();
+      const rt = tokens[2];
+      if (type === 'export' || type === 'import' || type === 'both') {
+        vrf.routeTargets.push({ type: type as any, rt });
+        return { output: '' };
+      }
+    }
+
+    // address-family ipv4 [unicast]
+    if ('address-family'.startsWith(cmd0) && tokens.length >= 2 && 'ipv4'.startsWith(tokens[1].toLowerCase())) {
+      return {
+        output: '',
+        newMode: 'vrf-af-config',
+        contextUpdates: { targetVrfAf: 'ipv4' }
+      };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== VRF ADDRESS-FAMILY CONFIG MODE =====================
+  private static execVrfAfConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const vrfName = context.targetVrfName;
+    if (!vrfName) return { output: '% No VRF selected.' };
+
+    const target = device as Router | Switch;
+    const vrf = VrfEngine.getOrCreateVrf(target, vrfName);
+
+    // route-target {export|import|both} <rt>
+    if ('route-target'.startsWith(cmd0) && tokens.length >= 3) {
+      const type = tokens[1].toLowerCase();
+      const rt = tokens[2];
+      if (type === 'export' || type === 'import' || type === 'both') {
+        vrf.routeTargets.push({ type: type as any, rt });
+        return { output: '' };
+      }
+    }
+
+    // exit-address-family / exit
+    if ('exit-address-family'.startsWith(cmd0) || cmd0 === 'exit') {
+      return {
+        output: '',
+        newMode: 'vrf-config'
+      };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -3358,6 +3619,10 @@ Configuration register is 0x2102
 
   // ===================== ARP (ADDRESS RESOLUTION PROTOCOL) HANDLERS =====================
   private static handleShowIpArp(tokens: string[], device: Device): CliExecutionResult {
+    if (tokens.length >= 2 && tokens[0].toLowerCase() === 'vrf') {
+      return { output: VrfEngine.renderShowIpArpVrf(device as Router | Switch, tokens[1]) };
+    }
+
     const filterArg = tokens[0]?.toLowerCase();
     const rows: Array<{
       protocol: string;
@@ -3480,10 +3745,71 @@ Configuration register is 0x2102
   }
 
   // ===================== PING HANDLER =====================
-  private static handlePing(targetRaw: string, sourceDevice: Device, allDevices: Device[]): CliExecutionResult {
+  private static handlePing(targetRaw: string, sourceDevice: Device, allDevices: Device[], vrfName?: string): CliExecutionResult {
     const target = targetRaw.trim();
     let isDomain = false;
     let resolvedIp = target;
+
+    if (vrfName) {
+      const devL3 = sourceDevice as Router | Switch;
+      if (!devL3.vrfInstances || !devL3.vrfInstances.has(vrfName)) {
+        return { output: `% VRF ${vrfName} does not exist.` };
+      }
+      const vrf = devL3.vrfInstances.get(vrfName)!;
+      let targetInVrf = false;
+      let dstMac = '0001.96a1.1234';
+      let vrfExitIfName = vrf.interfaces[0] || 'GigabitEthernet0/0/0';
+
+      for (const dev of allDevices) {
+        if (dev instanceof Host && dev.ipAddress === resolvedIp) {
+          const hostEndpoints = TopologyTraversal.getL2BroadcastDomain(dev, 'FastEthernet0', allDevices);
+          const connectsToVrf = hostEndpoints.some(ep => ep.device.id === sourceDevice.id && vrf.interfaces.includes(ep.interfaceName));
+          if (connectsToVrf) {
+            targetInVrf = true;
+            dstMac = dev.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6800';
+            break;
+          }
+        }
+        for (const ifc of dev.interfaces.values()) {
+          if (ifc.status === 'up' && !ifc.isShutdown && ifc.ipAddress === resolvedIp) {
+            if (dev.id === sourceDevice.id && vrf.interfaces.includes(ifc.name)) {
+              targetInVrf = true;
+              dstMac = ifc.macAddress;
+              vrfExitIfName = ifc.name;
+              break;
+            } else if (ifc.vrf === vrfName) {
+              targetInVrf = true;
+              dstMac = ifc.macAddress;
+              break;
+            }
+          }
+        }
+        if (targetInVrf) break;
+      }
+
+      const vrfRoute = devL3.lookupRoute(resolvedIp, vrfName);
+      if (vrfRoute) {
+        targetInVrf = true;
+      }
+
+      if (targetInVrf) {
+        sourceDevice.addArpEntry({
+          protocol: 'Internet',
+          ipAddress: resolvedIp,
+          macAddress: dstMac,
+          interfaceName: vrfExitIfName,
+          type: 'ARPA',
+          age: 0
+        });
+        return {
+          output: `Type escape sequence to abort.\nSending 5, 100-byte ICMP Echos to ${resolvedIp}, timeout is 2 seconds:\n!!!!!\nSuccess rate is 100 percent (5/5), round-trip min/avg/max = 1/2/4 ms`
+        };
+      } else {
+        return {
+          output: `Type escape sequence to abort.\nSending 5, 100-byte ICMP Echos to ${resolvedIp}, timeout is 2 seconds:\n.....\nSuccess rate is 0 percent (0/5)`
+        };
+      }
+    }
 
     // Handle domain names
     if (!SubnetUtils.isValidIpv4(target)) {
