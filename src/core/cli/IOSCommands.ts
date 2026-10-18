@@ -118,6 +118,8 @@ export class IOSCommands {
         );
         if (device instanceof Router) {
           list.push(
+            { command: 'clock rate', description: 'Configure serial clock rate for DCE interfaces' },
+            { command: 'encapsulation', description: 'Set interface encapsulation (hdlc, ppp, dot1Q)' },
             { command: 'encapsulation dot1Q', description: 'Set IEEE 802.1Q encapsulation' },
             { command: 'ip nat inside', description: 'Designate interface as inside network' },
             { command: 'ip nat outside', description: 'Designate interface as outside network' }
@@ -1030,6 +1032,39 @@ export class IOSCommands {
       }
     }
 
+    // clock rate <bps> (Serial DCE)
+    if ('clock'.startsWith(cmd0) && tokens.length >= 3 && 'rate'.startsWith(tokens[1].toLowerCase())) {
+      if (!iface.name.toLowerCase().startsWith('serial')) {
+        return { output: `% Selected interface is not a serial interface.` };
+      }
+      const rate = parseInt(tokens[2], 10);
+      if (isNaN(rate) || rate <= 0) {
+        return { output: `% Invalid clock rate value. Common rates: 64000, 128000, 2000000.` };
+      }
+      iface.clockRate = rate;
+      iface.isDce = true;
+      return { output: '' };
+    }
+
+    // no clock rate
+    if (cmd0 === 'no' && tokens.length >= 3 && 'clock'.startsWith(tokens[1].toLowerCase()) && 'rate'.startsWith(tokens[2].toLowerCase())) {
+      iface.clockRate = undefined;
+      iface.isDce = false;
+      return { output: '' };
+    }
+
+    // encapsulation <hdlc | ppp> (Serial interfaces)
+    if ('encapsulation'.startsWith(cmd0) && tokens.length >= 2) {
+      const encap = tokens[1].toLowerCase();
+      if (encap === 'hdlc' || encap === 'ppp') {
+        if (!iface.name.toLowerCase().startsWith('serial')) {
+          return { output: `% Encapsulation ${encap.toUpperCase()} is only supported on serial interfaces.` };
+        }
+        iface.encapsulation = encap as 'hdlc' | 'ppp';
+        return { output: '' };
+      }
+    }
+
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
@@ -1771,61 +1806,53 @@ Configuration register is 0x102
 
     if (device.deviceType === 'switch') {
       return `
-Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)
+Cisco IOS Software, Catalyst L2 Switch Software (CAT9K_LITE_IOSXE), Version 17.12.6, RELEASE SOFTWARE (fc2)
 Technical Support: http://www.cisco.com/techsupport
-Copyright (c) 1986-2013 by Cisco Systems, Inc.
-Compiled Wed 26-Jun-13 02:49 by mario
+Copyright (c) 1986-2024 by Cisco Systems, Inc.
+Compiled Fri 15-Mar-24 14:20 by mcpre
 
-ROM: C2960 Boot Loader (C2960-HBOOT-M) Version 12.2(25r)FX, RELEASE SOFTWARE (fc4)
+ROM: IOS-XE ROMMON
 
 ${device.hostname} uptime is 2 hours, 15 minutes
 System returned to ROM by power-on
-System image file is "flash:c2960-lanbasek9-mz.150-2.SE4.bin"
+System image file is "bootflash:packages.conf"
 
-cisco WS-C2960-24TT-L (PowerPC405) processor (revision B0) with 65536K bytes of memory.
-Processor board ID FOC1438Z08R
-24 FastEthernet interfaces
-2 Gigabit Ethernet interfaces
+cisco Catalyst 9200L-24T-4G (ARM64) processor with 2097152K bytes of memory.
+Processor board ID JAE23420XYZ
+24 Gigabit Ethernet interfaces
+4 1G SFP interfaces
 The password-recovery mechanism is enabled.
-64K bytes of flash-simulated non-volatile configuration memory.
+2048K bytes of non-volatile configuration memory.
 Base ethernet MAC Address       : 00:26:0B:44:A8:80
-Motherboard assembly number     : 73-10825-06
-Power supply part number        : 341-0097-02
-Motherboard serial number       : FOC1437340V
-Power supply serial number      : AZS14350H6X
-Model revision number           : B0
-Motherboard revision number     : C0
-Model number                    : WS-C2960-24TT-L
-System serial number            : FOC1438Z08R
-Top Assembly Part Number        : 800-29778-01
-Top Assembly Revision Number    : B0
-Version ID                      : V02
-CLEI Code Number                : COM3K00BRA
-Hardware Board Revision Number  : 0x01
+Model number                    : C9200L-24T-4G-E
 
-Configuration register is 0xF
+Configuration register is 0x102
 `.trim();
     }
 
-    // Default Router (C2900 / ISR)
+    // Cisco Catalyst C8200L-1N-4T Router (IOS-XE 17.15.4c)
     return `
-Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.4(3)M2, RELEASE SOFTWARE (fc2)
+Cisco IOS XE Software, Version 17.15.4c
+Cisco IOS Software [Dublin], Catalyst Edge Software (C8200L-UNIVERSALK9), Version 17.15.4c, RELEASE SOFTWARE (fc1)
 Technical Support: http://www.cisco.com/techsupport
 Copyright (c) 1986-2024 by Cisco Systems, Inc.
+Compiled Thu 29-Aug-24 16:35 by mcpre
 
-ROM: System Bootstrap, Version 15.4(3)M2, RELEASE SOFTWARE
+ROM: IOS-XE ROMMON
 
 ${device.hostname} uptime is 2 hours, 45 minutes
+Uptime for this control processor is 2 hours, 47 minutes
 System returned to ROM by power-on
-System image file is "flash0:c2900-universalk9-mz.SPA.154-3.M2.bin"
+System image file is "bootflash:c8200l-universalk9.17.15.04c.SPA.bin"
+Last reload reason: Power-on
 
-Cisco CISCO2911/K9 (revision 1.0) with 491520K/32768K bytes of memory.
-Processor board ID FTX1524890B
-3 Gigabit Ethernet interfaces
-1 Serial(sync/async) interface
-DRAM configuration is 64 bits wide with parity disabled.
-255K bytes of non-volatile configuration memory.
-249856K bytes of ATA System CompactFlash 0 (Read/Write)
+cisco C8200L-1N-4T (1RU) processor with 4194304K/2097152K bytes of memory.
+Processor board ID FDO24180ABC
+4 Gigabit Ethernet interfaces
+2 Serial(sync/async) network interface modules (NIM-2T)
+32768K bytes of non-volatile configuration memory.
+4194304K bytes of physical memory.
+11272192K bytes of Bootflash at bootflash:
 
 Configuration register is 0x2102
 `.trim();

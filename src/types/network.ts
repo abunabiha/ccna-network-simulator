@@ -39,6 +39,11 @@ export interface InterfaceConfig {
   // NAT properties
   natType?: 'inside' | 'outside';
 
+  // Serial WAN (NIM-2T) properties
+  clockRate?: number;          // e.g. 64000, 128000, 2000000
+  isDce?: boolean;
+  encapsulation?: 'hdlc' | 'ppp' | 'dot1Q';
+
   // DHCP Client properties
   isDhcpClient?: boolean;
   dhcpLease?: {

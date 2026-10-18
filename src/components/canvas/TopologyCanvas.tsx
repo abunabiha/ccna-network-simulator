@@ -121,10 +121,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         // Open port selection modal
         const src = devices.find(d => d.id === cableSourceDevId);
         if (src) {
-          const availSrcPorts = Array.from(src.interfaces?.values?.() || [])
-            .filter(p => isPhysicalPort(p.name) && !isPortConnected(src.id, p.name));
-          const availDstPorts = Array.from(dev.interfaces?.values?.() || [])
-            .filter(p => isPhysicalPort(p.name) && !isPortConnected(dev.id, p.name));
+          const uniqueSrc = Array.from(new Set(src.interfaces?.values?.() || []));
+          const uniqueDst = Array.from(new Set(dev.interfaces?.values?.() || []));
+          let availSrcPorts = uniqueSrc.filter(p => isPhysicalPort(p.name) && !isPortConnected(src.id, p.name));
+          let availDstPorts = uniqueDst.filter(p => isPhysicalPort(p.name) && !isPortConnected(dev.id, p.name));
+
+          if (connectingCable === 'serial') {
+            availSrcPorts = availSrcPorts.sort((a, b) => (b.name.toLowerCase().startsWith('serial') ? 1 : 0) - (a.name.toLowerCase().startsWith('serial') ? 1 : 0));
+            availDstPorts = availDstPorts.sort((a, b) => (b.name.toLowerCase().startsWith('serial') ? 1 : 0) - (a.name.toLowerCase().startsWith('serial') ? 1 : 0));
+          }
 
           setSelectedSourcePort(availSrcPorts[0]?.name || '');
           setSelectedTargetPort(availDstPorts[0]?.name || '');
@@ -237,8 +242,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke={link.cableType === 'crossover' ? '#f59e0b' : '#06b6d4'}
-                strokeWidth="2.5"
+                stroke={link.cableType === 'crossover' ? '#f59e0b' : link.cableType === 'serial' ? '#ef4444' : '#06b6d4'}
+                strokeWidth={link.cableType === 'serial' ? '3' : '2.5'}
                 strokeDasharray={link.cableType === 'crossover' ? '6,4' : undefined}
                 className="group-hover:stroke-rose-500 transition-colors"
               />
@@ -438,10 +443,16 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
       {/* Port Selection Dialog */}
       {connectionModal && (() => {
-        const availSrc = Array.from(connectionModal.sourceDev.interfaces?.values?.() || [])
+        let availSrc = Array.from(new Set(connectionModal.sourceDev.interfaces?.values?.() || []))
           .filter(p => isPhysicalPort(p.name) && !isPortConnected(connectionModal.sourceDev.id, p.name));
-        const availDst = Array.from(connectionModal.targetDev.interfaces?.values?.() || [])
+        let availDst = Array.from(new Set(connectionModal.targetDev.interfaces?.values?.() || []))
           .filter(p => isPhysicalPort(p.name) && !isPortConnected(connectionModal.targetDev.id, p.name));
+
+        if (connectingCable === 'serial') {
+          availSrc = availSrc.sort((a, b) => (b.name.toLowerCase().startsWith('serial') ? 1 : 0) - (a.name.toLowerCase().startsWith('serial') ? 1 : 0));
+          availDst = availDst.sort((a, b) => (b.name.toLowerCase().startsWith('serial') ? 1 : 0) - (a.name.toLowerCase().startsWith('serial') ? 1 : 0));
+        }
+
         const hasNoPorts = availSrc.length === 0 || availDst.length === 0;
 
         return (

@@ -78,20 +78,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {/* Cisco ISR Router */}
+            {/* Cisco Catalyst C8200L Router */}
             <div
               draggable
               onDragStart={(e) => handleDragStart(e, 'router')}
               onDragEnd={handleDragEnd}
               onClick={() => handleCardClick('router')}
-              title="Drag ke canvas atau klik untuk menambahkan"
+              title="Drag ke canvas atau klik untuk menambahkan (4x GE + NIM-2T Serial)"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
               <div className="w-10 h-10 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <CiscoRouterIcon size={38} />
               </div>
-              <span className="text-[11px] font-semibold text-slate-200 mt-1">Cisco Router</span>
-              <span className="text-[9px] text-slate-500">ISR 4331 / 2911</span>
+              <span className="text-[11px] font-semibold text-slate-200 mt-1">Catalyst 8200L</span>
+              <span className="text-[9px] text-cyan-400 font-medium">Router (IOS-XE 17.15.4c)</span>
             </div>
 
             {/* Catalyst L2 Switch */}
@@ -100,14 +100,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
               onDragStart={(e) => handleDragStart(e, 'switch')}
               onDragEnd={handleDragEnd}
               onClick={() => handleCardClick('switch')}
-              title="Drag ke canvas atau klik untuk menambahkan"
+              title="Drag ke canvas atau klik untuk menambahkan (24x GE + 4x SFP)"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-teal-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
               <div className="w-10 h-10 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <CiscoSwitchIcon size={38} />
               </div>
-              <span className="text-[11px] font-semibold text-slate-200 mt-1">Catalyst 2960</span>
-              <span className="text-[9px] text-slate-500">Layer 2 Switch</span>
+              <span className="text-[11px] font-semibold text-slate-200 mt-1">Catalyst 9200L</span>
+              <span className="text-[9px] text-teal-400 font-medium">L2 Switch (IOS 17.12.6)</span>
             </div>
 
             {/* Catalyst L3 Switch */}
@@ -116,13 +116,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
               onDragStart={(e) => handleDragStart(e, 'switch-l3')}
               onDragEnd={handleDragEnd}
               onClick={() => handleCardClick('switch-l3')}
-              title="Drag ke canvas atau klik untuk menambahkan"
+              title="Drag ke canvas atau klik untuk menambahkan (24x GE + 4x SFP, SVI, Routed Ports)"
               className="flex flex-col items-center justify-center p-2.5 bg-slate-950/70 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 rounded-xl transition-all group cursor-grab active:cursor-grabbing"
             >
               <div className="w-10 h-10 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <CiscoL3SwitchIcon size={38} />
               </div>
-              <span className="text-[11px] font-semibold text-slate-200 mt-1">Catalyst 9300</span>
+              <span className="text-[11px] font-semibold text-slate-200 mt-1">Catalyst 9300L</span>
               <span className="text-[9px] text-indigo-400 font-medium">L3 Switch (IOS-XE 17.12.6)</span>
             </div>
 
@@ -154,8 +154,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
               <div className="w-10 h-10 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <CiscoServerIcon size={38} />
               </div>
-              <span className="text-[11px] font-semibold text-slate-200 mt-1">App Server</span>
-              <span className="text-[9px] text-slate-500">HTTP / DNS</span>
+              <span className="text-[11px] font-semibold text-slate-200 mt-1">Enterprise Server</span>
+              <span className="text-[9px] text-slate-500">AAA / Syslog / DNS</span>
             </div>
 
             {/* Real Host Network Bridge (Cloud) */}
@@ -215,6 +215,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
               </div>
               {connectingCable === 'crossover' && (
                 <span className="text-[10px] bg-amber-500 text-slate-950 px-1 rounded font-bold">Active</span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setConnectingCable(connectingCable === 'serial' ? null : 'serial')}
+              className={`w-full flex items-center justify-between p-2 rounded-lg text-xs font-medium border transition-all ${
+                connectingCable === 'serial'
+                  ? 'bg-rose-950/80 border-rose-500 text-rose-300 shadow-sm'
+                  : 'bg-slate-950/50 border-slate-800 text-slate-300 hover:bg-slate-800/80'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-0.5 bg-rose-500 rounded-full" />
+                <span>Serial V.35 (DCE/DTE)</span>
+              </div>
+              {connectingCable === 'serial' && (
+                <span className="text-[10px] bg-rose-500 text-white px-1 rounded font-bold">Active</span>
               )}
             </button>
           </div>

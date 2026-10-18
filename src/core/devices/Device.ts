@@ -5,6 +5,8 @@ export abstract class Device {
   id: string;
   hostname: string;
   deviceType: DeviceType;
+  model: string = '';
+  osVersion: string = '';
   position: DevicePosition;
   interfaces: Map<string, InterfaceConfig>;
   bannerMotd: string = '';
@@ -37,7 +39,17 @@ export abstract class Device {
   abstract getRunningConfig(): string;
 
   getInterface(name: string): InterfaceConfig | undefined {
-    return this.interfaces.get(name);
+    if (!name) return undefined;
+    const direct = this.interfaces.get(name);
+    if (direct) return direct;
+
+    const lower = name.toLowerCase();
+    for (const [k, v] of this.interfaces.entries()) {
+      if (k.toLowerCase() === lower || v.name.toLowerCase() === lower || v.shortName?.toLowerCase() === lower) {
+        return v;
+      }
+    }
+    return undefined;
   }
 
   setInterface(name: string, config: Partial<InterfaceConfig>): void {

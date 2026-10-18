@@ -355,6 +355,52 @@ const swL3ShowArp = CliParser.execute('show arp', swL3Ctx, swL3, [swL3]);
 console.log(`Switch L3 'show arp' output:\n${swL3ShowArp.output}`);
 console.log(`Switch L3 SVI Vlan10 ARP entry verified: ${swL3ShowArp.output.includes('10.10.10.1') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL & MODUL SELESAI DENGAN SUKSES! ===');
+console.log('\n=== [10] PENGUJIAN TAHAP 1 CCNP ENTERPRISE: CATALYST C8200L, NIM-2T SERIAL & WAN V.35 ===');
+const c8200 = new Router('R_CCNP1', 'Catalyst-8200L', { x: 50, y: 50 });
+console.log(`Router Model: ${c8200.model} (Expected: C8200L-1N-4T) -> ${c8200.model === 'C8200L-1N-4T' ? 'PASS' : 'FAIL'}`);
+console.log(`Router OS Version: ${c8200.osVersion} (Expected: 17.15.4c) -> ${c8200.osVersion === '17.15.4c' ? 'PASS' : 'FAIL'}`);
+
+// Test show version output
+const c8200VersionRes = CliParser.execute('show version', { deviceId: 'R_CCNP1', mode: 'priv-exec' }, c8200, [c8200]);
+console.log(`show version contains 17.15.4c: ${c8200VersionRes.output.includes('Version 17.15.4c') ? 'PASS' : 'FAIL'}`);
+console.log(`show version contains C8200L-1N-4T: ${c8200VersionRes.output.includes('C8200L-1N-4T') ? 'PASS' : 'FAIL'}`);
+
+// Test interface aliases & backward compatibility
+const gi000 = c8200.interfaces.get('GigabitEthernet0/0/0');
+const gi00 = c8200.interfaces.get('GigabitEthernet0/0');
+console.log(`Interface GigabitEthernet0/0/0 exists: ${gi000 !== undefined ? 'PASS' : 'FAIL'}`);
+console.log(`Interface GigabitEthernet0/0 alias points to GigabitEthernet0/0/0: ${gi00 === gi000 ? 'PASS' : 'FAIL'}`);
+
+// Test NIM-2T Serial ports
+const ser010 = c8200.interfaces.get('Serial0/1/0');
+const ser011 = c8200.interfaces.get('Serial0/1/1');
+console.log(`NIM-2T Serial0/1/0 exists: ${ser010 !== undefined ? 'PASS' : 'FAIL'}`);
+console.log(`NIM-2T Serial0/1/1 exists: ${ser011 !== undefined ? 'PASS' : 'FAIL'}`);
+
+// Test CLI config on Serial0/1/0: clock rate, encapsulation
+let serCtx = { deviceId: 'R_CCNP1', mode: 'global-config' as const };
+CliParser.execute('enable', { deviceId: 'R_CCNP1', mode: 'user-exec' }, c8200, [c8200]);
+const serIntEnter = CliParser.execute('interface Serial0/1/0', serCtx, c8200, [c8200]);
+const serIfCtx = { deviceId: 'R_CCNP1', mode: 'interface-config' as const, targetInterface: serIntEnter.contextUpdates?.targetInterface || 'Serial0/1/0' };
+
+CliParser.execute('clock rate 64000', serIfCtx, c8200, [c8200]);
+console.log(`Serial0/1/0 clock rate 64000: ${ser010?.clockRate === 64000 && ser010?.isDce === true ? 'PASS' : 'FAIL'}`);
+
+CliParser.execute('encapsulation ppp', serIfCtx, c8200, [c8200]);
+console.log(`Serial0/1/0 encapsulation ppp: ${ser010?.encapsulation === 'ppp' ? 'PASS' : 'FAIL'}`);
+
+CliParser.execute('no clock rate', serIfCtx, c8200, [c8200]);
+console.log(`Serial0/1/0 no clock rate: ${ser010?.clockRate === undefined && ser010?.isDce === false ? 'PASS' : 'FAIL'}`);
+
+// Test Switch Models (C9200L & C9300L)
+console.log(`Switch L2 Model: ${sw1.model} (Expected: C9200L-24T-4G-E) -> ${sw1.model === 'C9200L-24T-4G-E' ? 'PASS' : 'FAIL'}`);
+console.log(`Switch L3 Model: ${swL3.model} (Expected: C9300L-24T-4G-A) -> ${swL3.model === 'C9300L-24T-4G-A' ? 'PASS' : 'FAIL'}`);
+
+const swPrivCtx = { deviceId: 'SW1', mode: 'priv-exec' as const };
+const swVersionRes = CliParser.execute('show version', swPrivCtx, sw1, [sw1]);
+console.log(`Switch show version contains 17.12.6: ${swVersionRes.output.includes('17.12.6') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL & CCNP TAHAP 1 SELESAI DENGAN SUKSES! ===');
+
 
 

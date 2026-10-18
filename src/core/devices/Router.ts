@@ -14,52 +14,91 @@ export class Router extends Device {
   constructor(id: string, hostname: string, position: DevicePosition) {
     super(id, hostname, 'router', position);
 
-    // Default interfaces for Cisco 2911 / ISR 4331
-    this.addInterface({
-      name: 'GigabitEthernet0/0',
-      shortName: 'Gi0/0',
+    this.model = 'C8200L-1N-4T';
+    this.osVersion = '17.15.4c';
+
+    // Catalyst C8200L-1N-4T: 4x Onboard GigabitEthernet ports
+    const gi000 = {
+      name: 'GigabitEthernet0/0/0',
+      shortName: 'Gi0/0/0',
       macAddress: `0001.c4${Math.floor(Math.random() * 89 + 10)}.${Math.floor(Math.random() * 8999 + 1000)}`,
-      status: 'down',
+      status: 'down' as const,
       isShutdown: true,
       speed: '1000Mb/s',
-      duplex: 'auto'
-    });
+      duplex: 'auto' as const
+    };
 
-    this.addInterface({
-      name: 'GigabitEthernet0/1',
-      shortName: 'Gi0/1',
+    const gi001 = {
+      name: 'GigabitEthernet0/0/1',
+      shortName: 'Gi0/0/1',
       macAddress: `0001.c4${Math.floor(Math.random() * 89 + 10)}.${Math.floor(Math.random() * 8999 + 1000)}`,
-      status: 'down',
+      status: 'down' as const,
       isShutdown: true,
       speed: '1000Mb/s',
-      duplex: 'auto'
-    });
+      duplex: 'auto' as const
+    };
 
-    this.addInterface({
-      name: 'GigabitEthernet0/2',
-      shortName: 'Gi0/2',
+    const gi002 = {
+      name: 'GigabitEthernet0/0/2',
+      shortName: 'Gi0/0/2',
       macAddress: `0001.c4${Math.floor(Math.random() * 89 + 10)}.${Math.floor(Math.random() * 8999 + 1000)}`,
-      status: 'down',
+      status: 'down' as const,
       isShutdown: true,
       speed: '1000Mb/s',
-      duplex: 'auto'
-    });
+      duplex: 'auto' as const
+    };
 
-    this.addInterface({
-      name: 'Serial0/0/0',
-      shortName: 'Se0/0/0',
+    const gi003 = {
+      name: 'GigabitEthernet0/0/3',
+      shortName: 'Gi0/0/3',
       macAddress: `0001.c4${Math.floor(Math.random() * 89 + 10)}.${Math.floor(Math.random() * 8999 + 1000)}`,
-      status: 'down',
+      status: 'down' as const,
       isShutdown: true,
-      speed: '1544Kb/s'
-    });
+      speed: '1000Mb/s',
+      duplex: 'auto' as const
+    };
+
+    // NIM-2T: 2-Port Serial WAN Interface Module
+    const se010 = {
+      name: 'Serial0/1/0',
+      shortName: 'Se0/1/0',
+      macAddress: `0001.c4${Math.floor(Math.random() * 89 + 10)}.${Math.floor(Math.random() * 8999 + 1000)}`,
+      status: 'down' as const,
+      isShutdown: true,
+      speed: '1544Kb/s',
+      description: 'NIM-2T WAN Serial Port 0'
+    };
+
+    const se011 = {
+      name: 'Serial0/1/1',
+      shortName: 'Se0/1/1',
+      macAddress: `0001.c4${Math.floor(Math.random() * 89 + 10)}.${Math.floor(Math.random() * 8999 + 1000)}`,
+      status: 'down' as const,
+      isShutdown: true,
+      speed: '1544Kb/s',
+      description: 'NIM-2T WAN Serial Port 1'
+    };
+
+    this.addInterface(gi000);
+    this.addInterface(gi001);
+    this.addInterface(gi002);
+    this.addInterface(gi003);
+    this.addInterface(se010);
+    this.addInterface(se011);
+
+    // Map compatibility aliases for CCNA 2-tuple notation (Gi0/0, Gi0/1, Gi0/2, Se0/0/0)
+    this.interfaces.set('GigabitEthernet0/0', gi000);
+    this.interfaces.set('GigabitEthernet0/1', gi001);
+    this.interfaces.set('GigabitEthernet0/2', gi002);
+    this.interfaces.set('Serial0/0/0', se010);
   }
 
   updateConnectedRoutes(): void {
     // Filter out previous connected and local routes
     this.routingTable = this.routingTable.filter(r => r.protocol !== 'C' && r.protocol !== 'L');
 
-    for (const iface of this.interfaces.values()) {
+    const uniqueIfaces = Array.from(new Set(this.interfaces.values()));
+    for (const iface of uniqueIfaces) {
       if (iface.status === 'up' && !iface.isShutdown && iface.ipAddress && iface.subnetMask) {
         const netAddr = SubnetUtils.getNetworkAddress(iface.ipAddress, iface.subnetMask);
         const cidr = SubnetUtils.maskToCidr(iface.subnetMask);
@@ -173,11 +212,18 @@ export class Router extends Device {
     }
 
     // Interfaces
-    for (const iface of this.interfaces.values()) {
+    const uniqueIfaces = Array.from(new Set(this.interfaces.values()));
+    for (const iface of uniqueIfaces) {
       lines.push(`interface ${iface.name}`);
       if (iface.description) lines.push(` description ${iface.description}`);
       if (iface.isSubinterface && iface.dot1qVlan) {
         lines.push(` encapsulation dot1Q ${iface.dot1qVlan}`);
+      }
+      if (iface.encapsulation && iface.encapsulation !== 'dot1Q') {
+        lines.push(` encapsulation ${iface.encapsulation}`);
+      }
+      if (iface.clockRate) {
+        lines.push(` clock rate ${iface.clockRate}`);
       }
       if (iface.isDhcpClient) {
         lines.push(` ip address dhcp`);

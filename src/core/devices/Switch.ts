@@ -18,6 +18,14 @@ export class Switch extends Device {
     this.isLayer3 = isLayer3;
     this.ipRouting = isLayer3;
 
+    if (isLayer3) {
+      this.model = 'C9300L-24T-4G-A';
+      this.osVersion = '17.12.6';
+    } else {
+      this.model = 'C9200L-24T-4G-E';
+      this.osVersion = '17.12.6';
+    }
+
     // Default VLAN 1
     this.vlanDatabase.set(1, { id: 1, name: 'default', status: 'active' });
 
