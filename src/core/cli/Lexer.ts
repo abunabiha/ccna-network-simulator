@@ -94,6 +94,10 @@ export class CliLexer {
       const portPart = clean.replace(/^[a-zA-Z]+/i, '');
       return `Vlan${portPart}`;
     }
+    if (lower.startsWith('po') || lower.startsWith('port-channel')) {
+      const portPart = clean.replace(/^[a-zA-Z\-]+/i, '');
+      return `Port-channel${portPart}`;
+    }
     if (lower.startsWith('lo')) {
       const portPart = clean.replace(/^[a-zA-Z]+/i, '');
       return `Loopback${portPart}`;

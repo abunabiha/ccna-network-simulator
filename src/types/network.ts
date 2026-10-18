@@ -61,6 +61,48 @@ export interface InterfaceConfig {
 
   // Cisco Discovery Protocol (CDP) per interface
   cdpEnabled?: boolean;
+
+  // Spanning Tree Protocol (STP) per interface
+  stpPortFast?: boolean;
+  stpBpduGuard?: boolean;
+  stpBpduFilter?: boolean;
+  stpRootGuard?: boolean;
+  stpCost?: number;
+  stpPortPriority?: number;
+  stpState?: 'disabled' | 'blocking' | 'listening' | 'learning' | 'forwarding';
+  stpRole?: 'Root' | 'Desg' | 'Altn' | 'Back' | 'Disa';
+
+  // EtherChannel / Link Aggregation per interface
+  channelGroup?: number;
+  channelMode?: 'active' | 'passive' | 'desirable' | 'auto' | 'on';
+  channelProtocol?: 'LACP' | 'PAgP' | 'NONE';
+
+  // Dynamic Trunking Protocol (DTP) per interface
+  dtpMode?: 'access' | 'trunk' | 'dynamic-auto' | 'dynamic-desirable';
+  dtpNoNegotiate?: boolean;
+}
+
+export interface StpPortStatus {
+  portName: string;
+  role: 'Root' | 'Desg' | 'Altn' | 'Back' | 'Disa';
+  status: 'FWD' | 'BLK' | 'LRN' | 'LIS' | 'DSB';
+  cost: number;
+  priority: number;
+  portNumber: number;
+  type: string;
+}
+
+export interface EtherChannelBundle {
+  groupId: number;
+  protocol: 'LACP' | 'PAgP' | '-';
+  ports: string[];
+  status: 'SU' | 'SD' | 'RU' | 'RD';
+}
+
+export interface VtpConfig {
+  domain: string;
+  mode: 'server' | 'client' | 'transparent' | 'off';
+  version: number;
 }
 
 export interface DevicePosition {

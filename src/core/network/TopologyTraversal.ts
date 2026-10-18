@@ -86,7 +86,7 @@ export class TopologyTraversal {
       while (queue.length > 0) {
         const sw = queue.shift()!;
         for (const swIface of sw.interfaces.values()) {
-          if (swIface.isShutdown) continue;
+          if (swIface.isShutdown || swIface.stpState === 'blocking') continue;
           if (swIface.connectedDeviceId) {
             if (swIface.connectedDeviceId === device.id) continue;
 

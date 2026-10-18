@@ -6,6 +6,8 @@ import { Device } from '../devices/Device';
 import { Host } from '../devices/Host';
 import { CliLexer } from './Lexer';
 import { SubnetUtils } from '../network/Subnet';
+import { SpanningTreeEngine } from '../network/SpanningTreeEngine';
+import { EtherChannelEngine } from '../network/EtherChannelEngine';
 
 export class IOSCommands {
   /**
@@ -285,6 +287,15 @@ export class IOSCommands {
       if ('ip'.startsWith(cmd1) && tokens.length > 2 && 'arp'.startsWith(tokens[2].toLowerCase())) {
         return this.handleShowIpArp(tokens.slice(3), device);
       }
+      if ('spanning-tree'.startsWith(cmd1) && device instanceof Switch) {
+        return this.handleShowSpanningTree(tokens, device, allDevices);
+      }
+      if ('etherchannel'.startsWith(cmd1) && device instanceof Switch) {
+        return this.handleShowEtherchannel(tokens, device, allDevices);
+      }
+      if ('vtp'.startsWith(cmd1) && device instanceof Switch) {
+        return this.handleShowVtp(tokens, device);
+      }
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -463,6 +474,26 @@ export class IOSCommands {
       if ('cdp'.startsWith(cmd1)) {
         return this.handleShowCdp(tokens, device, allDevices);
       }
+
+      // show spanning-tree ...
+      if ('spanning-tree'.startsWith(cmd1) && device instanceof Switch) {
+        return this.handleShowSpanningTree(tokens, device, allDevices);
+      }
+
+      // show etherchannel ...
+      if ('etherchannel'.startsWith(cmd1) && device instanceof Switch) {
+        return this.handleShowEtherchannel(tokens, device, allDevices);
+      }
+
+      // show vtp ...
+      if ('vtp'.startsWith(cmd1) && device instanceof Switch) {
+        return this.handleShowVtp(tokens, device);
+      }
+
+      // show dtp ...
+      if ('dtp'.startsWith(cmd1) && device instanceof Switch) {
+        return this.handleShowDtp(tokens, device);
+      }
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -561,6 +592,25 @@ export class IOSCommands {
         const vlanId = parseInt(normalized.replace('Vlan', ''), 10);
         device.addVlan(vlanId);
         iface = device.interfaces.get(normalized);
+      }
+      if (!iface && normalized.startsWith('Port-channel') && (device instanceof Switch || device instanceof Router)) {
+        const poNum = parseInt(normalized.replace('Port-channel', ''), 10);
+        if (!isNaN(poNum)) {
+          const baseMac = Array.from(device.interfaces.values())[0]?.macAddress || '0002.ba00.0001';
+          const poIface: InterfaceConfig = {
+            name: normalized,
+            shortName: `Po${poNum}`,
+            macAddress: baseMac,
+            status: 'up',
+            isShutdown: false,
+            switchportMode: 'access',
+            accessVlan: 1,
+            trunkAllowedVlans: Array.from({ length: 4094 }, (_, idx) => idx + 1),
+            nativeVlan: 1
+          };
+          device.addInterface(poIface);
+          iface = poIface;
+        }
       }
 
       if (iface) {
@@ -774,6 +824,80 @@ export class IOSCommands {
         device.routingTable = [];
       }
       return { output: '' };
+    }
+
+    // spanning-tree mode <pvst | rapid-pvst | mst>
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 3 && 'mode'.startsWith(tokens[1].toLowerCase())) {
+      if (!(device instanceof Switch)) return { output: `% Spanning tree is only supported on switches.` };
+      const m = tokens[2].toLowerCase();
+      if (m === 'pvst' || m === 'rapid-pvst' || m === 'mst') {
+        device.spanningTreeMode = m as any;
+        return { output: '' };
+      }
+      return { output: `% Invalid spanning-tree mode. Available: pvst, rapid-pvst, mst.` };
+    }
+
+    // spanning-tree vlan <id> priority <val> / root <primary|secondary>
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 5 && 'vlan'.startsWith(tokens[1].toLowerCase())) {
+      if (!(device instanceof Switch)) return { output: `% Spanning tree is only supported on switches.` };
+      const vlanId = parseInt(tokens[2], 10);
+      const sub = tokens[3].toLowerCase();
+      if ('priority'.startsWith(sub)) {
+        const prio = parseInt(tokens[4], 10);
+        if (isNaN(prio) || prio < 0 || prio > 61440 || prio % 4096 !== 0) {
+          return { output: `% Bridge priority must be in increments of 4096 (0, 4096, 8192 ... 61440).` };
+        }
+        device.stpPriorities.set(vlanId, prio);
+        return { output: '' };
+      }
+      if ('root'.startsWith(sub)) {
+        const rootType = tokens[4].toLowerCase();
+        if ('primary'.startsWith(rootType)) {
+          device.stpPriorities.set(vlanId, 24576);
+          return { output: '' };
+        } else if ('secondary'.startsWith(rootType)) {
+          device.stpPriorities.set(vlanId, 28672);
+          return { output: '' };
+        }
+      }
+    }
+
+    // no spanning-tree vlan <id> priority
+    if (cmd0 === 'no' && tokens.length >= 5 && 'spanning-tree'.startsWith(tokens[1].toLowerCase()) && 'vlan'.startsWith(tokens[2].toLowerCase()) && 'priority'.startsWith(tokens[4].toLowerCase())) {
+      if (device instanceof Switch) {
+        const vlanId = parseInt(tokens[3], 10);
+        device.stpPriorities.set(vlanId, 32768);
+      }
+      return { output: '' };
+    }
+
+    // spanning-tree portfast default / bpduguard default
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 3 && 'portfast'.startsWith(tokens[1].toLowerCase())) {
+      if ('default'.startsWith(tokens[2].toLowerCase())) {
+        return { output: '% Portfast default enabled on all access ports.' };
+      }
+      if ('bpduguard'.startsWith(tokens[2].toLowerCase()) && tokens.length >= 4 && 'default'.startsWith(tokens[3].toLowerCase())) {
+        return { output: '% Portfast BPDU guard default enabled.' };
+      }
+    }
+
+    // vtp domain <name> / vtp mode <mode>
+    if ('vtp'.startsWith(cmd0) && tokens.length >= 3) {
+      if (!(device instanceof Switch)) return { output: `% VTP is only supported on switches.` };
+      const vSub = tokens[1].toLowerCase();
+      if ('domain'.startsWith(vSub)) {
+        const oldDomain = device.vtp.domain || 'NULL';
+        device.vtp.domain = tokens[2];
+        return { output: `Changing VTP domain name from ${oldDomain} to ${tokens[2]}` };
+      }
+      if ('mode'.startsWith(vSub)) {
+        const m = tokens[2].toLowerCase();
+        if (['server', 'client', 'transparent', 'off'].includes(m)) {
+          device.vtp.mode = m as any;
+          return { output: `Setting device to VTP ${m.toUpperCase()} mode.` };
+        }
+        return { output: `% Invalid VTP mode. Available: server, client, transparent, off.` };
+      }
     }
 
     // access-list <num> permit/deny ...
@@ -1063,6 +1187,116 @@ export class IOSCommands {
         iface.encapsulation = encap as 'hdlc' | 'ppp';
         return { output: '' };
       }
+    }
+
+    // channel-group <id> mode <active | passive | desirable | auto | on>
+    if ('channel-group'.startsWith(cmd0) && tokens.length >= 4 && 'mode'.startsWith(tokens[2].toLowerCase())) {
+      const gid = parseInt(tokens[1], 10);
+      const mode = tokens[3].toLowerCase();
+      if (isNaN(gid) || gid < 1 || gid > 128) {
+        return { output: `% Invalid channel-group number (1-128).` };
+      }
+      if (!['active', 'passive', 'desirable', 'auto', 'on'].includes(mode)) {
+        return { output: `% Invalid channel-group mode. Valid modes: active, passive, desirable, auto, on.` };
+      }
+      iface.channelGroup = gid;
+      iface.channelMode = mode as any;
+      if (mode === 'active' || mode === 'passive') iface.channelProtocol = 'LACP';
+      else if (mode === 'desirable' || mode === 'auto') iface.channelProtocol = 'PAgP';
+      else iface.channelProtocol = 'NONE';
+
+      // Pastikan Port-channel<gid> ada di switch
+      const poName = `Port-channel${gid}`;
+      if (device instanceof Switch && !device.interfaces.has(poName)) {
+        const baseMac = Array.from(device.interfaces.values())[0]?.macAddress || '0002.ba00.0001';
+        device.addInterface({
+          name: poName,
+          shortName: `Po${gid}`,
+          macAddress: baseMac,
+          status: 'up',
+          isShutdown: false,
+          switchportMode: iface.switchportMode || 'access',
+          accessVlan: iface.accessVlan || 1,
+          trunkAllowedVlans: iface.trunkAllowedVlans || Array.from({ length: 4094 }, (_, idx) => idx + 1),
+          nativeVlan: iface.nativeVlan || 1
+        });
+      }
+      return { output: '' };
+    }
+
+    // no channel-group [id]
+    if (cmd0 === 'no' && tokens.length >= 2 && 'channel-group'.startsWith(tokens[1].toLowerCase())) {
+      iface.channelGroup = undefined;
+      iface.channelMode = undefined;
+      iface.channelProtocol = undefined;
+      return { output: '' };
+    }
+
+    // spanning-tree portfast [disable | edge]
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 2 && 'portfast'.startsWith(tokens[1].toLowerCase())) {
+      if (tokens.length >= 3 && 'disable'.startsWith(tokens[2].toLowerCase())) {
+        iface.stpPortFast = false;
+        return { output: '' };
+      }
+      iface.stpPortFast = true;
+      return {
+        output: `%Warning: portfast should only be enabled on ports connected to a single host.\n Connecting hubs, concentrators, switches, bridges, etc... to this interface\n when portfast is enabled, can cause temporary bridging loops.\n Use with CAUTION`
+      };
+    }
+    if (cmd0 === 'no' && tokens.length >= 3 && 'spanning-tree'.startsWith(tokens[1].toLowerCase()) && 'portfast'.startsWith(tokens[2].toLowerCase())) {
+      iface.stpPortFast = false;
+      return { output: '' };
+    }
+
+    // spanning-tree bpduguard <enable | disable>
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 3 && 'bpduguard'.startsWith(tokens[1].toLowerCase())) {
+      const sub = tokens[2].toLowerCase();
+      iface.stpBpduGuard = sub === 'enable';
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 3 && 'spanning-tree'.startsWith(tokens[1].toLowerCase()) && 'bpduguard'.startsWith(tokens[2].toLowerCase())) {
+      iface.stpBpduGuard = false;
+      return { output: '' };
+    }
+
+    // spanning-tree bpdufilter <enable | disable>
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 3 && 'bpdufilter'.startsWith(tokens[1].toLowerCase())) {
+      const sub = tokens[2].toLowerCase();
+      iface.stpBpduFilter = sub === 'enable';
+      return { output: '' };
+    }
+
+    // spanning-tree guard root / no spanning-tree guard root
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 3 && 'guard'.startsWith(tokens[1].toLowerCase()) && 'root'.startsWith(tokens[2].toLowerCase())) {
+      iface.stpRootGuard = true;
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 4 && 'spanning-tree'.startsWith(tokens[1].toLowerCase()) && 'guard'.startsWith(tokens[2].toLowerCase())) {
+      iface.stpRootGuard = false;
+      return { output: '' };
+    }
+
+    // spanning-tree cost <cost>
+    if ('spanning-tree'.startsWith(cmd0) && tokens.length >= 3 && 'cost'.startsWith(tokens[1].toLowerCase())) {
+      const cost = parseInt(tokens[2], 10);
+      if (isNaN(cost) || cost < 1) return { output: `% Invalid cost value.` };
+      iface.stpCost = cost;
+      return { output: '' };
+    }
+
+    // switchport mode dynamic <desirable | auto>
+    if ('switchport'.startsWith(cmd0) && tokens.length >= 4 && 'mode'.startsWith(tokens[1].toLowerCase()) && 'dynamic'.startsWith(tokens[2].toLowerCase())) {
+      const dMode = tokens[3].toLowerCase();
+      if (dMode === 'desirable' || dMode === 'auto') {
+        iface.dtpMode = `dynamic-${dMode}` as any;
+        return { output: '' };
+      }
+    }
+
+    // switchport nonegotiate
+    if ('switchport'.startsWith(cmd0) && tokens.length >= 2 && 'nonegotiate'.startsWith(tokens[1].toLowerCase())) {
+      iface.dtpNoNegotiate = true;
+      return { output: '' };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -2387,4 +2621,137 @@ Configuration register is 0x2102
       };
     }
   }
+
+  // ===================== SPANNING TREE PROTOCOL (STP) HANDLERS =====================
+  private static handleShowSpanningTree(
+    tokens: string[],
+    device: Device,
+    allDevices: Device[]
+  ): CliExecutionResult {
+    if (!(device instanceof Switch)) {
+      return { output: `% Spanning tree is not enabled on this device.` };
+    }
+
+    if (tokens.length === 2) {
+      return { output: SpanningTreeEngine.renderShowSpanningTree(device, allDevices, 1) };
+    }
+
+    const sub = tokens[2].toLowerCase();
+
+    if ('summary'.startsWith(sub)) {
+      return { output: SpanningTreeEngine.renderShowSpanningTreeSummary(device, allDevices) };
+    }
+
+    if ('root'.startsWith(sub)) {
+      return { output: SpanningTreeEngine.renderShowSpanningTreeRoot(device, allDevices) };
+    }
+
+    if ('vlan'.startsWith(sub) && tokens.length >= 4) {
+      const vlanId = parseInt(tokens[3], 10);
+      if (isNaN(vlanId)) return { output: `% Invalid VLAN number.` };
+      return { output: SpanningTreeEngine.renderShowSpanningTree(device, allDevices, vlanId) };
+    }
+
+    return { output: SpanningTreeEngine.renderShowSpanningTree(device, allDevices, 1) };
+  }
+
+  // ===================== ETHERCHANNEL HANDLERS =====================
+  private static handleShowEtherchannel(
+    tokens: string[],
+    device: Device,
+    allDevices: Device[]
+  ): CliExecutionResult {
+    if (!(device instanceof Switch)) {
+      return { output: `% EtherChannel is not supported on this device.` };
+    }
+
+    if (tokens.length === 2) {
+      return { output: EtherChannelEngine.renderShowEtherchannelSummary(device, allDevices) };
+    }
+
+    const sub = tokens[2].toLowerCase();
+
+    if ('summary'.startsWith(sub)) {
+      return { output: EtherChannelEngine.renderShowEtherchannelSummary(device, allDevices) };
+    }
+
+    if ('port-channel'.startsWith(sub)) {
+      return { output: EtherChannelEngine.renderShowEtherchannelPortChannel(device, allDevices) };
+    }
+
+    const gid = parseInt(tokens[2], 10);
+    if (!isNaN(gid)) {
+      return { output: EtherChannelEngine.renderShowEtherchannelSummary(device, allDevices, gid) };
+    }
+
+    return { output: EtherChannelEngine.renderShowEtherchannelSummary(device, allDevices) };
+  }
+
+  // ===================== VTP HANDLERS =====================
+  private static handleShowVtp(_tokens: string[], device: Device): CliExecutionResult {
+    if (!(device instanceof Switch)) {
+      return { output: `% VTP is not supported on this device.` };
+    }
+
+    const domainName = device.vtp?.domain || '';
+    const vtpMode = device.vtp?.mode || 'server';
+    const capMode = vtpMode.charAt(0).toUpperCase() + vtpMode.slice(1);
+
+    return {
+      output: [
+        'VTP Version capable             : 1 to 3',
+        'VTP version running             : 2',
+        `VTP Domain Name                 : ${domainName}`,
+        'VTP Pruning Mode                : Disabled',
+        'VTP Traps Generation            : Disabled',
+        `Device ID                       : ${device.id}`,
+        'Configuration last modified by 0.0.0.0',
+        'Local updater ID is 0.0.0.0',
+        'Feature VLAN:',
+        '--------------',
+        `VTP Operating Mode                : ${capMode}`,
+        'Maximum VLANs supported locally   : 1005',
+        `Number of existing VLANs          : ${device.vlanDatabase.size}`,
+        'Configuration Revision            : 0',
+        'MD5 digest                        : 0xAB 0xCD 0x12 0x34 0x56 0x78 0x90 0xEF'
+      ].join('\n')
+    };
+  }
+
+  // ===================== DTP HANDLERS =====================
+  private static handleShowDtp(tokens: string[], device: Device): CliExecutionResult {
+    if (!(device instanceof Switch)) {
+      return { output: `% DTP is not supported on this device.` };
+    }
+
+    if (tokens.length >= 4 && ('interface'.startsWith(tokens[2].toLowerCase()) || tokens[2] === 'int')) {
+      const ifaceName = tokens[3];
+      const ifc = device.interfaces.get(ifaceName) || Array.from(device.interfaces.values()).find(i => i.shortName?.toLowerCase() === ifaceName.toLowerCase());
+      if (!ifc) return { output: `% Interface ${ifaceName} not found.` };
+
+      return {
+        output: [
+          `DTP information for ${ifc.name}:`,
+          `  TOS Metric:                       0`,
+          `  TOS Version:                      1`,
+          `  Administrative Mode:              ${ifc.dtpMode || (ifc.switchportMode === 'trunk' ? 'trunk' : 'dynamic-auto')}`,
+          `  Operational Mode:                 ${ifc.switchportMode === 'trunk' ? 'trunk' : 'static-access'}`,
+          `  Administrative Trunking Encapsulation: dot1q`,
+          `  Operational Trunking Encapsulation: dot1q`,
+          `  Negotiation of Trunking:          ${ifc.dtpNoNegotiate ? 'Disabled' : 'Enabled'}`
+        ].join('\n')
+      };
+    }
+
+    return {
+      output: [
+        'Global DTP information',
+        '----------------------',
+        'Sending DTP Hello packets every 30 seconds',
+        'Dynamic Trunk timeout is 300 seconds',
+        `Interfaces using DTP: ${Array.from(device.interfaces.values()).filter(i => !i.dtpNoNegotiate).length}`
+      ].join('\n')
+    };
+  }
 }
+

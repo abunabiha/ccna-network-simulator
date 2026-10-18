@@ -9,6 +9,8 @@ export class Switch extends Device {
   isLayer3: boolean = false;
   routingTable: RouteEntry[] = [];
   spanningTreeMode: 'pvst' | 'rapid-pvst' | 'mst' = 'pvst';
+  stpPriorities: Map<number, number> = new Map();
+  vtp: { domain: string; mode: 'server' | 'client' | 'transparent' | 'off'; version: number } = { domain: '', mode: 'server', version: 2 };
   defaultGateway?: string;
   dhcpPools: Map<string, DhcpPool> = new Map();
   dhcpExcludedAddresses: string[] = [];
@@ -26,8 +28,9 @@ export class Switch extends Device {
       this.osVersion = '17.12.6';
     }
 
-    // Default VLAN 1
+    // Default VLAN 1 & STP priority 32768
     this.vlanDatabase.set(1, { id: 1, name: 'default', status: 'active' });
+    this.stpPriorities.set(1, 32768);
 
     // 24 FastEthernet ports
     for (let i = 1; i <= 24; i++) {
@@ -224,9 +227,22 @@ export class Switch extends Device {
       lines.push('!');
     }
 
+    // VTP
+    if (this.vtp.domain) {
+      lines.push(`vtp domain ${this.vtp.domain}`);
+      lines.push(`vtp mode ${this.vtp.mode}`);
+      lines.push('!');
+    }
+
     // Spanning Tree
     lines.push(`spanning-tree mode ${this.spanningTreeMode}`);
-    lines.push('spanning-tree extend system-id', '!');
+    lines.push('spanning-tree extend system-id');
+    for (const [vlanId, prio] of this.stpPriorities.entries()) {
+      if (prio !== 32768) {
+        lines.push(`spanning-tree vlan ${vlanId} priority ${prio}`);
+      }
+    }
+    lines.push('!');
 
     // VLANs
     for (const [vlanId, vlan] of this.vlanDatabase.entries()) {
@@ -237,8 +253,8 @@ export class Switch extends Device {
       }
     }
 
-    // Interfaces
-    for (const iface of this.interfaces.values()) {
+    // Interfaces (deduplicated by object reference)
+    for (const iface of Array.from(new Set(this.interfaces.values()))) {
       lines.push(`interface ${iface.name}`);
       if (iface.description) lines.push(` description ${iface.description}`);
 
@@ -249,6 +265,32 @@ export class Switch extends Device {
       }
 
       if (!iface.name.startsWith('Vlan')) {
+        if (iface.channelGroup) {
+          lines.push(` channel-group ${iface.channelGroup} mode ${iface.channelMode || 'on'}`);
+        }
+
+        if (iface.stpPortFast) {
+          lines.push(' spanning-tree portfast');
+        }
+        if (iface.stpBpduGuard) {
+          lines.push(' spanning-tree bpduguard enable');
+        }
+        if (iface.stpBpduFilter) {
+          lines.push(' spanning-tree bpdufilter enable');
+        }
+        if (iface.stpRootGuard) {
+          lines.push(' spanning-tree guard root');
+        }
+        if (iface.stpCost) {
+          lines.push(` spanning-tree cost ${iface.stpCost}`);
+        }
+        if (iface.dtpMode) {
+          lines.push(` switchport mode ${iface.dtpMode}`);
+        }
+        if (iface.dtpNoNegotiate) {
+          lines.push(' switchport nonegotiate');
+        }
+
         if (iface.switchportMode === 'none') {
           lines.push(' no switchport');
         } else if (iface.switchportMode === 'trunk') {

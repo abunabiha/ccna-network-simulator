@@ -400,7 +400,117 @@ const swPrivCtx = { deviceId: 'SW1', mode: 'priv-exec' as const };
 const swVersionRes = CliParser.execute('show version', swPrivCtx, sw1, [sw1]);
 console.log(`Switch show version contains 17.12.6: ${swVersionRes.output.includes('17.12.6') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL & CCNP TAHAP 1 SELESAI DENGAN SUKSES! ===');
+console.log('\n=== [11] PENGUJIAN TAHAP 2 CCNP ENTERPRISE: ADVANCED LAYER 2 (STP, ETHERCHANNEL, VTP) ===');
+
+// Setup 3 Switches dalam topologi segitiga
+const swA = new Switch('SW_A', 'Switch-A', { x: 100, y: 100 });
+const swB = new Switch('SW_B', 'Switch-B', { x: 300, y: 100 });
+const swC = new Switch('SW_C', 'Switch-C', { x: 200, y: 300 });
+
+// Hubungkan Switch-A Gi0/1 <-> Switch-B Gi0/1
+swA.interfaces.get('GigabitEthernet0/1')!.connectedDeviceId = 'SW_B';
+swA.interfaces.get('GigabitEthernet0/1')!.connectedPort = 'GigabitEthernet0/1';
+swB.interfaces.get('GigabitEthernet0/1')!.connectedDeviceId = 'SW_A';
+swB.interfaces.get('GigabitEthernet0/1')!.connectedPort = 'GigabitEthernet0/1';
+
+// Hubungkan Switch-B Gi0/2 <-> Switch-C Gi0/1
+swB.interfaces.get('GigabitEthernet0/2')!.connectedDeviceId = 'SW_C';
+swB.interfaces.get('GigabitEthernet0/2')!.connectedPort = 'GigabitEthernet0/1';
+swC.interfaces.get('GigabitEthernet0/1')!.connectedDeviceId = 'SW_B';
+swC.interfaces.get('GigabitEthernet0/1')!.connectedPort = 'GigabitEthernet0/2';
+
+// Hubungkan Switch-A Gi0/2 <-> Switch-C Gi0/2
+swA.interfaces.get('GigabitEthernet0/2')!.connectedDeviceId = 'SW_C';
+swA.interfaces.get('GigabitEthernet0/2')!.connectedPort = 'GigabitEthernet0/2';
+swC.interfaces.get('GigabitEthernet0/2')!.connectedDeviceId = 'SW_A';
+swC.interfaces.get('GigabitEthernet0/2')!.connectedPort = 'GigabitEthernet0/2';
+
+const stpTopologyDevs = [swA, swB, swC];
+
+// 1. STP Configuration: Set Switch-A as Root Primary (priority 4096)
+const swACtx = { deviceId: 'SW_A', mode: 'global-config' as const };
+CliParser.execute('spanning-tree mode rapid-pvst', swACtx, swA, stpTopologyDevs);
+CliParser.execute('spanning-tree vlan 1 priority 4096', swACtx, swA, stpTopologyDevs);
+console.log(`Switch-A priority set to 4096: ${swA.stpPriorities.get(1) === 4096 ? 'PASS' : 'FAIL'}`);
+
+// Test show spanning-tree pada Switch-A (Harus menjadi Root Bridge)
+const swAPriv = { deviceId: 'SW_A', mode: 'priv-exec' as const };
+const swAShowStp = CliParser.execute('show spanning-tree', swAPriv, swA, stpTopologyDevs);
+console.log(`Switch-A is Root Bridge: ${swAShowStp.output.includes('This bridge is the root') ? 'PASS' : 'FAIL'}`);
+
+// Test show spanning-tree pada Switch-B & Switch-C
+const swBPriv = { deviceId: 'SW_B', mode: 'priv-exec' as const };
+const swBShowStp = CliParser.execute('show spanning-tree', swBPriv, swB, stpTopologyDevs);
+console.log(`Switch-B Root Port Gi0/1 is FWD: ${swBShowStp.output.includes('Gi0/1') && swBShowStp.output.includes('Root FWD') ? 'PASS' : 'FAIL'}`);
+
+const swCPriv = { deviceId: 'SW_C', mode: 'priv-exec' as const };
+const swCShowStp = CliParser.execute('show spanning-tree', swCPriv, swC, stpTopologyDevs);
+console.log(`Switch-C detects Alternate/Blocking port for Loop Prevention: ${swCShowStp.output.includes('Altn BLK') ? 'PASS' : 'FAIL'}`);
+
+// Test show spanning-tree summary & root
+const swAShowSummary = CliParser.execute('show spanning-tree summary', swAPriv, swA, stpTopologyDevs);
+console.log(`Switch-A show spanning-tree summary output: ${swAShowSummary.output.includes('Switch is in rapid-pvst mode') ? 'PASS' : 'FAIL'}`);
+
+// Test interface STP features: PortFast & BPDU Guard
+const swAIfCtx = { deviceId: 'SW_A', mode: 'interface-config' as const, targetInterface: 'FastEthernet0/5' };
+CliParser.execute('spanning-tree portfast', swAIfCtx, swA, stpTopologyDevs);
+CliParser.execute('spanning-tree bpduguard enable', swAIfCtx, swA, stpTopologyDevs);
+const fa05 = swA.interfaces.get('FastEthernet0/5')!;
+console.log(`Fa0/5 PortFast enabled: ${fa05.stpPortFast === true ? 'PASS' : 'FAIL'}`);
+console.log(`Fa0/5 BPDU Guard enabled: ${fa05.stpBpduGuard === true ? 'PASS' : 'FAIL'}`);
+
+// 2. EtherChannel (LACP & PAgP)
+// LACP on Fa0/10 & Fa0/11 between Switch-A and Switch-B (mode active + mode active)
+const swAIf10 = { deviceId: 'SW_A', mode: 'interface-config' as const, targetInterface: 'FastEthernet0/10' };
+const swAIf11 = { deviceId: 'SW_A', mode: 'interface-config' as const, targetInterface: 'FastEthernet0/11' };
+CliParser.execute('channel-group 1 mode active', swAIf10, swA, stpTopologyDevs);
+CliParser.execute('channel-group 1 mode active', swAIf11, swA, stpTopologyDevs);
+
+const swBIf10 = { deviceId: 'SW_B', mode: 'interface-config' as const, targetInterface: 'FastEthernet0/10' };
+const swBIf11 = { deviceId: 'SW_B', mode: 'interface-config' as const, targetInterface: 'FastEthernet0/11' };
+CliParser.execute('channel-group 1 mode active', swBIf10, swB, stpTopologyDevs);
+CliParser.execute('channel-group 1 mode active', swBIf11, swB, stpTopologyDevs);
+
+// Hubungkan fisik port Fa0/10 & Fa0/11
+swA.interfaces.get('FastEthernet0/10')!.connectedDeviceId = 'SW_B';
+swA.interfaces.get('FastEthernet0/10')!.connectedPort = 'FastEthernet0/10';
+swB.interfaces.get('FastEthernet0/10')!.connectedDeviceId = 'SW_A';
+swB.interfaces.get('FastEthernet0/10')!.connectedPort = 'FastEthernet0/10';
+
+swA.interfaces.get('FastEthernet0/11')!.connectedDeviceId = 'SW_B';
+swA.interfaces.get('FastEthernet0/11')!.connectedPort = 'FastEthernet0/11';
+swB.interfaces.get('FastEthernet0/11')!.connectedDeviceId = 'SW_A';
+swB.interfaces.get('FastEthernet0/11')!.connectedPort = 'FastEthernet0/11';
+
+const lacpSummary = CliParser.execute('show etherchannel summary', swAPriv, swA, stpTopologyDevs);
+console.log(`LACP Bundle Po1(SU) created: ${lacpSummary.output.includes('Po1(SU)') && lacpSummary.output.includes('LACP') ? 'PASS' : 'FAIL'}`);
+console.log(`LACP Member ports bundled (P): ${lacpSummary.output.includes('Fa0/10(P)') && lacpSummary.output.includes('Fa0/11(P)') ? 'PASS' : 'FAIL'}`);
+
+// PAgP on Fa0/15 & Fa0/16 (desirable + auto)
+const swAIf15 = { deviceId: 'SW_A', mode: 'interface-config' as const, targetInterface: 'FastEthernet0/15' };
+CliParser.execute('channel-group 2 mode desirable', swAIf15, swA, stpTopologyDevs);
+const swBIf15 = { deviceId: 'SW_B', mode: 'interface-config' as const, targetInterface: 'FastEthernet0/15' };
+CliParser.execute('channel-group 2 mode auto', swBIf15, swB, stpTopologyDevs);
+
+swA.interfaces.get('FastEthernet0/15')!.connectedDeviceId = 'SW_B';
+swA.interfaces.get('FastEthernet0/15')!.connectedPort = 'FastEthernet0/15';
+swB.interfaces.get('FastEthernet0/15')!.connectedDeviceId = 'SW_A';
+swB.interfaces.get('FastEthernet0/15')!.connectedPort = 'FastEthernet0/15';
+
+const pagpSummary = CliParser.execute('show etherchannel 2 summary', swAPriv, swA, stpTopologyDevs);
+console.log(`PAgP Bundle Po2(SU) created: ${pagpSummary.output.includes('Po2(SU)') && pagpSummary.output.includes('PAgP') ? 'PASS' : 'FAIL'}`);
+
+// 3. VTP & DTP Testing
+CliParser.execute('vtp domain CCNP-ENTERPRISE', swACtx, swA, stpTopologyDevs);
+CliParser.execute('vtp mode server', swACtx, swA, stpTopologyDevs);
+const vtpStatusRes = CliParser.execute('show vtp status', swAPriv, swA, stpTopologyDevs);
+console.log(`VTP domain CCNP-ENTERPRISE verified: ${vtpStatusRes.output.includes('CCNP-ENTERPRISE') ? 'PASS' : 'FAIL'}`);
+
+const dtpShowRes = CliParser.execute('show dtp interface Gi0/1', swAPriv, swA, stpTopologyDevs);
+console.log(`DTP show interface Gi0/1 verified: ${dtpShowRes.output.includes('DTP information for GigabitEthernet0/1') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1 & TAHAP 2 SELESAI DENGAN SUKSES! ===');
+
 
 
 
