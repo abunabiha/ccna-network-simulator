@@ -1,0 +1,289 @@
+=== PAGE 1 ===
+   
+   
+ 
+ 
+© 2026 Cisco and/or its affiliates. All rights reserved.  Page 1 of 7   
+ 
+CCNP Enterprise: Advanced 
+Routing (ENARSI)  
+Scope and Sequence 
+ 
+Version 9 
+  
+
+=== PAGE 2 ===
+ CCNP Enterprise: Advanced Routing (ENARSI) Scope and Sequence 
+ 
+ 
+ 
+© 2025 Cisco and/or its affiliates. All rights reserved.  Page 2 of 7   
+ 
+Table of Content 
+Target Audience 3 
+Prerequisites 3 
+Course Description 3 
+Authorized Use 4 
+Course Features 4 
+Equipment Requirements 5 
+Course Outline 6 
+ 
+
+=== PAGE 3 ===
+ CCNP Enterprise: Advanced Routing (ENARSI) Scope and Sequence 
+ 
+ 
+ 
+© 2025 Cisco and/or its affiliates. All rights reserved.  Page 3 of 7   
+Target Audience 
+The Cisco Networking Academy® CCNP Enterprise curriculum is designed for participants who 
+are seeking professional-level jobs in the ICT industry or hope to fulfill prerequisites to pursue 
+other CCNP or CCIE certifications. The entire curriculum is appropriate for learners at 
+universities and colleges. 
+Prerequisites 
+CCNA or equivalent knowledge and skills. 
+Course Description 
+In this curriculum, Cisco Networking Academy™ participants learn, apply, and practice CCNP 
+Enterprise knowledge and skills through a series of in-depth, hands-on experiences that 
+reinforce their learning.  
+The CCNP Enterprise v9 curriculum is presented in two courses that provide integrated and 
+comprehensive coverage of professional-level networking technologies.  
+Upon completion of each course, learners will be prepared to take the certification exam 
+associated with that course. 
+The following two courses comprise the CCNP Enterprise v9 curriculum: 
+CCNP Enterprise: Core Networking v9 
+The Implementing and Operating Cisco Enterprise Network Core Technologies (ENCOR) course 
+provides learners with the knowledge and skills needed to install, configure, operate, and 
+troubleshoot an enterprise network. This course introduces overlay network design through 
+SD-Access and SD-WAN solutions and teaches learners to implement security principles and 
+automation and programmability within an enterprise network. This course helps prepare 
+learners to take the 350-401 ENCOR exam, which is part of the CCIE Enterprise Infrastructure 
+certification. This version is aligned with the updated version of the 350-401 exam, version 
+1.2. 
+Learners will be able to: 
+• Configure and implement identified solutions by applying planned implementation 
+processes using Cisco IOS Software commands and applications. 
+• Verify appropriate show and debug commands and applications to ensure correct 
+solution implementation and performance. 
+• Troubleshoot appropriate show and debug commands and applications to identify the 
+cause of basic-level network issues and correctly implement a solution that ensures the 
+network is performing as desired. 
+CCNP Enterprise: Advanced Routing v9 
+The Implementing Cisco Enterprise Advanced Routing and Services (ENARSI) course provides 
+learners with the knowledge and skills needed to install, operate, manage, and troubleshoot an 
+enterprise network. Throughout the course, learners will build the skills necessary to ensure the 
+smooth and effective operation of these networks. Completing this course prepares them to 
+take the Implementing Cisco Enterprise Advanced Routing and Services (300-410 ENARSI) 
+
+=== PAGE 4 ===
+ CCNP Enterprise: Advanced Routing (ENARSI) Scope and Sequence 
+ 
+ 
+ 
+© 2025 Cisco and/or its affiliates. All rights reserved.  Page 4 of 7   
+exam version 1.1. Learners who pass the exam will earn the Cisco Certified Specialist - 
+Enterprise Advanced Infrastructure Implementation certification, which is also part of the CCNP 
+Enterprise certification. 
+Learners will be able to: 
+• Install, configure, and operate enterprise networks. 
+• Troubleshoot enterprise networks with a focus on advanced routing and services. 
+• Implement Layer 3 technologies, route manipulation, VPN technologies, network 
+infrastructure, and network security solutions. 
+• Demonstrate advanced knowledge of enterprise networking tools, technologies, and 
+concepts. 
+These two courses, along with the corresponding certification exams, align to the overall CCNP 
+Enterprise certification. Both courses provide learners with extensive opportunities for hands-
+on practical experience and career-skills development. 
+Authorized Use 
+Access to the CCNP curriculum is granted exclusively under the terms of the Cisco Networking 
+Academy Membership Agreement.  
+This content is licensed for use in academic degree programs and non-profit workforce 
+development initiatives only. 
+Use of these materials for commercial training, bootcamps, or other for-profit activities outside 
+the scope of the agreement is strictly prohibited.  
+Failure to adhere to these policies may lead to the termination of the Academy agreement. 
+Course Features 
+The CCNP Enterprise v9 curriculum includes many features to engage and assess learner 
+knowledge and skills. 
+Curriculum 
+The online curriculum has been repurposed for use by the Cisco Networking Academy from the 
+premium offerings at Cisco U. 
+The Cisco U. built-in, hands-on labs, (using the terminology “Discovery”), available to Cisco U. 
+premium subscribers, have been stripped and are only available at Cisco Networking Academy 
+as video-based demonstrations. 
+The course at Cisco Networking Academy has been expanded with additional hands-on 
+practice activities that leverage the Cisco Hardware Classroom Equipment, Cisco Packet 
+Tracer, or Cisco Modeling Labs free edition (CML-Free). These lab activities are threaded 
+throughout the course using the Assignment Flow. 
+Assessments 
+Assessments and practice activities are focused on specific certification competencies to 
+increase knowledge and skill retention. 
+Embedded module-group assessments provide immediate feedback to support the evaluation 
+of knowledge and acquired skills. 
+
+=== PAGE 5 ===
+ CCNP Enterprise: Advanced Routing (ENARSI) Scope and Sequence 
+ 
+ 
+ 
+© 2025 Cisco and/or its affiliates. All rights reserved.  Page 5 of 7   
+Activities 
+Hands-on labs help students develop critical thinking and complex, problem-solving skills. 
+It is recommended to leverage CML-Free to emulate real network operating systems and 
+practice important network virtualization skills and concepts, such as a digital twin. 
+Cisco Packet Tracer simulation-based learning activities are added as optional instructor 
+resources to support vital CCNA skills. 
+Video demonstrations give insight into complex workflows and processes providing exposure to 
+advanced networking tools and operations. 
+Equipment Requirements 
+Detailed equipment information, including descriptions and part numbers, is available in the 
+CCNP Enterprise Equipment List, which is located on the Cisco NetAcad Equipment Information 
+site (https://www.netacad.com/resources/program-info/equipment-information).  
+The labs in the CCNP Enterprise curriculum use the following topology and equipment. 
+CCNP Enterprise Baseline Physical Topology (for both ENCOR and ENARSI)  
+ 
+Baseline Equipment Bundle 
+• 3x C8200L-1N-4T (2 with NIM-2T) 
+• 2x C9300L-24T-4G-A 
+• 1x C9200L-24T-4G-E 
+• Ethernet cables as shown in the topology 
+• 2x CAB-SS-V35MT= (10’ DTE Serial Cable) 
+
+
+=== PAGE 6 ===
+ CCNP Enterprise: Advanced Routing (ENARSI) Scope and Sequence 
+ 
+ 
+ 
+© 2025 Cisco and/or its affiliates. All rights reserved.  Page 6 of 7   
+• 2x CAB-SS-V35FC= (10’ DCE Serial Cable) 
+• PCs - minimum system requirements 
+o CPU: Intel Core i5 (8th Gen or newer) / AMD Ryzen 5 or equivalent 
+▪ Must support hardware virtualization (Intel VT-x or AMD-V) for lab simulation software 
+o Operating System, such as Microsoft Windows, Linux, or Mac OS 
+o RAM: 16 GB (Recommended for running CML/Virtual Machines); 8 GB (Minimum) 
+o Storage: 20 GB of free disk space 
+o Ethernet port (RJ-45) or USB Ethernet adapter (for connecting to physical lab equipment) 
+o Display resolution: 1920 x 1080 (FHD) or higher 
+o Latest video card drivers, operating system updates, and a modern web browser (Chrome, 
+Firefox, or Edge) 
+• Internet connection for lab and study PCs 
+Software 
+• Cisco IOS versions: 
+o Routers: Version IOSXE-17.15.4c or higher. 
+o Layer 3 Switches: Version IOS-XE 17.12.6 or higher. 
+o Layer 2 Switches: Version IOS 17.12.6 or higher 
+• Packet Tracer v9 or newer 
+• Open-source server software for various services and protocols, such as HTTP, DHCP, FTP, TFTP, etc. 
+• Terminal emulation and SSH client software, such as Tera Term and PuTTY for lab PCs 
+• Oracle VirtualBox, latest version 
+• VMware Workstation, latest version 
+• Wireshark version: latest stable version 
+• Terminal emulation software for the installed PC operating system 
+Course Outline 
+The CCNP Enterprise: Advanced Routing course is structured into 6 domains (module groups) 
+that cover specific competencies. The table below details the modules and their associated 
+objectives. Each module is an integrated unit of learning that consists of content, activities, and 
+assessments that target a specific set of competencies. The size of the module depends on 
+the depth of knowledge and skill needed to master the competencies. 
+No. Module Name Objective 
+Layer 3 Technologies - EIGRP 
+1 Implementing EIGRP 
+Implement EIGRP features and operations, differentiate between Classic and 
+Named modes, and understand routing exchange and feasibility conditions. 
+2 Optimizing EIGRP 
+Optimize EIGRP performance by configuring queries, stub routers, Stuck in Active 
+(SIA) mitigation, and summary routes. 
+3 Troubleshooting EIGRP 
+Troubleshoot common EIGRP issues regarding neighbor formation, routing 
+tables, stub configurations, and summarization. 
+Layer 3 Technologies - OSPF 
+4 Implementing OSPF 
+Implement OSPF features, hierarchical structures, and message types, and 
+analyze the Link State Database (LSDP) synchronization and SPF algorithm. 
+5 Optimizing OSPF 
+Optimize OSPF using route summarization, special area types (Stubby Areas), 
+default routes, and virtual links. 
+
+=== PAGE 7 ===
+ CCNP Enterprise: Advanced Routing (ENARSI) Scope and Sequence 
+ 
+ 
+ 
+© 2025 Cisco and/or its affiliates. All rights reserved.  Page 7 of 7   
+6 Troubleshooting OSPF 
+Troubleshoot OSPF adjacency, routing issues, path selection, special area 
+configurations, and summarization. 
+Routing Manipulation 
+7 Configuring Redistribution 
+Configure route redistribution between protocols using default metrics, mutual 
+redistribution, and manipulation tools like route maps and distribute lists. 
+8 
+Troubleshooting 
+Redistribution 
+Troubleshoot route redistribution issues, including metric mismatches and route 
+feedback loops. 
+9 
+Implementing Path 
+Control 
+Implement path control mechanisms using Policy-Based Routing (PBR), IP-SLA, 
+and Bidirectional Forwarding Detection (BFD). 
+Layer 3 Technologies - BGP  
+10 Implementing IBGP 
+Implement Internal BGP (IBGP) and External BGP (EBGP), covering fundamentals, 
+neighbor relationships, path attributes, and transit AS functionality. 
+11 Optimizing BGP 
+Optimize BGP using attributes (Weight, Local Preference, MED, AS-Path), route 
+filtering, peer groups, and Route Reflectors. 
+12 Implementing MP-BGP 
+Configure Multiprotocol BGP (MP-BGP) to support and filter both IPv4 and IPv6 
+address families. 
+13 Troubleshooting BGP 
+Troubleshoot BGP neighbor relationships, IBGP configurations, and MP-BGP 
+issues. 
+MPLS and VPN Technologies 
+14 Exploring MPLS 
+Explain MPLS concepts, terminology, Label Switching Router (LSR) types, and 
+traffic forwarding mechanisms compared to traditional IP routing. 
+15 
+Introducing MPLS L3 VPN 
+Architecture 
+Describe MPLS Layer 3 VPN architecture, including PE routers, VRFs, Route 
+Distinguishers (RD), Route Targets (RT), and packet flow. 
+16 
+Introducing MPLS L3 VPN 
+Routing 
+Explain MPLS Layer 3 VPN routing requirements, table operations, and the end-
+to-end flow of routing updates and packet forwarding. 
+17 Configuring VRF-Lite 
+Configure and verify VRF-Lite, including VRF-aware routing protocols and VRF 
+table management. 
+18 Implementing DMVPN 
+Implement DMVPN using GRE, mGRE, and NHRP, covering hub-and-spoke 
+configurations and authentication. 
+Infrastructure Security and Services 
+19 Implementing DHCP 
+Implement DHCP for IPv4 and IPv6, including relays, address bindings, and 
+SLAAC (stateful and stateless). 
+20 
+Introducing IPv6 First Hop 
+Security 
+Secure IPv6 networks using First Hop Security tools such as ND inspection, RA 
+Guard, Source Guard, and Destination Guard. 
+21 Securing Cisco Routers 
+Secure Cisco routers using Access Control Lists (ACLs), Control Plane Policing 
+(CoPP), and Unicast Reverse Path Forwarding (uRFP). 
+22 
+Troubleshooting 
+Infrastructure Security 
+and Services 
+Troubleshoot infrastructure security services including AAA, SNMP, Syslog, and 
+NetFlow. 
+23 
+Troubleshooting with DNA 
+Center Assurance 
+Monitor and troubleshoot networks using Cisco DNA Center Assurance tools, AI 
+Network Analytics, and Path Trace. 
+ 
+ 
+

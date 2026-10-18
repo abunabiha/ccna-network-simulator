@@ -1,206 +1,208 @@
 # FORMULASI MATEMATIKA & SPESIFIKASI ALGORITMA SISTEM
-## Proyek: CCNA NetSim Pro - Cisco Network Simulator & Auto-Grader
-
-Dokumen ini menyajikan model matematis formal dan spesifikasi algoritma yang digunakan dalam simulasi jaringan L2/L3, parser CLI Cisco IOS, serta mesin evaluasi lab otomatis untuk keperluan sitasi dan validasi ilmiah.
+## Berdasarkan Standar IEEE & Analisis Teori Graf
+### Proyek: Cisco NetSim Pro - Enterprise Multi-Tier Cisco Network Simulator & Auto-Grader
+#### Cakupan: Cisco CCNA 200-301 (v1.1) & CCNP Enterprise v9 (ENCOR 350-401 v1.2 & ENARSI 300-410 v1.1)
 
 ---
 
-## 1. Pemodelan Matematis Pengalamatan & Subnetting IPv4
+Dokumen ini menyajikan model matematis formal, pembuktian teori graf, dan spesifikasi algoritma deterministik yang digunakan dalam kernel simulasi jaringan enterprise Cisco NetSim Pro untuk keperluan validasi ilmiah dan sitasi akademik (Disertasi Doktor / Publikasi IEEE Scopus Q1).
 
-### 1.1 Representasi Vektor Bit Biner
-Alamat IPv4 direpresentasikan sebagai bilangan bulat tidak bertanda 32-bit:
+---
+
+## 1. Pemodelan Alamat IPv4, Subnetting & Wildcard ACL
+
+### 1.1 Representasi Ruang Alamat Biner
+Ruang alamat IPv4 direpresentasikan sebagai bilangan bulat tidak bertanda 32-bit:
 $$\text{IP} \in \mathbb{U}_{32} = [0, 2^{32}-1]$$
 
-Konversi dari notasi desimal bertitik (*dotted decimal notation*) $D = (d_1, d_2, d_3, d_4)$ di mana $d_i \in [0, 255]$ ke representasi integer 32-bit dihitung melalui pergeseran bit (*bitwise shift*):
+Konversi dari notasi desimal bertitik $D = (d_1, d_2, d_3, d_4)$ dengan $d_i \in [0, 255]$:
 $$\text{IP}_{int} = (d_1 \ll 24) \lor (d_2 \ll 16) \lor (d_3 \ll 8) \lor d_4$$
 
-### 1.2 Formulasi Subnet Mask & Network ID
-Diberikan panjang prefix CIDR $p \in [0, 32]$, *Subnet Mask* $M(p)$ didefinisikan sebagai:
+### 1.2 Formulasi Subnet Mask, Network ID & Wildcard Mask
+Untuk panjang prefix CIDR $p \in [0, 32]$:
 $$M(p) = \begin{cases} 
 0 & \text{jika } p = 0 \\
 (\sim 0) \ll (32 - p) & \text{jika } 1 \le p \le 32 
 \end{cases}$$
 
-Alamat Jaringan (*Network Address*) $N$ dan Alamat Broadcast $B$ dihitung secara bitwise:
-$$N = \text{IP}_{int} \land M(p)$$
-$$B = N \lor (\sim M(p))$$
+Alamat Jaringan $N$ dan Broadcast $B$:
+$$N = \text{IP}_{int} \land M(p), \quad B = N \lor (\sim M(p))$$
 
-Jumlah host yang dapat dialokasikan (*usable host capacity*) $H(p)$:
-$$H(p) = \begin{cases}
-2^{32-p} - 2 & \text{jika } p \le 30 \\
-2 & \text{jika } p = 31 \text{ (RFC 3021 point-to-point)} \\
-1 & \text{jika } p = 32 \text{ (Host route)}
-\end{cases}$$
-
-### 1.3 Formulasi Wildcard Mask untuk Access Control List (ACL)
-Dalam Cisco IOS, Access Control List dan OSPF network statements menggunakan *Wildcard Mask* $W(p)$:
+Wildcard mask $W(p)$ untuk ACL dan pernyataan network Cisco:
 $$W(p) = \sim M(p) = 255.255.255.255 - M(p)$$
-Pengujian kecocokan paket terhadap aturan ACL dengan pola $(N_{acl}, W_{acl})$ pada IP paket $P$:
+Pengujian kecocokan paket $P$ terhadap aturan ACL $(N_{acl}, W_{acl})$:
 $$\text{Match}(P, N_{acl}, W_{acl}) \iff (P \land \sim W_{acl}) == (N_{acl} \land \sim W_{acl})$$
 
 ---
 
-## 2. Algoritma Evaluasi Rute (Longest Prefix Match)
+## 2. Hirarki Evaluasi Rute (Longest Prefix Match & Administrative Distance)
 
-Ketika router menerima paket dengan tujuan alamat IP $D$, router mencari rute terbaik (*best route*) dari tabel routing $\mathcal{R}$ yang terdiri dari himpunan entri rute $r_i = (N_i, M_i, \text{AD}_i, \text{Metric}_i, \text{NextHop}_i)$:
-
+Diberikan tabel perutean $\mathcal{R}$ yang terdiri dari himpunan rute $r_i = (N_i, M_i, \text{AD}_i, \text{Metric}_i, \text{NextHop}_i)$. Untuk paket dengan alamat IP tujuan $D$:
 $$\mathcal{C}(D) = \{ r_i \in \mathcal{R} \mid (D \land M_i) = N_i \}$$
 
-Rute terpilih $r^*$ ditentukan berdasarkan aturan leksikografis standar Cisco:
-1. **Longest Prefix Match (Prefix Length $p$ terbesar)**:
+Rute optimal $r^*$ dipilih melalui aturan leksikografis deterministik:
+1. **Longest Prefix Match (Panjang Prefix $p$ Terbesar)**:
    $$\mathcal{C}_{max} = \arg\max_{r_i \in \mathcal{C}(D)} \text{popcount}(M_i)$$
 2. **Lowest Administrative Distance (AD)** jika prefix length sama:
    $$\mathcal{C}_{AD} = \arg\min_{r_i \in \mathcal{C}_{max}} \text{AD}_i$$
-3. **Lowest Metric** jika AD sama:
+3. **Lowest Protocol Metric** jika AD sama:
    $$r^* = \arg\min_{r_i \in \mathcal{C}_{AD}} \text{Metric}_i$$
 
-Nilai Administrative Distance bawaan Cisco:
-- Connected: 0
-- Static Route: 1
-- OSPF: 110
-- RIP: 120
+Matriks Nilai Administrative Distance Bawaan Cisco Enterprise:
+| Protokol / Sumber Rute | Nilai AD Default |
+| :--- | :---: |
+| Connected Interface | **0** |
+| Static Route | **1** |
+| EIGRP Summary Route | **5** |
+| External BGP (EBGP) | **20** |
+| EIGRP Internal | **90** |
+| OSPF (Intra, Inter, External) | **110** |
+| IS-IS | **115** |
+| RIPv2 | **120** |
+| EIGRP External (Redistributed) | **170** |
+| Internal BGP (IBGP) | **200** |
 
 ---
 
-## 3. Algoritma Perhitungan Jalur Terpendek OSPFv2 (Dijkstra SPF)
+## 3. Algoritma Perhitungan Jalur Terpendek OSPF Multi-Area (Dijkstra SPF)
 
-Untuk domain routing OSPF, topologi dimodelkan sebagai graf berarah terbobot $G = (V, E, w)$, di mana:
-- $V$ adalah himpunan router dan subnet jaringan.
-- $E$ adalah himpunan link antar router/antarmuka.
-- $w(u, v)$ adalah cost metrik OSPF antarmuka:
-  $$w(u, v) = \left\lfloor \frac{\text{Reference Bandwidth}}{\text{Interface Bandwidth}} \right\rfloor = \left\lfloor \frac{10^8 \text{ bps}}{\text{Bandwidth}(u,v)} \right\rfloor$$
+Topologi OSPF dimodelkan sebagai graf berarah terbobot $G = (V, E, w)$. Cost antarmuka $w(u, v)$ dihitung berdasarkan *Reference Bandwidth* $B_{ref}$ (default: $10^8$ bps):
+$$w(u, v) = \left\lfloor \frac{B_{ref}}{\text{Bandwidth}(u, v)} \right\rfloor$$
+
+### 3.1 Hirarki Preferensi Jalur OSPF RFC 2328
+Jika terdapat beberapa jalur menuju subnet tujuan yang sama dari area berbeda, OSPF memilih rute berdasarkan hirarki tipe rute yang ketat, **bukan** berdasarkan nilai cost numerik terendah:
+$$\text{Intra-Area (O)} \succ \text{Inter-Area (O IA)} \succ \text{External Type 1 (O E1 / N1)} \succ \text{External Type 2 (O E2 / N2)}$$
+
+### 3.2 Formulasi Cost Rute Eksternal
+- **Tipe E1 (External Metric 1)**: Cost total mencakup cost internal menuju ASBR ditambah cost eksternal yang diiklankan:
+  $$\text{Cost}_{E1} = \text{Cost}_{\text{Internal-to-ASBR}} + \text{Cost}_{\text{Advertised}}$$
+- **Tipe E2 (External Metric 2 - Default)**: Hanya memperhitungkan cost eksternal yang diiklankan oleh ASBR, cost internal hanya digunakan sebagai *tie-breaker*:
+  $$\text{Cost}_{E2} = \text{Cost}_{\text{Advertised}}$$
+
+---
+
+## 4. Algoritma DUAL EIGRP & Formulasi Metrik Komposit (RFC 7868)
+
+### 4.1 Formulasi Metrik Komposit EIGRP Klasik (Classic Metric)
+Metrik komposit EIGRP menggabungkan bandwidth minimum dan total delay:
+$$\text{Metric} = 256 \times \left( K_1 \cdot \text{BW}_{\min} + \frac{K_2 \cdot \text{BW}_{\min}}{256 - \text{Load}} + K_3 \cdot \text{Delay}_{\text{sum}} \right) \times \left( \frac{K_5}{\text{Reliability} + K_4} \right)$$
+
+Dengan nilai konstanta bawaan Cisco $K_1 = 1, K_2 = 0, K_3 = 1, K_4 = 0, K_5 = 0$:
+$$\text{Metric} = 256 \times \left( \text{BW}_{\min} + \text{Delay}_{\text{sum}} \right)$$
+
+Di mana:
+$$\text{BW}_{\min} = \frac{10^7}{\min_{l \in \text{path}} (\text{Bandwidth}(l) \text{ in kbps})}$$
+$$\text{Delay}_{\text{sum}} = \frac{\sum_{l \in \text{path}} \text{Delay}(l) \text{ in tens of }\mu\text{s}}{10}$$
+
+### 4.2 Formulasi Wide Metrics EIGRP Named Mode (Skala 64-Bit)
+Untuk mendukung link berkecepatan tinggi ($\ge 10\text{ Gbps}$), Cisco IOS-XE Named Mode menggunakan konstanta pengali $65536$ dan delay dalam skala pikodetik ($10^{-12}$ detik):
+$$\text{WideMetric} = \left( K_1 \cdot \frac{10^7 \times 65536}{\text{Bandwidth}_{\min}} + K_3 \cdot \frac{\text{Delay}_{\text{sum\_pico}} \times 65536}{10^6} \right)$$
+
+### 4.3 Kondisi Kelayakan DUAL (DUAL Feasibility Condition)
+Diberikan router lokal $R$, sebuah subnet tujuan $D$, dan tetangga $N$:
+- **Feasible Distance ($FD$)**: Nilai metrik terbaik terhitung dari router lokal $R$ menuju tujuan $D$ sejak perubahan topologi terakhir.
+- **Reported Distance ($RD$)** atau *Advertised Distance*: Nilai metrik dari tetangga $N$ menuju tujuan $D$.
 
 ```
-Algoritma Dijkstra-OSPF(G, root):
-1. Inisialisasi dist[v] = ∞ untuk setiap v ∈ V, dist[root] = 0
-2. Inisialisasi next_hop[v] = NIL untuk setiap v ∈ V
-3. PriorityQueue Q = V
-4. While Q tidak kosong:
-5.    u = Extract-Min(Q)
-6.    For each neighbor v dari u:
-7.       alt = dist[u] + w(u, v)
-8.       If alt < dist[v]:
-9.          dist[v] = alt
-10.         If u == root:
-11.            next_hop[v] = v
-12.         Else:
-13.            next_hop[v] = next_hop[u]
-14.         Decrease-Key(Q, v, alt)
-15. Return dist, next_hop
+Kondisi Kelayakan (Feasibility Condition - FC):
+Tetangga N memenuhi syarat menjadi Feasible Successor (FS) jika dan hanya jika:
+                      RD_N < FD_current
 ```
 
+**Pembuktian Matematis Bebas-Loop (*Loop-Freedom Guarantee*)**:
+Jika $RD_N < FD_{current}$, maka jalur dari $N$ menuju $D$ tidak mungkin melewati router lokal $R$, karena jika jalur tersebut melewati $R$, maka $RD_N$ harus lebih besar dari $FD_{current}$ ($RD_N \ge FD_{current} + \text{Cost}(N, R) > FD_{current}$), yang merupakan sebuah kontradiksi. Dengan demikian, kondisi kelayakan secara matematis menjamin *loop-free alternate path* seketika tanpa memerlukan siklus pertukaran pesan global.
+
+### 4.4 Beban Tak Seimbang (*Unequal-Cost Load Balancing*)
+Sebuah Feasible Successor $FS_k$ dapat dimasukkan ke dalam tabel routing untuk membagi beban trafik (*unequal-cost multipath*) jika memenuhi ambang batas *Variance* $V \ge 1$:
+$$\text{Metric}(FS_k) \le V \times FD_{current}$$
+
 ---
 
-## 4. Algoritma Parser & Lexer Cisco IOS CLI (Trie-Based Matcher)
+## 5. Algoritma Penentuan Jalur Terbaik BGP-4 (13-Step Best Path Decision Tree)
 
-Untuk mendukung singkatan perintah (misal `sh ip ro` dipetakan ke `show ip route`), sistem menggunakan struktur data *Prefix Tree (Trie)* atau *Greedy Unique Prefix Resolution*.
+Ketika router BGP menerima beberapa pengumuman rute NLRI menuju prefix tujuan yang sama, router mengevaluasi kandidat rute melalui algoritma pohon keputusan deterministik 13 langkah:
 
-Diberikan input token $t$ dan himpunan kata kunci valid dalam mode aktif $K = \{k_1, k_2, \dots, k_m\}$:
-$$\text{Candidates}(t, K) = \{ k \in K \mid k \text{ diawali oleh } t \}$$
+```mermaid
+flowchart TD
+    S1["1. Highest Weight (Cisco proprietary, 0-65535, default 32768 local)"] -->|Tie| S2["2. Highest Local Preference (default 100, disebarkan di internal AS)"]
+    S2 -->|Tie| S3["3. Locally Originated Routes (network/aggregate > redistribute)"]
+    S3 -->|Tie| S4["4. Shortest AS_PATH (jumlah AS dalam AS-Sequence terpendek)"]
+    S4 -->|Tie| S5["5. Lowest Origin Type Code (IGP < EGP < Incomplete '?')"]
+    S5 -->|Tie| S6["6. Lowest Multi-Exit Discriminator (MED / Metric antar-AS)"]
+    S6 -->|Tie| S7["7. External BGP over Internal BGP (EBGP > IBGP)"]
+    S7 -->|Tie| S8["8. Lowest IGP Metric to BGP Next-Hop"]
+    S8 -->|Tie| S9["9. Determine if Multipath is enabled (maximum-paths)"]
+    S9 -->|Tie| S10["10. Oldest EBGP Route (meminimalkan route flapping)"]
+    S10 -->|Tie| S11["11. Lowest BGP Router-ID (atau Originator-ID jika via RR)"]
+    S11 -->|Tie| S12["12. Minimum Cluster List Length (untuk lingkungan Route Reflector)"]
+    S12 -->|Tie| S13["13. Lowest Neighbor IP Address"]
+```
 
-Hasil resolusi token:
-$$\text{Resolve}(t, K) = \begin{cases}
-k & \text{jika } |\text{Candidates}(t, K)| = 1 \text{ (Singkatan Valid)} \\
-\text{Ambiguous} & \text{jika } |\text{Candidates}(t, K)| > 1 \text{ (\% Ambiguous command)} \\
-\text{Invalid} & \text{jika } |\text{Candidates}(t, K)| = 0 \text{ (\% Invalid input detected)}
+Rumusan fungsi keputusan:
+$$\text{BestPath} = \arg\max_{r \in \mathcal{B}(P)} \left( \text{Weight}(r), \text{LocalPref}(r), \text{LocalOrig}(r), -\text{Len}(\text{AS\_Path}(r)), -\text{OriginCode}(r), -\text{MED}(r), \text{IsEBGP}(r), -\text{Cost}_{\text{IGP}}(r), -\text{BGP\_RID}(r), -\text{NeighborIP}(r) \right)$$
+
+---
+
+## 6. Analisis Graf Pencegahan Loop Redistribusi Rute (Mutual Redistribution)
+
+Pada skenario redistribusi timbal-balik dua titik (*two-point mutual redistribution*) antara Domain $A$ (misal OSPF) dan Domain $B$ (misal EIGRP) melalui Boundary Router $R_1$ dan $R_2$, topologi membentuk graf siklik $C = (R_1, \text{Domain}_B, R_2, \text{Domain}_A)$:
+
+```mermaid
+graph LR
+    subgraph Domain_A["Domain A (OSPF Area 0, AD=110)"]
+        R1_A["R1 (Border Router)"]
+        R2_A["R2 (Border Router)"]
+    end
+    subgraph Domain_B["Domain B (EIGRP AS 100, External AD=170)"]
+        R1_B["R1 (Border Router)"]
+        R2_B["R2 (Border Router)"]
+    end
+    R1_A <-->|Subnet Asal: 10.1.0.0/24| R2_A
+    R1_A -->|Redistribute A to B| R1_B
+    R1_B <--> R2_B
+    R2_B -->|Feedback: Redistribute B to A| R2_A
+```
+
+### 6.1 Teorema Pembentukan Loop Umpan Balik (*Routing Feedback Loop*)
+Jika rute $P$ dari Domain $A$ diredistribusikan ke Domain $B$ oleh $R_1$, rute tersebut muncul di $R_2$ dari arah Domain $B$. Jika $R_2$ meredistribusikan kembali rute tersebut ke Domain $A$ dengan metrik lebih menarik daripada jalur internal asli, terbentuk siklus perutean (*routing loop*) atau rute sub-optimal (*sub-optimal routing*).
+
+### 6.2 Solusi Matematis Pemutusan Siklus: Route Tagging ($\tau$) & Route-Maps
+Untuk mencegah siklus, setiap rute yang diredistribusikan ditandai dengan nilai integer tag $\tau \in [1, 2^{32}-1]$ menggunakan Route-Map:
+1. **Aturan Injeksi pada $R_1$**:
+   $$\text{Redistribute}(A \to B): \quad \text{SetTag}(P) = \tau_A$$
+2. **Aturan Filter pada $R_2$**:
+   $$\text{Redistribute}(B \to A): \quad \text{If } \text{GetTag}(P) == \tau_A \implies \text{DROP} \quad (\text{Deny})$$
+   $$\text{SetTag}(P) = \tau_B$$
+
+Dengan menerapkan predikat filter berbasis tag:
+$$\forall r \in \text{Routes}(B), \quad \text{Redistribute}(r) \iff \text{Tag}(r) \ne \tau_A$$
+maka siklus pada graf perutean terputus secara formal, menjamin konvergensi topologi bebas loop.
+
+---
+
+## 7. Model Matematika Protokol Redundansi Gateway (FHRP: HSRP & VRRP)
+
+Pada kelompok redundansi FHRP dengan anggota himpunan router $R_{grp} = \{r_1, r_2, \dots, r_k\}$, pemilihan *Active/Master Router* $r^*$ dimodelkan sebagai fungsi optimasi terurut:
+$$r^* = \arg\max_{r_i \in R_{grp}} \left( \text{Priority}(r_i), \text{IP}_{int}(r_i) \right)$$
+
+### 7.1 Algoritma Penentuan Virtual MAC Address
+Untuk memfasilitasi penerusan Layer 2 tanpa mengubah konfigurasi gateway pada host, simulator secara deterministik membangkitkan alamat MAC virtual berdasarkan nomor grup $g$:
+- **HSRP Versi 1 ($g \in [0, 255]$)**:
+  $$\text{MAC}_{HSRPv1} = \text{00:00:0c:07:ac:} \, \text{hex}_2(g)$$
+- **HSRP Versi 2 ($g \in [0, 4095]$)**:
+  $$\text{MAC}_{HSRPv2} = \text{00:00:0c:9f:f} \, \text{hex}_3(g)$$
+- **VRRP Versi 2/3 ($g \in [1, 255]$)**:
+  $$\text{MAC}_{VRRP} = \text{00:00:5e:00:01:} \, \text{hex}_2(g)$$
+
+---
+
+## 8. Semantik Evaluasi Policy-Based Routing (PBR) & IP SLA
+
+Untuk paket masuk $P$ pada antarmuka yang menerapkan kebijakan $\text{PBR} = \{ (c_1, a_1), (c_2, a_2), \dots, (c_m, a_m) \}$ di mana setiap aturan ke-$j$ terdiri dari klausa pencocokan $c_j$ (ACL) dan aksi $a_j$ (`set ip next-hop` $N_j$ dengan tracking IP SLA $T_j$):
+
+$$\text{ForwardAction}(P) = \begin{cases}
+\text{DirectForward}(N_j) & \text{jika } \exists j \le m \text{ s.t. } \text{Match}(P, c_j) \land \text{SlaStatus}(T_j) == \text{UP} \\
+\text{FIB\_Lookup}(P) & \text{jika tidak ada aturan cocok atau seluruh probe SLA Down}
 \end{cases}$$
 
----
-
-## 5. Algoritma Evaluasi & Penilaian Otomatis (Lab Auto-Grader)
-
-Sistem evaluasi lab memodelkan setiap skenario laboratorium sebagai himpunan berbobot dari kriteria verifikasi $C = \{c_1, c_2, \dots, c_n\}$ dengan bobot $w_i \in \mathbb{R}^+$ di mana $\sum_{i=1}^n w_i = 100\%$.
-
-Setiap kriteria $c_i$ memiliki fungsi predikat biner evaluasi:
-$$f_i: \text{SystemState} \to \{0, 1\}$$
-
-Fungsi predikat diklasifikasikan ke dalam 3 jenis evaluasi:
-1. **Config Syntax Matching ($f_{cfg}$)**: Memeriksa keberadaan parameter konfigurasi pada AST running-config (misal: IP host, subnet mask, OSPF network mask).
-2. **Operational State Matching ($f_{ops}$)**: Memeriksa status operasional objek sistem (misal: status line protocol interface bernilai `UP`, port security berstatus `SecureUp`).
-3. **End-to-End Functional Ping Test ($f_{ping}$)**: Memverifikasi aliran paket data aktual antara host asal dan host tujuan melintasi seluruh hop perantara.
-
-Skor Akhir Mahasiswa $S$ dihitung melalui penjumlahan terbobot:
-$$S = \sum_{i=1}^n w_i \cdot f_i(\text{SystemState})$$
-Sesuai prinsip pedagogis *Strict Mastery Learning Criteria*, taraf kelulusan lab didefinisikan:
-$$\text{Status} = \begin{cases}
-\text{PASS (LULUS)} & \text{jika } S = 100\% \\
-\text{INCOMPLETE / NOT PASSED} & \text{jika } S < 100\%
-\end{cases}$$
-Beserta daftar feedback diagnostik $\{ \text{Diagnostic}_i \mid f_i = 0 \}$ untuk memandu proses refleksi belajar.
-
----
-
-## 6. Formulasi Pencocokan Graf Bipartit Soal Drag-and-Drop Pearson VUE
-
-Soal Drag-and-Drop dimodelkan sebagai pemetaan relasi graf bipartit $G = (U, V, E)$ antara himpunan konsep sumber (*Draggable Items*) $U = \{u_1, u_2, \dots, u_m\}$ dan himpunan target klasifikasi (*Target Drop Zones*) $V = \{v_1, v_2, \dots, v_k\}$.
-
-Diberikan relasi pasangan kunci jawaban sah $E^* \subset U \times V$, dan himpunan pasangan yang ditempatkan oleh peserta ujian $E_{cand} \subset U \times V$:
-
-1. **Precision ($P$) & Recall ($R$) Pencocokan**:
-   $$P = \frac{|E_{cand} \cap E^*|}{|E_{cand}|}, \quad R = \frac{|E_{cand} \cap E^*|}{|E^*|}$$
-
-2. **Evaluasi Diskrit Biner ($f_{dnd}$)**:
-   $$f_{dnd}(E_{cand}, E^*) = \begin{cases} 
-   1 & \text{jika } E_{cand} = E^* \quad (\text{seluruh slot cocok sempurna}) \\
-   0 & \text{jika } E_{cand} \ne E^* 
-   \end{cases}$$
-
----
-
-## 7. Model Evaluasi Simlet & Skala Skor Standar Pearson VUE (300–1000)
-
-Pada ujian sertifikasi resmi Cisco CCNA 200-301 di platform Pearson VUE, skor mentah (*raw score*) ditransformasikan ke skala terstandardisasi interval $[300, 1000]$.
-
-### 7.1 Evaluasi Soal Simlet (Performance-Based Interactive CLI)
-Untuk setiap butir soal Simlet berbobot $W_{sim}$, peserta diberikan $K$ tugas konfigurasi mikro $\{t_1, t_2, \dots, t_K\}$. Setiap tugas diaudit langsung terhadap state virtual device:
-$$g(t_k) \in \{0, 1\}, \quad \text{Skor Simlet} = \frac{1}{K} \sum_{k=1}^K g(t_k)$$
-
-### 7.2 Transformasi Skor Terstandardisasi Pearson VUE
-Diberikan total $N$ butir soal ujian dengan bobot domain $w_d$ untuk domain $d \in \{1, \dots, 6\}$ di mana $\sum_{d=1}^6 w_d = 1.0$:
-
-1. **Rasio Skor Mentah Terbobot ($\Theta$)**:
-   $$\Theta = \sum_{d=1}^6 w_d \cdot \left( \frac{\sum_{q \in Q_d} \text{Score}(q)}{|Q_d|} \right), \quad \Theta \in [0, 1]$$
-
-2. **Transformasi Skor Skala Pearson VUE ($S_{VUE}$)**:
-   $$S_{VUE} = 300 + \lfloor 700 \times \Theta \rfloor$$
-
-3. **Status Kelulusan Ujian**:
-   - Standar Pearson VUE Klasik: Lulus jika $S_{VUE} \ge 825$ ($\Theta \ge 0.75$).
-   - Standar Penguasaan Penuh (*Full Mastery Criteria*): Lulus jika $\Theta = 1.0$ ($S_{VUE} = 1000$).
-
----
-
-## 8. Pemodelan Matematis Batas Broadcast Domain Layer 2 & Penelusuran Rute Hop-by-Hop (RFC 2131, RFC 3927 & CCNA L2/L3 Isolation)
-
-Untuk menjamin kepatuhan simulator terhadap prinsip fisik Cisco CCNA, topologi jaringan dimodelkan sebagai graf multi-layer berbobot $G = (V, E_{L2}, E_{L3})$:
-
-### 8.1 Pemisahan Domain Broadcast Layer 2 ($E_{L2}$)
-Diberikan himpunan simpul perangkat $V = V_{\text{Host}} \cup V_{\text{Switch}} \cup V_{\text{Router}} \cup V_{\text{Cloud}}$.
-Sisi Layer 2 $E_{L2}$ hanya menghubungkan port switch dan port host/router lokal dalam VLAN yang sama. Antarmuka router $r \in V_{\text{Router}}$ membatasi penyebaran frame broadcast secara deterministik (Router drops L2 broadcast):
-
-$$\text{BroadcastDomain}(u) = \{ v \in V \mid \exists \text{ path } u \rightsquigarrow v \text{ via } E_{L2} \setminus \text{InternalRouterCrossing} \}$$
-
-1. **Alokasi DHCP (RFC 2131)**:
-   Paket $\text{DHCPDISCOVER}$ dikirimkan dengan tujuan MAC `FF:FF:FF:FF:FF:FF` dan IP `255.255.255.255`. Permohonan sewa IP hanya berhasil jika terdapat entitas server DHCP $s \in \text{BroadcastDomain}(u)$ dengan subnet pool yang sesuai:
-   $$\text{DHCP\_Lease}(u) = \begin{cases}
-   (IP_{pool}, M_{pool}, GW, DNS) & \text{jika } \exists s \in \text{BroadcastDomain}(u) \land \text{PoolMatch}(s, u) \\
-   \text{APIPA } (169.254.x.y, 255.255.0.0, 0.0.0.0) & \text{jika } \text{BroadcastDomain}(u) \cap S_{\text{DHCP}} = \emptyset
-   \end{cases}$$
-
-2. **Isolasi Alamat APIPA (RFC 3927)**:
-   Jika tidak ada server DHCP aktif di segmen broadcast lokal (misal PC terhubung ke port router kosong tanpa DHCP pool), host mengonfigurasi alamat lokal-link APIPA $169.254.x.y/16$ dengan gateway `0.0.0.0`, mencegah kebocoran IP dari bridge jaringan eksternal.
-
-### 8.2 Forwarding Hop-by-Hop & Resolusi Rekursif Next-Hop ($E_{L3}$)
-Untuk paket IP dengan sumber $S$ dan tujuan $D$:
-1. **Pemeriksaan Subnet Lokal**:
-   $$\text{IsLocal}(S, D) \iff (S \land M_S) = (D \land M_S)$$
-   Jika $\text{IsLocal}$ bernilai benar, resolusi diselesaikan secara lokal via ARP.
-2. **Evaluasi Default Gateway**:
-   Jika $\neg \text{IsLocal}(S, D)$, paket wajib diarahkan ke $\text{DefaultGateway}(S) = GW$. Jika $(S \land M_S) \ne (GW \land M_S)$, paket di-drop dengan status `Destination Host Unreachable`.
-3. **Resolusi Rekursif Tabel Routing pada Gateway**:
-   Router gateway mencari entri rute terbaik $r^* = \text{LongestPrefixMatch}(D)$.
-   - Jika rute $r^*$ tidak ditemukan $\to$ Router mengirimkan ICMP Type 3 Code 0 (`Destination Net Unreachable`).
-   - Jika rute $r^*$ memiliki $\text{NextHop}$ tanpa antarmuka keluar eksplisit, dilakukan resolusi rekursif:
-     $$\text{ExitInterface}(r^*) = \arg_{ifc \in \text{Interfaces}(GW)} \{(ifc.IP \land ifc.Mask) = (r^*.\text{NextHop} \land ifc.Mask)\}$$
-   - Paket diteruskan ke segmen antarmuka keluar hanya jika $\text{Status}(ifc) = \text{UP}$ dan $\neg ifc.\text{isShutdown}$.
-
+Model ini menjamin pengalihan jalur yang deterministik dan tahan terhadap kegagalan link (*dynamic failover*).

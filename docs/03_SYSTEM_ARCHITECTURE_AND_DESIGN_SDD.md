@@ -1,65 +1,82 @@
 # DOKUMEN PERANCANGAN SISTEM (SOFTWARE DESIGN DOCUMENT - SDD)
 ## Berdasarkan Standar IEEE Std 1016-2009
-### Proyek: CCNA NetSim Pro - Cisco Network Simulator & Auto-Grader
+### Proyek: Cisco NetSim Pro - Enterprise Multi-Tier Cisco Network Simulator & Auto-Grader
+#### Cakupan: Cisco CCNA 200-301 (v1.1) & CCNP Enterprise v9 (ENCOR 350-401 v1.2 & ENARSI 300-410 v1.1)
 
 ---
 
 ## 1. Ikhtisar Arsitektur Sistem (System Architectural Overview)
 
-Sistem **CCNA NetSim Pro** dirancang menggunakan arsitektur berlapis (*Layered & Component-Based Architecture*) yang memisahkan secara tegas antara lapisan antarmuka pengguna (*Presentation*), logika eksekusi perintah (*CLI Engine*), kernel protokol simulasi (*Network Kernel*), dan modul asesmen laboratorium (*Auto-Grading Engine*).
+Sistem **Cisco NetSim Pro** mengimplementasikan arsitektur modular berlapis (*Layered & Component-Based State Architecture*) yang memisahkan secara tegas antara lapisan visualisasi (*Presentation*), manajemen status aplikasi (*State Management*), bidang kontrol protokol (*Control Plane Engines*), bidang penerusan data (*Data Plane / Cisco Express Forwarding*), serta subsistem evaluasi pedagogis (*Auto-Grading & Exam Engine*).
 
 ```mermaid
 graph TD
-    subgraph UI_Layer["1. Presentation Layer (React + Tailwind + SVG)"]
-        TC[Topology Canvas Component]
-        CT[Cisco IOS Terminal Emulator]
-        LP[Lab Curriculum & Task Panel]
-        PI[OSI 7-Layer PDU Inspector]
-        GM[Auto-Grade Scorecard Modal]
+    subgraph UI_Layer["1. Presentation Layer (React 18 + Tailwind CSS + Canvas/SVG)"]
+        TC[Interactive Topology Canvas]
+        CT[Cisco IOS-XE Authentic Terminal Emulator]
+        LP[Lab Curriculum & Scenario Panel]
+        PI[OSI 7-Layer & PDU Inspector]
+        GM[Auto-Grader Diagnostic Modal]
+        EX[Pearson VUE Exam Simulator Engine]
     end
 
-    subgraph State_Layer["2. Application State Management (Zustand)"]
+    subgraph State_Layer["2. Application State Management (Zustand 4.5)"]
         NS[Network Topology Store]
         TS[Terminal Session Store]
-        SS[Simulation & Event Queue Store]
-        LS[Lab Progression Store]
+        SS[Simulation Event Queue Store]
+        LS[Lab Progression & User Identity Store]
     end
 
-    subgraph Core_Engine["3. Domain Simulation Kernel"]
-        CLI[Cisco IOS Parser & Lexer FSM]
-        DEV[Device Polymorphic Models: Router, Switch, Host]
-        L2[L2 Engine: VLAN 802.1Q, STP, MAC Table]
-        L3[L3 Engine: Routing Table, OSPFv2, Longest Prefix]
-        SVC[Services: DHCP Server/Relay, NAT/PAT, ACL Filter]
+    subgraph Control_Plane["3. Enterprise Control Plane Engines"]
+        CLI[Cisco IOS-XE Parser & Lexer FSM]
+        DEV[Device Models: C8200L, C9300L, C9200L, Host, Server]
+        OSPF[OSPFv2/v3 Engine: LSDB, LSA 1-5 & 7, Stub/NSSA, Virtual Links]
+        EIGRP[EIGRP Engine: Classic/Named Mode, DUAL FSM, Wide Metrics]
+        BGP[BGP-4 Engine: FSM, 13-Step Best Path, Route Reflector]
+        REDIST[Mutual Redistribution Engine: Route-Maps, Prefix-Lists, Tagging]
+        FHRP[FHRP Engine: HSRPv1/v2, VRRPv2/v3, GLBP]
+        PBR[PBR & IP SLA Tracking Engine]
+        L2[L2 Protocols: VLAN 802.1Q, MSTP, LACP/PAgP, CDP, ARP]
+        VRF[VRF Manager: Multi-VRF Context Isolation]
     end
 
-    subgraph Assessment_Engine["4. Pedagogical & Grading Subsystem"]
-        LG[Rule-Based Lab Grader]
-        VE[Config Validator & State Auditor]
-        PM[Ping Reachability Matrix Tester]
+    subgraph Data_Plane["4. Cisco Express Forwarding (CEF) Data Plane"]
+        RIB[Unified Routing Information Base Manager]
+        FIB[FIB Forwarding Engine (Longest Prefix Match Trie)]
+        ADJ[Adjacency Table & ARP Resolution Cache]
+        MPLS[MPLS Shim Label Push/Pop/Swap Engine]
+    end
+
+    subgraph Assessment_Subsystem["5. Pedagogical & Assessment Subsystem"]
+        LG[Rule-Based Lab Grader (Strict 100% Mastery)]
+        AST[Running-Config AST Auditor]
+        PM[Data-Plane Reachability Ping Matrix]
     end
 
     UI_Layer <--> State_Layer
-    State_Layer <--> Core_Engine
-    State_Layer <--> Assessment_Engine
-    Assessment_Engine --> Core_Engine
+    State_Layer <--> Control_Plane
+    Control_Plane --> RIB
+    RIB --> FIB
+    FIB <--> ADJ
+    State_Layer <--> Assessment_Subsystem
+    Assessment_Subsystem --> Data_Plane
 ```
 
 ---
 
-## 2. Dekomposisi Subsistem & Komponen
+## 2. Dekomposisi Subsistem Kontrol Plane & Parser Cisco IOS-XE CLI
 
-### 2.1 Subsistem Cisco IOS CLI & Finite State Machine (FSM)
-Parser CLI Cisco mengimplementasikan mesin keadaan berhingga (*Finite State Machine*) untuk mengelola navigasi hierarki mode eksekusi perintah Cisco IOS secara ketat:
+### 2.1 Finite State Machine (FSM) Navigasi Mode CLI Cisco IOS-XE
+Parser CLI mengimplementasikan mesin keadaan berhingga (*Finite State Machine*) berhierarki penuh yang mencakup seluruh mode konfigurasi enterprise CCNP:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> UserExec : Connect Console
+    [*] --> UserExec : Koneksi Konsol
     UserExec --> PrivilegedExec : enable
     PrivilegedExec --> UserExec : disable
     PrivilegedExec --> GlobalConfig : configure terminal
     GlobalConfig --> PrivilegedExec : exit / end / Ctrl+Z
-    
+
     GlobalConfig --> InterfaceConfig : interface <id>
     InterfaceConfig --> GlobalConfig : exit
     InterfaceConfig --> PrivilegedExec : end / Ctrl+Z
@@ -68,34 +85,69 @@ stateDiagram-v2
     SubInterfaceConfig --> GlobalConfig : exit
     SubInterfaceConfig --> PrivilegedExec : end / Ctrl+Z
 
-    GlobalConfig --> RouterOspfConfig : router ospf <pid>
-    RouterOspfConfig --> GlobalConfig : exit
-    RouterOspfConfig --> PrivilegedExec : end / Ctrl+Z
-
     GlobalConfig --> VlanConfig : vlan <id>
     VlanConfig --> GlobalConfig : exit
-    VlanConfig --> PrivilegedExec : end / Ctrl+Z
 
     GlobalConfig --> LineConfig : line con 0 / line vty 0 4
     LineConfig --> GlobalConfig : exit
-    LineConfig --> PrivilegedExec : end / Ctrl+Z
+
+    GlobalConfig --> RouterOspfConfig : router ospf <pid>
+    RouterOspfConfig --> GlobalConfig : exit
+
+    GlobalConfig --> RouterEigrpClassicConfig : router eigrp <asn>
+    RouterEigrpClassicConfig --> GlobalConfig : exit
+
+    GlobalConfig --> RouterEigrpNamedConfig : router eigrp <virtual-instance-name>
+    RouterEigrpNamedConfig --> EigrpAddressFamilyConfig : address-family ipv4 unicast autonomous-system <asn>
+    EigrpAddressFamilyConfig --> EigrpAfInterfaceConfig : af-interface <id>
+    EigrpAfInterfaceConfig --> EigrpAddressFamilyConfig : exit
+    EigrpAddressFamilyConfig --> EigrpAfTopologyConfig : topology base
+    EigrpAfTopologyConfig --> EigrpAddressFamilyConfig : exit
+    EigrpAddressFamilyConfig --> RouterEigrpNamedConfig : exit
+    RouterEigrpNamedConfig --> GlobalConfig : exit
+
+    GlobalConfig --> RouterBgpConfig : router bgp <asn>
+    RouterBgpConfig --> BgpAddressFamilyConfig : address-family ipv4 unicast
+    BgpAddressFamilyConfig --> RouterBgpConfig : exit
+    RouterBgpConfig --> GlobalConfig : exit
+
+    GlobalConfig --> RouteMapConfig : route-map <name> permit/deny <seq>
+    RouteMapConfig --> GlobalConfig : exit
+
+    GlobalConfig --> IpSlaConfig : ip sla <id>
+    IpSlaConfig --> GlobalConfig : exit
+
+    GlobalConfig --> VrfConfig : ip vrf <name> / vrf definition <name>
+    VrfConfig --> GlobalConfig : exit
 ```
 
-Tabel Transisi Keadaan Prompt:
+### 2.2 Tabel Transisi Prompt CLI Cisco IOS-XE
 | Mode CLI | Tampilan Prompt | Perintah Masuk Utama | Perintah Keluar |
 | :--- | :--- | :--- | :--- |
-| **User EXEC** | `Router>` | Inisialisasi sesi | `exit` (disconnect) |
+| **User EXEC** | `Router>` | Inisialisasi sesi konsol | `exit` (disconnect) |
 | **Privileged EXEC** | `Router#` | `enable` | `disable`, `exit` |
-| **Global Config** | `Router(config)#` | `configure terminal` | `exit`, `end` |
-| **Interface Config** | `Router(config-if)#` | `interface GigabitEthernet0/0` | `exit`, `end` |
-| **Sub-Interface Config**| `Router(config-subif)#`| `interface GigabitEthernet0/0.10` | `exit`, `end` |
-| **VLAN Config** | `Router(config-vlan)#` | `vlan 10` | `exit`, `end` |
-| **Router OSPF Config** | `Router(config-router)#`| `router ospf 1` | `exit`, `end` |
-| **Line Config** | `Router(config-line)#` | `line console 0` | `exit`, `end` |
+| **Global Configuration** | `Router(config)#` | `configure terminal` | `exit`, `end`, `Ctrl+Z` |
+| **Interface Config** | `Router(config-if)#` | `interface GigabitEthernet0/0/0` | `exit`, `end` |
+| **Serial WAN Config** | `Router(config-if)#` | `interface Serial0/1/0` | `exit`, `end` |
+| **Sub-Interface Config** | `Router(config-subif)#` | `interface GigabitEthernet0/0/0.10` | `exit`, `end` |
+| **VLAN Config** | `Switch(config-vlan)#` | `vlan 10` | `exit`, `end` |
+| **SVI Config** | `Switch(config-if)#` | `interface Vlan10` | `exit`, `end` |
+| **Router OSPF Config** | `Router(config-router)#` | `router ospf 1` | `exit`, `end` |
+| **Router EIGRP Classic** | `Router(config-router)#` | `router eigrp 100` | `exit`, `end` |
+| **Router EIGRP Named** | `Router(config-router)#` | `router eigrp ENTERPRISE` | `exit`, `end` |
+| **EIGRP Address-Family** | `Router(config-router-af)#` | `address-family ipv4 unicast autonomous-system 100` | `exit`, `end` |
+| **EIGRP AF-Interface** | `Router(config-router-af-interface)#` | `af-interface GigabitEthernet0/0/0` | `exit`, `end` |
+| **EIGRP AF-Topology** | `Router(config-router-af-topology)#` | `topology base` | `exit`, `end` |
+| **Router BGP Config** | `Router(config-router)#` | `router bgp 65001` | `exit`, `end` |
+| **BGP Address-Family** | `Router(config-router-af)#` | `address-family ipv4` | `exit`, `end` |
+| **Route-Map Config** | `Router(config-route-map)#` | `route-map POLICY_FILTER permit 10` | `exit`, `end` |
+| **IP SLA Config** | `Router(config-ip-sla)#` | `ip sla 1` | `exit`, `end` |
+| **VRF Definition Config**| `Router(config-vrf)#` | `vrf definition CUSTOMER_A` | `exit`, `end` |
+| **Line Config** | `Router(config-line)#` | `line console 0` / `line vty 0 4` | `exit`, `end` |
 
 ---
 
-## 3. Diagram Kelas Sistem (UML Class Diagram)
+## 3. Diagram Kelas Sistem Berorientasi Objek (UML Class Diagram)
 
 ```mermaid
 classDiagram
@@ -104,25 +156,45 @@ classDiagram
         +string id
         +string hostname
         +string deviceType
+        +string model
+        +string osVersion
         +Map~string, Interface~ interfaces
         +Map~string, any~ configState
-        +executeCommand(cmd: string, context: CliContext) CliResult
+        +executeCommand(cmd: string) CliResult
         +getRunningConfig() string
     }
 
-    class Router {
-        +RoutingTable routingTable
-        +OspfProcess ospfProcess
-        +DhcpServer dhcpServer
-        +NatTable natTable
-        +List~AclRule~ accessLists
-        +resolveNextHop(destIp: string) NextHopInfo
+    class CiscoRouterC8200L {
+        +string model = "C8200L-1N-4T"
+        +string osVersion = "Cisco IOS-XE 17.15.4c"
+        +OspfProcess ospf
+        +EigrpProcess eigrp
+        +BgpProcess bgp
+        +Map~string, VrfContext~ vrfInstances
+        +Map~string, RouteMap~ routeMaps
+        +Map~string, IpPrefixList~ prefixLists
+        +Map~number, IpSlaInstance~ ipSlaProbes
+        +resolveNextHop(destIp: string, vrf: string) NextHopInfo
     }
 
-    class Switch {
+    class CiscoMultilayerSwitchC9300L {
+        +string model = "C9300L-24T-4G-A"
+        +string osVersion = "Cisco IOS-XE 17.12.6"
+        +boolean ipRoutingEnabled
+        +Map~number, Vlan~ vlanDatabase
+        +Map~number, SviInterface~ vlanInterfaces
+        +Map~number, HsrpGroup~ hsrpGroups
+        +Map~number, VrrpGroup~ vrrpGroups
+        +Map~number, PortChannel~ etherChannels
+        +forwardL2OrL3(frame: EthernetFrame)
+    }
+
+    class CiscoAccessSwitchC9200L {
+        +string model = "C9200L-24T-4G-E"
+        +string osVersion = "Cisco IOS 17.12.6"
         +Map~number, Vlan~ vlanDatabase
         +MacAddressTable macTable
-        +StpState stpState
+        +StpInstance stp
         +forwardFrame(frame: EthernetFrame, inPort: string)
     }
 
@@ -130,7 +202,8 @@ classDiagram
         +string ipAddress
         +string subnetMask
         +string defaultGateway
-        +string dnsServer
+        +string ipv6Address
+        +boolean isDhcp
         +ping(destIp: string) PingResult
     }
 
@@ -141,142 +214,149 @@ classDiagram
         +string subnetMask
         +boolean isUp
         +boolean isShutdown
-        +string switchportMode
+        +string mediaType // Copper, Fiber, Serial
+        +string clockRate // For DCE serial
+        +string vrfName
         +number accessVlan
         +List~number~ allowedVlans
         +number nativeVlan
     }
 
-    class Link {
-        +string id
-        +string sourceDeviceId
-        +string sourcePort
-        +string targetDeviceId
-        +string targetPort
-        +string cableType
-        +boolean isConnected
+    class VrfContext {
+        +string name
+        +string routeDistinguisher
+        +RoutingTable routingTable
+        +ArpTable arpTable
     }
 
-    Device <|-- Router
-    Device <|-- Switch
+    class RouteMap {
+        +string name
+        +List~RouteMapClause~ clauses
+        +evaluate(route: RouteEntry) RouteMapResult
+    }
+
+    class EigrpProcess {
+        +number asn
+        +string namedInstance
+        +Map~string, EigrpNeighbor~ neighbors
+        +EigrpTopologyTable topologyTable
+        +calculateDual()
+    }
+
+    class BgpProcess {
+        +number asn
+        +string routerId
+        +Map~string, BgpNeighbor~ neighbors
+        +BgpPathTable bgpTable
+        +selectBestPath(prefix: string) BgpRoute
+    }
+
+    Device <|-- CiscoRouterC8200L
+    Device <|-- CiscoMultilayerSwitchC9300L
+    Device <|-- CiscoAccessSwitchC9200L
     Device <|-- Host
     Device "1" *-- "many" Interface : contains
-    Link --> Interface : connects
+    CiscoRouterC8200L "1" *-- "many" VrfContext : contains
+    CiscoRouterC8200L "1" *-- "many" RouteMap : contains
+    CiscoRouterC8200L "1" *-- "1" EigrpProcess : runs
+    CiscoRouterC8200L "1" *-- "1" BgpProcess : runs
 ```
 
 ---
 
-## 4. Diagram Sekuens Alur Paket & Inspeksi OSI (Sequence Diagram)
+## 4. Diagram Alur Transmisi Paket Multi-Hop Enterprise (Sequence Diagram)
 
-Diagram berikut mengilustrasikan alur pemrosesan transmisi paket ICMP Echo (Ping) dari Host1 melalui Switch1 dan Router1 ke Host2 dalam mode simulasi:
+Diagram berikut mengilustrasikan alur penerusan paket melintasi topologi enterprise lengkap:
+Host $\rightarrow$ Access Switch C9200L $\rightarrow$ Multilayer Switch C9300L (HSRP Virtual Gateway) $\rightarrow$ Core Router C8200L (Evaluasi PBR & VRF) $\rightarrow$ WAN Link Serial NIM-2T $\rightarrow$ Remote Enterprise Server.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User
-    participant Host1 as Host 1 (PC)
-    participant SW1 as Switch 1 (L2)
-    participant R1 as Router 1 (Default GW)
-    participant Host2 as Host 2 (PC)
-    participant UI as OSI 7-Layer Inspector
+    participant Host as PC-1 (10.1.10.50)
+    participant SW_L2 as C9200L (Access Switch)
+    participant SW_L3 as C9300L (HSRP Active GW: 10.1.10.1)
+    participant R_Core as C8200L (Core Router)
+    participant R_Edge as Remote Edge Router
+    participant Server as Enterprise Server (172.16.50.10)
 
-    User->>Host1: ping 192.168.2.10
-    Host1->>Host1: Evaluasi Subnet (Different Subnet -> Gateway ARP)
-    Host1->>SW1: Kirim Frame L2 (Dst MAC: R1 MAC, Dst IP: 192.168.2.10)
-    SW1->>SW1: Update MAC Table & Forward based on VLAN 802.1Q
-    SW1->>R1: Forward Frame ke Trunk/Access Port R1
+    User->>Host: ping 172.16.50.10
+    Host->>Host: Subnet Check -> Kirim ke Default Gateway 10.1.10.1
+    Host->>Host: Lookup ARP Gateway -> MAC Virtual HSRP: 0000.0c9f.f00a
+    Host->>SW_L2: Enkapsulasi Frame L2 (VLAN 10)
+    SW_L2->>SW_L3: Teruskan Frame via 802.1Q Trunk Port
     
-    R1->>R1: L2 Decapsulation -> Periksa Dst IP
-    R1->>R1: Evaluasi Access-List (Permit/Deny)
-    R1->>R1: Lookup Routing Table (Longest Prefix Match)
-    R1->>R1: Decrement TTL, Re-encapsulate L2 Frame
-    
-    R1->>Host2: Forward Packet ke Target Subnet
-    Host2->>Host2: Terima ICMP Echo Request -> Generate Echo Reply
-    Host2-->>R1: Kirim ICMP Echo Reply
-    R1-->>SW1: Forward Reply
-    SW1-->>Host1: Forward Reply
-    Host1-->>User: "Reply from 192.168.2.10: bytes=32 time<1ms TTL=127"
-    
-    User->>UI: Klik Event PDU di Router 1
-    UI-->>User: Tampilkan In-Layers (L2 MAC, L3 IP) vs Out-Layers (Next-hop MAC, Updated TTL)
+    SW_L3->>SW_L3: SVI Vlan 10 menerima paket
+    SW_L3->>SW_L3: CEF FIB Lookup -> Next-Hop C8200L (Routed Port via OSPF Area 0)
+    SW_L3->>R_Core: Forward Packet ke C8200L (GE0/0/0)
+
+    R_Core->>R_Core: Cek PBR (Policy-Based Routing) pada GE0/0/0
+    alt PBR Rule Match & IP SLA Probe Aktif
+        R_Core->>R_Core: Apply Next-Hop PBR via Serial0/1/0 (NIM-2T)
+    else PBR Failover / No Match
+        R_Core->>R_Core: Standard Longest Prefix Match (LPM) via BGP/EIGRP
+    end
+
+    R_Core->>R_Core: Evaluasi VRF Context & Decrement TTL
+    R_Core->>R_Edge: Forward melintasi WAN Serial NIM-2T (HDLC/PPP Encapsulation)
+    R_Edge->>Server: Forward ke Subnet Tujuan
+    Server->>Server: Terima ICMP Request & Generate ICMP Reply
+    Server-->>Host: Reply dikembalikan melintasi jalur konvergen
+    Host-->>User: "Reply from 172.16.50.10: bytes=32 time=4ms TTL=252"
 ```
 
 ---
 
-## 5. Subsistem Penilaian Otomatis (Lab Auto-Grader Architecture)
+## 5. Arsitektur Cisco Express Forwarding (CEF) Data Plane
 
-Mesin penilaian otomatis (*Lab Auto-Grader*) bekerja secara deterministik melalui metode audit berjenjang:
-1. **Pemeriksaan Deklaratif (Running-Config AST Inspection)**: Memverifikasi keberadaan sintaks wajib (misal: `ip address`, `encapsulation dot1Q`, `switchport mode trunk`, `router ospf 1`).
-2. **Pemeriksaan Keadaan Operasional (Operational State Verification)**: Memeriksa apakah status antarmuka bernilai `up/up`, apakah tabel rute memiliki rute yang diharapkan, dan apakah neighbor OSPF berstatus `FULL`.
-3. **Pemeriksaan Verifikasi Fungsional (Data Plane Ping Matrix)**: Menguji konektivitas aktual dengan mengirimkan virtual ping antar node yang ditargetkan dalam skenario lab.
-4. **Aturan Evaluasi Kelulusan Ketat (*Strict 100% Mastery Rule*)**: Mengikuti prinsip pedagogis *mastery learning*, kandidat hanya dinyatakan *Passed* jika dan hanya jika seluruh tugas lab terpenuhi secara sempurna tanpa kegagalan (`score === 100%`).
-
----
-
-## 6. Arsitektur Live Physical Device Connector & Host NIC Bridge
-
-Subsistem ini menjembatani lingkungan simulasi berbasis peramban (*browser sandbox*) dengan infrastruktur jaringan fisik nyata pada komputer host pengguna:
+Untuk mencapai determinisme pemrosesan paket berkinerja tinggi, sistem memisahkan Control Plane dan Data Plane sesuai prinsip Cisco Express Forwarding (CEF):
 
 ```mermaid
 graph LR
-    subgraph Browser_Sandbox["Web Sandbox Environment"]
-        Topology["Canvas Device / Cloud Node"]
-        Connector["LiveDeviceConnectorModal"]
-        PingEngine["ICMP Latency Measurement Engine"]
+    subgraph Control_Plane["Control Plane (Slow Path)"]
+        OSPF_DB["OSPF LSDB"]
+        EIGRP_TOP["EIGRP Topology Table"]
+        BGP_TAB["BGP Path Table"]
+        STATIC_ROUT["Static & Connected"]
+        RIB_ENG["Unified Routing Information Base (RIB)"]
+        ARP_ENG["Dynamic ARP Protocol"]
     end
 
-    subgraph Host_Physical_Stack["User Host & Physical Network"]
-        NIC["Host NIC (en0/Wi-Fi, en1/Ethernet, lo0)"]
-        GW["Default Gateway (e.g., 192.168.1.1)"]
-        RouterPhysical["Physical Cisco Router / Switch (SSH/Telnet)"]
-        RemoteEndpoints["External IP Endpoints / Internet"]
+    subgraph Data_Plane["Data Plane (CEF Fast Path)"]
+        FIB_TRIE["Forwarding Information Base (MTRIE)"]
+        ADJ_TAB["Adjacency Table (MAC Rewrites & Interface Exit)"]
+        PACKET_IN["Packet Ingress Engine"]
+        PACKET_OUT["Packet Egress Engine"]
     end
 
-    Topology <--> Connector
-    Connector <--> NIC
-    NIC <--> GW
-    NIC <--> RouterPhysical
-    GW <--> RemoteEndpoints
-    PingEngine <--> RemoteEndpoints
+    OSPF_DB --> RIB_ENG
+    EIGRP_TOP --> RIB_ENG
+    BGP_TAB --> RIB_ENG
+    STATIC_ROUT --> RIB_ENG
+    RIB_ENG -->|Kompilasi Jalur Terbaik| FIB_TRIE
+    ARP_ENG -->|Resolusi Next-Hop L2| ADJ_TAB
+    PACKET_IN --> FIB_TRIE
+    FIB_TRIE --> ADJ_TAB
+    ADJ_TAB --> PACKET_OUT
 ```
 
-Tiga Modus Operasional:
-1. **Host NIC Bridging**: Menautkan node awan (*Cloud Bridge*) ke antarmuka fisik lokal (seperti `en0`, `en1`, atau `lo0`) dan mengidentifikasi default gateway komputer host secara otomatis.
-2. **Direct Hardware Connection**: Membuka sesi interaktif via SSH (port 22), Telnet (port 23), atau Cisco RESTCONF/NX-API (port 443) ke perangkat keras Cisco fisik dengan autentikasi kredensial dan logging riwayat perintah.
-3. **Real-Time ICMP Ping Tester**: Melakukan pengujian latensi transmisi paket (RTT dalam milidetik) dan time-to-live (TTL) secara langsung ke IP target di jaringan fisik.
+1. **Forwarding Information Base (FIB)**: Struktur pohon prefix (*Multi-bit Radix Tree / Trie*) yang menyimpan salinan teroptimasi dari tabel routing RIB. Lookup alamat IP tujuan diselesaikan dalam waktu $O(k)$ di mana $k$ adalah panjang bit alamat IP ($k=32$ untuk IPv4).
+2. **Adjacency Table**: Memetakan setiap entri next-hop langsung ke informasi header Layer 2 (MAC tujuan, MAC sumber antarmuka lokal, tag 802.1Q) tanpa memerlukan evaluasi ARP ulang untuk setiap paket.
+3. **Pemisahan Konteks VRF**: Setiap instans VRF (`VrfContext`) memiliki pasangan FIB dan Adjacency Table terisolasi sendiri, mencegah kebocoran trafik (*route leaking*) kecuali jika dikonfigurasi secara eksplisit.
 
 ---
 
-## 7. Arsitektur Pearson VUE Authentic Exam Engine
+## 6. Subsistem Penilaian Otomatis & Ujian Pearson VUE
 
-Subsistem ujian meniru persis arsitektur perangkat lunak pengujian sertifikasi resmi Pearson VUE untuk ujian Cisco CCNA 200-301 (v1.1):
+### 6.1 Arsitektur Penilaian Bertingkat (Tiered Auto-Grader)
+Mesin penilai otomatis (*Lab Auto-Grader*) mengevaluasi keberhasilan praktikum secara berjenjang:
+1. **Audit AST Konfigurasi Aktif (*Abstract Syntax Tree Verification*)**: Memeriksa keberadaan baris perintah deklaratif wajib (misal: `router eigrp <name>`, `standby 10 ip`, `ip policy route-map`).
+2. **Verifikasi State Operasional Protokol**: Memastikan status tetangga OSPF bernilai `FULL`, tetangga EIGRP aktif, peering BGP berstatus `Established`, dan status HSRP berstatus `Active/Standby`.
+3. **Pengujian Matriks Konektivitas Data Plane**: Mengeksekusi pengiriman ping virtual antar simpul endpoint untuk membuktikan bahwa jalur data fisik dan logis berfungsi optimal.
+4. **Aturan Kelulusan Penguasaan Penuh (*Strict 100% Mastery Rule*)**: Siswa hanya dinyatakan lulus jika nilai akhir mencapai $100\%$ tanpa ada kriteria yang terlewati.
 
-```mermaid
-graph TD
-    ExamSession["Pearson VUE Exam Session Controller (120 min countdown)"]
-    
-    subgraph Question_Models["Authentic Question Taxonomies"]
-        MC["Multiple Choice (Single & Multiple Select)"]
-        DND["Drag-and-Drop Matching Engine (Bipartite Graph Matching)"]
-        SIM["Simlet Performance-Based Interactive Lab (Embedded Cisco IOS CLI)"]
-    end
-
-    subgraph Scoring_Breakdown["Domain Mastery Evaluator"]
-        D1["1. Network Fundamentals (20%)"]
-        D2["2. Network Access (20%)"]
-        D3["3. IP Connectivity (25%)"]
-        D4["4. IP Services (10%)"]
-        D5["5. Security Fundamentals (15%)"]
-        D6["6. Automation & Programmability (10%)"]
-        TotalReport["Pearson VUE Score Report (Scaled Score 300-1000 & 100% Mastery)"]
-    end
-
-    ExamSession --> Question_Models
-    Question_Models --> Scoring_Breakdown
-    Scoring_Breakdown --> TotalReport
-```
-
-1. **Drag-and-Drop Bipartite Matching**: Kandidat memetakan kumpulan item sumber (*draggable concepts*) ke slot target (*drop zones*). Validasi jawaban dinilai menggunakan verifikasi pencocokan pasangan terurut $(s_i, t_j)$.
-2. **Simlet Interactive Lab Engine**: Kandidat diberikan skenario troubleshooting/konfigurasi performa nyata. Komponen memuat instansi virtual Router/Switch independen lengkap dengan sub-CLI parser dan mengevaluasi status perangkat (*live running state verification*).
-3. **Pearson VUE Scaled Scoring**: Skor akhir ditransformasikan ke skala standar 300–1000 poin dengan rincian capaian persentase per domain kurikulum CCNA.
+### 6.2 Integrasi Pearson VUE Exam Engine
+Subsistem ujian mengimplementasikan tiga model soal resmi Pearson VUE:
+1. **Multiple Choice (Single/Multi Answer)**: Pertanyaan konsep teoritis dengan validasi biner.
+2. **Drag-and-Drop Concept Matching**: Pemetaan item sumber ke target klasifikasi berbasis relasi graf bipartit.
+3. **Simlet Performance-Based CLI Lab**: Jendela lab interaktif di mana kandidat mengonfigurasi perangkat virtual dalam konteks ujian berbatas waktu 120 menit.
