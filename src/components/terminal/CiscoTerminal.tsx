@@ -13,6 +13,8 @@ import {
   Zap
 } from 'lucide-react';
 
+const EMPTY_OUTPUTS: string[] = [];
+
 export const CiscoTerminal: React.FC = () => {
   const activeTerminalDeviceId = useNetworkStore((state) => state.activeTerminalDeviceId);
   const openTerminalTabs = useNetworkStore((state) => state.openTerminalTabs);
@@ -26,9 +28,10 @@ export const CiscoTerminal: React.FC = () => {
   const activeContext = useNetworkStore((state) => 
     state.activeTerminalDeviceId ? state.cliContexts[state.activeTerminalDeviceId] : null
   );
-  const currentOutputs = useNetworkStore((state) => 
-    state.activeTerminalDeviceId ? (state.terminalOutputs[state.activeTerminalDeviceId] || []) : []
-  );
+  const currentOutputs = useNetworkStore((state) => {
+    const devId = state.activeTerminalDeviceId;
+    return (devId && state.terminalOutputs[devId]) ? state.terminalOutputs[devId] : EMPTY_OUTPUTS;
+  });
   const devices = useNetworkStore((state) => state.devices);
 
   const [inputVal, setInputVal] = useState('');
