@@ -1,4 +1,4 @@
-import { DeviceType, DevicePosition, InterfaceConfig } from '../../types/network';
+import { DeviceType, DevicePosition, InterfaceConfig, ArpEntry } from '../../types/network';
 import { CliMode, CliContext, CliExecutionResult } from '../../types/cli';
 
 export abstract class Device {
@@ -15,6 +15,9 @@ export abstract class Device {
   servicePasswordEncryption: boolean = false;
   ipRouting: boolean = true;
   commandHistory: string[] = [];
+
+  // Address Resolution Protocol (ARP)
+  arpTable: ArpEntry[] = [];
 
   // Cisco Discovery Protocol (CDP)
   cdpEnabled: boolean = true;
@@ -46,6 +49,42 @@ export abstract class Device {
 
   addInterface(config: InterfaceConfig): void {
     this.interfaces.set(config.name, config);
+  }
+
+  // ===================== ARP METHODS =====================
+  addArpEntry(entry: ArpEntry): void {
+    const existingIndex = this.arpTable.findIndex(e => e.ipAddress === entry.ipAddress);
+    const enriched: ArpEntry = {
+      protocol: entry.protocol || 'Internet',
+      ipAddress: entry.ipAddress,
+      age: entry.age !== undefined ? entry.age : 0,
+      macAddress: entry.macAddress,
+      type: entry.type || (entry.age === '-' ? 'static' : 'ARPA'),
+      interfaceName: entry.interfaceName
+    };
+    if (existingIndex >= 0) {
+      this.arpTable[existingIndex] = enriched;
+    } else {
+      this.arpTable.push(enriched);
+    }
+  }
+
+  removeArpEntry(ipAddress: string): boolean {
+    const prevLen = this.arpTable.length;
+    this.arpTable = this.arpTable.filter(e => e.ipAddress !== ipAddress);
+    return this.arpTable.length < prevLen;
+  }
+
+  clearArpTable(keepStatic: boolean = true): void {
+    if (keepStatic) {
+      this.arpTable = this.arpTable.filter(e => e.type === 'static' || e.age === '-');
+    } else {
+      this.arpTable = [];
+    }
+  }
+
+  getArpEntries(): ArpEntry[] {
+    return this.arpTable;
   }
 
   getPrompt(context: CliContext): string {

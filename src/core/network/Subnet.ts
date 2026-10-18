@@ -161,5 +161,30 @@ export class SubnetUtils {
     if (firstOctet >= 192 && firstOctet <= 223) return '255.255.255.0';
     return '255.255.255.0';
   }
+
+  /**
+   * Normalisasi MAC address ke format Cisco ARPA (xxxx.xxxx.xxxx)
+   */
+  static formatMacCisco(mac: string): string {
+    if (!mac) return '0000.0000.0000';
+    const hex = mac.toLowerCase().replace(/[^0-9a-f]/g, '');
+    if (hex.length === 12) {
+      return `${hex.slice(0, 4)}.${hex.slice(4, 8)}.${hex.slice(8, 12)}`;
+    }
+    return mac.toLowerCase();
+  }
+
+  /**
+   * Normalisasi MAC address ke format Windows (xx-xx-xx-xx-xx-xx)
+   */
+  static formatMacWindows(mac: string): string {
+    if (!mac) return '00-00-00-00-00-00';
+    const hex = mac.toLowerCase().replace(/[^0-9a-f]/g, '');
+    if (hex.length === 12) {
+      return `${hex.slice(0, 2)}-${hex.slice(2, 4)}-${hex.slice(4, 6)}-${hex.slice(6, 8)}-${hex.slice(8, 10)}-${hex.slice(10, 12)}`;
+    }
+    return mac.toLowerCase();
+  }
 }
+
 

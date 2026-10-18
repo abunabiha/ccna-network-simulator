@@ -284,6 +284,13 @@ export class Switch extends Device {
       lines.push('!');
     }
 
+    // Static ARP entries
+    for (const entry of this.arpTable) {
+      if (entry.type === 'static' || entry.age === '-') {
+        lines.push(`arp ${entry.ipAddress} ${entry.macAddress} ARPA`);
+      }
+    }
+
     // Management lines
     lines.push('line con 0');
     if (this.consolePassword) lines.push(` password ${this.consolePassword}`, ' login');

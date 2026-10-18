@@ -276,6 +276,12 @@ export const CiscoTerminal: React.FC = () => {
                 sh ip ro
               </button>
               <button 
+                onClick={() => handleQuickCmd('show ip arp')}
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
+              >
+                sh ip arp
+              </button>
+              <button 
                 onClick={() => handleQuickCmd('configure terminal')}
                 className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-mono"
               >

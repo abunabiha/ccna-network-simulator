@@ -152,16 +152,73 @@ FastEthernet0:
 
     if (mainCmd === 'arp') {
       if (parts[1] === '-a') {
-        if (this.arpTable.length === 0) {
+        let entries = this.arpTable;
+        if (parts[2]) {
+          entries = entries.filter(e => e.ipAddress === parts[2]);
+        }
+        if (entries.length === 0) {
           return { output: 'No ARP Entries Found.' };
         }
-        const lines = ['Internet Address      Physical Address      Type'];
-        for (const entry of this.arpTable) {
-          lines.push(`${entry.ipAddress.padEnd(21)} ${entry.macAddress.padEnd(21)} dynamic`);
+        const hostIp = this.ipAddress || '127.0.0.1';
+        const lines = [
+          `Interface: ${hostIp} --- 0x2`,
+          '  Internet Address      Physical Address      Type'
+        ];
+        for (const entry of entries) {
+          const typeStr = entry.type === 'static' || entry.age === '-' ? 'static' : 'dynamic';
+          const formattedMac = SubnetUtils.formatMacWindows(entry.macAddress);
+          lines.push(`  ${entry.ipAddress.padEnd(21)} ${formattedMac.padEnd(21)} ${typeStr}`);
         }
         return { output: lines.join('\n') };
       }
-      return { output: 'Usage: arp -a' };
+
+      if (parts[1] === '-d') {
+        if (parts.length >= 3 && parts[2] !== '*') {
+          this.removeArpEntry(parts[2]);
+        } else {
+          this.clearArpTable(false);
+        }
+        return { output: '' };
+      }
+
+      if (parts[1] === '-s') {
+        if (parts.length < 4) {
+          return { output: 'The ARP entry addition failed: The parameter is incorrect.' };
+        }
+        const ip = parts[2];
+        const mac = parts[3];
+        if (!SubnetUtils.isValidIpv4(ip)) {
+          return { output: 'The ARP entry addition failed: Invalid IP address.' };
+        }
+        const cleanMac = SubnetUtils.formatMacCisco(mac);
+        this.addArpEntry({
+          ipAddress: ip,
+          macAddress: cleanMac,
+          interfaceName: 'FastEthernet0',
+          type: 'static',
+          age: '-'
+        });
+        return { output: '' };
+      }
+
+      return {
+        output: [
+          'Displays and modifies the IP-to-Physical address translation tables used by',
+          'address resolution protocol (ARP).',
+          '',
+          'ARP -s inet_addr eth_addr [if_addr]',
+          'ARP -d inet_addr [if_addr]',
+          'ARP -a [inet_addr] [-N if_addr] [-v]',
+          '',
+          '  -a            Displays current ARP entries by interrogating the current',
+          '                protocol data. If inet_addr is specified, the IP and',
+          '                Physical addresses for only the specified computer are displayed.',
+          '  -d            Deletes the host specified by inet_addr. inet_addr may be',
+          '                wildcarded with * to delete all hosts.',
+          '  -s            Adds the host and associates the Internet address inet_addr',
+          '                with the Physical address eth_addr.'
+        ].join('\n')
+      };
     }
 
     if (mainCmd === 'ping') {
@@ -347,7 +404,7 @@ Available commands:
   ipconfig /all     Display full IP & MAC configuration
   ping <target>     Send ICMP Echo requests to target IP or domain (e.g. 8.8.8.8, google.com)
   tracert <target>  Trace route to target IP or domain
-  arp -a            Display ARP cache table
+  arp [-a|-d|-s]    Display or modify ARP cache table
 `.trim()
       };
     }

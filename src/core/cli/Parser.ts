@@ -29,7 +29,10 @@ export class CliParser {
         { command: 'ipconfig', description: 'Display IP configuration' },
         { command: 'ipconfig /all', description: 'Display detailed configuration' },
         { command: 'ping <ip>', description: 'Send ICMP Echo to target' },
-        { command: 'arp -a', description: 'View ARP cache' }
+        { command: 'tracert <ip>', description: 'Trace route to target' },
+        { command: 'arp -a', description: 'View ARP cache table' },
+        { command: 'arp -d', description: 'Clear ARP cache entries' },
+        { command: 'arp -s', description: 'Add static ARP entry' }
       ];
     }
 
@@ -50,7 +53,7 @@ export class CliParser {
    */
   static complete(input: string, context: CliContext, device: Device): { completedText: string; candidates: string[] } {
     if (device instanceof Host) {
-      const hostCmds = ['ipconfig', 'ipconfig /all', 'ping', 'tracert', 'arp -a'];
+      const hostCmds = ['ipconfig', 'ipconfig /all', 'ping', 'tracert', 'arp', 'arp -a', 'arp -d', 'arp -s'];
       const match = hostCmds.filter(c => c.startsWith(input.toLowerCase()));
       if (match.length === 1) {
         return { completedText: match[0], candidates: match };

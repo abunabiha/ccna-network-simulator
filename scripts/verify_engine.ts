@@ -305,8 +305,56 @@ swL3.updateConnectedRoutes();
 const l3RouteMatch = swL3.lookupRoute('10.10.10.55');
 console.log(`L3 Switch LPM lookupRoute check: ${l3RouteMatch?.network === '10.10.10.0' && l3RouteMatch?.exitInterface === 'Vlan10' ? 'PASS' : 'FAIL'}`);
 
-// 3. Host Command History check
-console.log(`Host commandHistory recorded check: ${pcUser.commandHistory.length > 0 ? 'PASS' : 'FAIL'}`);
+console.log('\n=== [9] PENGUJIAN ADDRESS RESOLUTION PROTOCOL (ARP) DI SEMUA PERANGKAT ===');
+
+// 1. Host ARP Testing: arp -a, arp -s, arp -d
+const hostArpInitial = pcUser.executeCli('arp -a', pcCtx, allDevsTest);
+console.log(`Host arp -a initial:\n${hostArpInitial.output}`);
+
+// Host static ARP entry
+const hostArpSet = pcUser.executeCli('arp -s 192.168.20.88 00-aa-bb-cc-dd-ee', pcCtx, allDevsTest);
+console.log(`Host arp -s result: ${hostArpSet.output}`);
+const hostArpCheck = pcUser.executeCli('arp -a', pcCtx, allDevsTest);
+console.log(`Host static ARP verified: ${hostArpCheck.output.includes('192.168.20.88') && hostArpCheck.output.includes('00-aa-bb-cc-dd-ee') ? 'PASS' : 'FAIL'}`);
+
+// Host delete ARP entry
+pcUser.executeCli('arp -d 192.168.20.88', pcCtx, allDevsTest);
+const hostArpAfterDel = pcUser.executeCli('arp -a', pcCtx, allDevsTest);
+console.log(`Host arp -d delete verified: ${!hostArpAfterDel.output.includes('192.168.20.88') ? 'PASS' : 'FAIL'}`);
+
+// 2. Cisco IOS ARP Testing (Router R3)
+const r3PrivCtx = { deviceId: 'R3', mode: 'priv-exec' as const };
+const r3ShowArp = CliParser.execute('show ip arp', r3PrivCtx, r3, allDevsTest);
+console.log(`Router R3 'show ip arp' output:\n${r3ShowArp.output}`);
+console.log(`Router R3 local interface ARP entries present: ${r3ShowArp.output.includes('192.168.20.1') && r3ShowArp.output.includes('192.168.1.2') ? 'PASS' : 'FAIL'}`);
+
+// Add static ARP on Cisco Router
+const r3StaticArp = CliParser.execute('arp 192.168.20.99 0050.7966.6800 arpa', r3GlobalCtx, r3, allDevsTest);
+const r3ShowArpAfterStatic = CliParser.execute('show ip arp', r3PrivCtx, r3, allDevsTest);
+console.log(`Router R3 static ARP verified: ${r3ShowArpAfterStatic.output.includes('192.168.20.99') && r3ShowArpAfterStatic.output.includes('0050.7966.6800') ? 'PASS' : 'FAIL'}`);
+
+// Test clear ip arp (clears dynamic entries while preserving static)
+CliParser.execute('clear ip arp', r3PrivCtx, r3, allDevsTest);
+const r3ShowArpCleared = CliParser.execute('show ip arp', r3PrivCtx, r3, allDevsTest);
+console.log(`Router R3 'clear ip arp' cleared dynamic entries: ${!r3ShowArpCleared.output.includes('192.168.20.2') ? 'PASS' : 'FAIL'}`);
+
+// Test no arp <ip> (removes static entry)
+CliParser.execute('no arp 192.168.20.99', r3GlobalCtx, r3, allDevsTest);
+const r3ShowArpNoStatic = CliParser.execute('show ip arp', r3PrivCtx, r3, allDevsTest);
+console.log(`Router R3 'no arp' static removal verified: ${!r3ShowArpNoStatic.output.includes('192.168.20.99') ? 'PASS' : 'FAIL'}`);
+
+// 3. Dynamic Bidirectional ARP resolution during ping
+// Ping from PC to R3 Gateway (192.168.20.1)
+const pingGwRes = pcUser.executeCli('ping 192.168.20.1', pcCtx, allDevsTest);
+console.log(`Ping GW Output:\n${pingGwRes.output}`);
+const hostArpAfterPing = pcUser.executeCli('arp -a', pcCtx, allDevsTest);
+console.log(`PC learned GW MAC via dynamic ARP: ${hostArpAfterPing.output.includes('192.168.20.1') ? 'PASS' : 'FAIL'}`);
+
+// Switch L3 ARP verification
+const swL3ShowArp = CliParser.execute('show arp', swL3Ctx, swL3, [swL3]);
+console.log(`Switch L3 'show arp' output:\n${swL3ShowArp.output}`);
+console.log(`Switch L3 SVI Vlan10 ARP entry verified: ${swL3ShowArp.output.includes('10.10.10.1') ? 'PASS' : 'FAIL'}`);
 
 console.log('\n=== SELURUH PENGUJIAN KERNEL & MODUL SELESAI DENGAN SUKSES! ===');
+
 

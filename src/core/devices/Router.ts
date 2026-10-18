@@ -223,6 +223,13 @@ export class Router extends Device {
       }
     }
 
+    // Static ARP entries
+    for (const entry of this.arpTable) {
+      if (entry.type === 'static' || entry.age === '-') {
+        lines.push(`arp ${entry.ipAddress} ${entry.macAddress} ARPA`);
+      }
+    }
+
     // Access lists
     for (const [num, rules] of this.accessLists.entries()) {
       for (const r of rules) {

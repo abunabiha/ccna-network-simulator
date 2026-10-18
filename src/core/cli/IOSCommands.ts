@@ -21,6 +21,8 @@ export class IOSCommands {
           { command: 'ping', description: 'Send echo messages' },
           { command: 'traceroute', description: 'Trace route to destination' },
           { command: 'show', description: 'Show running system information' },
+          { command: 'show ip arp', description: 'IP ARP table' },
+          { command: 'show arp', description: 'ARP table' },
           { command: 'exit', description: 'Exit from the EXEC' }
         );
         break;
@@ -47,6 +49,10 @@ export class IOSCommands {
           { command: 'show ip dhcp binding', description: 'DHCP address bindings' },
           { command: 'show ip dhcp pool', description: 'DHCP pool information' },
           { command: 'show dhcp lease', description: 'Show DHCP client leases' },
+          { command: 'show ip arp', description: 'IP ARP table' },
+          { command: 'show arp', description: 'ARP table' },
+          { command: 'clear ip arp', description: 'Clear ARP cache' },
+          { command: 'clear arp', description: 'Clear ARP cache' },
           { command: 'clear ip dhcp binding *', description: 'Clear DHCP bindings' },
           { command: 'copy running-config startup-config', description: 'Copy configuration to NVRAM' },
           { command: 'write memory', description: 'Save running configuration' },
@@ -65,6 +71,8 @@ export class IOSCommands {
           { command: 'service password-encryption', description: 'Encrypt system passwords' },
           { command: 'banner motd', description: 'Define a login banner' },
           { command: 'interface', description: 'Select an interface to configure' },
+          { command: 'arp', description: 'Set a static ARP entry' },
+          { command: 'no arp', description: 'Remove a static ARP entry' },
           { command: 'ip route', description: 'Establish static routes' },
           { command: 'ip routing', description: 'Enable IP routing' },
           { command: 'no ip routing', description: 'Disable IP routing' },
@@ -269,6 +277,12 @@ export class IOSCommands {
       if ('cdp'.startsWith(cmd1)) {
         return this.handleShowCdp(tokens, device, allDevices);
       }
+      if ('arp'.startsWith(cmd1)) {
+        return this.handleShowIpArp(tokens.slice(2), device);
+      }
+      if ('ip'.startsWith(cmd1) && tokens.length > 2 && 'arp'.startsWith(tokens[2].toLowerCase())) {
+        return this.handleShowIpArp(tokens.slice(3), device);
+      }
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -314,6 +328,17 @@ export class IOSCommands {
       };
     }
 
+    // clear ip arp / clear arp
+    if (cmd0 === 'clear' && tokens.length >= 2) {
+      const cmd1 = tokens[1].toLowerCase();
+      if ('arp'.startsWith(cmd1)) {
+        return this.handleClearArp(tokens.slice(2), device);
+      }
+      if ('ip'.startsWith(cmd1) && tokens.length >= 3 && 'arp'.startsWith(tokens[2].toLowerCase())) {
+        return this.handleClearArp(tokens.slice(3), device);
+      }
+    }
+
     // clear ip dhcp binding *
     if (cmd0 === 'clear' && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'dhcp'.startsWith(tokens[2].toLowerCase()) && 'binding'.startsWith(tokens[3].toLowerCase())) {
       return { output: '' };
@@ -345,6 +370,11 @@ export class IOSCommands {
       if ('ip'.startsWith(cmd1)) {
         if (tokens.length < 3) return { output: `% Incomplete command.` };
         const cmd2 = tokens[2].toLowerCase();
+
+        // show ip arp
+        if ('arp'.startsWith(cmd2)) {
+          return this.handleShowIpArp(tokens.slice(3), device);
+        }
 
         // show ip interface brief
         if ('interface'.startsWith(cmd2) || cmd2 === 'int') {
@@ -420,6 +450,11 @@ export class IOSCommands {
       // show port-security
       if ('port-security'.startsWith(cmd1)) {
         return { output: this.renderPortSecurity(device) };
+      }
+
+      // show arp
+      if ('arp'.startsWith(cmd1)) {
+        return this.handleShowIpArp(tokens.slice(2), device);
       }
 
       // show cdp ...
@@ -680,6 +715,17 @@ export class IOSCommands {
         device.defaultGateway = undefined;
       }
       return { output: '' };
+    }
+
+    // arp <ip> <mac> arpa [interface]
+    if (cmd0 === 'arp' && tokens.length >= 4) {
+      return this.handleStaticArp(tokens, device);
+    }
+    // no arp <ip>
+    if (cmd0 === 'no' && tokens.length >= 3 && 'arp'.startsWith(tokens[1].toLowerCase())) {
+      const ip = tokens[2];
+      const removed = device.removeArpEntry(ip);
+      return { output: removed ? '' : `% Entry not found for ${ip}` };
     }
 
     // cdp run / no cdp run
@@ -2073,6 +2119,129 @@ Configuration register is 0x2102
     return sections.length > 0 ? sections.join('\n\n') : '% No interfaces available for CDP.';
   }
 
+  // ===================== ARP (ADDRESS RESOLUTION PROTOCOL) HANDLERS =====================
+  private static handleShowIpArp(tokens: string[], device: Device): CliExecutionResult {
+    const filterArg = tokens[0]?.toLowerCase();
+    const rows: Array<{
+      protocol: string;
+      address: string;
+      age: string;
+      hardware: string;
+      type: string;
+      iface: string;
+    }> = [];
+
+    const seenIps = new Set<string>();
+
+    // 1. Include device's own active L3 interfaces
+    for (const iface of device.interfaces.values()) {
+      if (iface.ipAddress && !iface.isShutdown && iface.status === 'up') {
+        rows.push({
+          protocol: 'Internet',
+          address: iface.ipAddress,
+          age: '-',
+          hardware: iface.macAddress,
+          type: 'ARPA',
+          iface: iface.name
+        });
+        seenIps.add(iface.ipAddress);
+      }
+    }
+
+    // 2. Include entries from device.arpTable
+    for (const entry of device.arpTable) {
+      if (!seenIps.has(entry.ipAddress)) {
+        rows.push({
+          protocol: entry.protocol || 'Internet',
+          address: entry.ipAddress,
+          age: entry.age !== undefined ? entry.age.toString() : '0',
+          hardware: entry.macAddress,
+          type: 'ARPA',
+          iface: entry.interfaceName || 'GigabitEthernet0/0'
+        });
+        seenIps.add(entry.ipAddress);
+      }
+    }
+
+    // 3. Filter if requested
+    let filtered = rows;
+    if (filterArg) {
+      filtered = rows.filter(r => 
+        r.address === filterArg || 
+        r.iface.toLowerCase() === filterArg ||
+        r.iface.toLowerCase().startsWith(filterArg) ||
+        r.hardware.toLowerCase() === filterArg
+      );
+    }
+
+    const header = [
+      'Protocol  Address          Age (min)  Hardware Addr   Type   Interface'
+    ];
+
+    for (const r of filtered) {
+      const protoCol = r.protocol.padEnd(10);
+      const addrCol = r.address.padEnd(17);
+      const ageCol = r.age.padStart(9).padEnd(11);
+      const hwCol = r.hardware.padEnd(16);
+      const typeCol = r.type.padEnd(7);
+      const ifaceCol = r.iface;
+      header.push(`${protoCol}${addrCol}${ageCol}${hwCol}${typeCol}${ifaceCol}`);
+    }
+
+    return { output: header.join('\n') };
+  }
+
+  private static handleClearArp(tokens: string[], device: Device): CliExecutionResult {
+    if (tokens.length > 0 && SubnetUtils.isValidIpv4(tokens[0])) {
+      device.removeArpEntry(tokens[0]);
+    } else {
+      device.clearArpTable(true);
+    }
+    return { output: '' };
+  }
+
+  private static handleStaticArp(tokens: string[], device: Device): CliExecutionResult {
+    // arp <ip> <mac> arpa [interface]
+    const ip = tokens[1];
+    const mac = tokens[2];
+    const encap = tokens[3]?.toLowerCase();
+
+    if (!SubnetUtils.isValidIpv4(ip)) {
+      return { output: `% Invalid IP address: ${ip}` };
+    }
+
+    if (encap !== 'arpa') {
+      return { output: `% Unrecognized encapsulation type. Only ARPA supported.` };
+    }
+
+    const normMac = mac.toLowerCase().replace(/[:-]/g, '.');
+    let targetIface = tokens[4] ? CliLexer.normalizeInterfaceName(tokens[4]) : undefined;
+
+    if (!targetIface) {
+      for (const ifc of device.interfaces.values()) {
+        if (ifc.ipAddress && ifc.subnetMask && SubnetUtils.isSameSubnet(ifc.ipAddress, ip, ifc.subnetMask)) {
+          targetIface = ifc.name;
+          break;
+        }
+      }
+    }
+
+    if (!targetIface) {
+      targetIface = Array.from(device.interfaces.values())[0]?.name || 'GigabitEthernet0/0';
+    }
+
+    device.addArpEntry({
+      protocol: 'Internet',
+      ipAddress: ip,
+      age: '-',
+      macAddress: normMac,
+      type: 'static',
+      interfaceName: targetIface
+    });
+
+    return { output: '' };
+  }
+
   // ===================== PING HANDLER =====================
   private static handlePing(targetRaw: string, sourceDevice: Device, allDevices: Device[]): CliExecutionResult {
     const target = targetRaw.trim();
@@ -2131,6 +2300,52 @@ Configuration register is 0x2102
     const sendingHeader = `${domainTranslationHeader}Type escape sequence to abort.\nSending 5, 100-byte ICMP Echos to ${resolvedIp}, timeout is 2 seconds:`;
 
     if (targetDevice) {
+      // Dynamic ARP resolution
+      let srcIface: InterfaceConfig | undefined;
+      for (const ifc of sourceDevice.interfaces.values()) {
+        if (ifc.ipAddress && ifc.subnetMask && SubnetUtils.isSameSubnet(ifc.ipAddress, resolvedIp, ifc.subnetMask)) {
+          srcIface = ifc;
+          break;
+        }
+      }
+      if (!srcIface) {
+        srcIface = Array.from(sourceDevice.interfaces.values()).find(i => i.ipAddress && !i.isShutdown && i.status === 'up');
+      }
+
+      let dstMac = '0001.96a1.1234';
+      let dstIfaceName = 'GigabitEthernet0/0';
+      if (targetDevice instanceof Host) {
+        dstMac = targetDevice.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6800';
+        dstIfaceName = 'FastEthernet0';
+      } else {
+        const dstIface = Array.from(targetDevice.interfaces.values()).find(i => i.ipAddress === resolvedIp) || Array.from(targetDevice.interfaces.values())[0];
+        if (dstIface) {
+          dstMac = dstIface.macAddress;
+          dstIfaceName = dstIface.name;
+        }
+      }
+
+      if (srcIface) {
+        sourceDevice.addArpEntry({
+          protocol: 'Internet',
+          ipAddress: resolvedIp,
+          macAddress: dstMac,
+          interfaceName: srcIface.name,
+          type: 'ARPA',
+          age: 0
+        });
+        if (srcIface.ipAddress) {
+          targetDevice.addArpEntry({
+            protocol: 'Internet',
+            ipAddress: srcIface.ipAddress,
+            macAddress: srcIface.macAddress,
+            interfaceName: dstIfaceName,
+            type: targetDevice instanceof Host ? 'dynamic' : 'ARPA',
+            age: 0
+          });
+        }
+      }
+
       return {
         output: `${sendingHeader}\n.!!!!\nSuccess rate is 80 percent (4/5), round-trip min/avg/max = 1/2/4 ms`
       };

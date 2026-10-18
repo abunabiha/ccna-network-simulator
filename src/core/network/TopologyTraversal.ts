@@ -318,10 +318,41 @@ export class TopologyTraversal {
     if (sourceHost.subnetMask && SubnetUtils.isSameSubnet(sourceHost.ipAddress, destIp, sourceHost.subnetMask)) {
       for (const ep of endpoints) {
         if (ep.device instanceof Host && ep.device.ipAddress === destIp) {
+          const targetMac = ep.device.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6800';
+          const sourceMac = sourceHost.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6801';
+          sourceHost.addArpEntry({
+            ipAddress: destIp,
+            macAddress: targetMac,
+            interfaceName: 'FastEthernet0',
+            type: 'dynamic',
+            age: 0
+          });
+          ep.device.addArpEntry({
+            ipAddress: sourceHost.ipAddress,
+            macAddress: sourceMac,
+            interfaceName: 'FastEthernet0',
+            type: 'dynamic',
+            age: 0
+          });
           return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [destIp] };
         }
         for (const ifc of ep.device.interfaces.values()) {
           if (ifc.ipAddress === destIp && !ifc.isShutdown && ifc.status === 'up') {
+            const sourceMac = sourceHost.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6801';
+            sourceHost.addArpEntry({
+              ipAddress: destIp,
+              macAddress: ifc.macAddress,
+              interfaceName: 'FastEthernet0',
+              type: 'dynamic',
+              age: 0
+            });
+            ep.device.addArpEntry({
+              ipAddress: sourceHost.ipAddress,
+              macAddress: sourceMac,
+              interfaceName: ifc.name,
+              type: 'ARPA',
+              age: 0
+            });
             return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [destIp] };
           }
         }
@@ -374,6 +405,27 @@ export class TopologyTraversal {
         reason: `Default gateway (${sourceHost.defaultGateway}) tidak dapat dijangkau di jaringan fisik lokal (antarmuka router down atau tidak terhubung).`
       };
     }
+
+    // Dynamic ARP learning between sourceHost and default gateway router/switch
+    const gwIface = gatewayEndpoint.device.getInterface(gatewayEndpoint.interfaceName) ||
+      Array.from(gatewayEndpoint.device.interfaces.values()).find(i => i.ipAddress === sourceHost.defaultGateway);
+    const gwMac = gwIface?.macAddress || '0001.96a1.0001';
+    const sourceMac = sourceHost.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6801';
+
+    sourceHost.addArpEntry({
+      ipAddress: sourceHost.defaultGateway,
+      macAddress: gwMac,
+      interfaceName: 'FastEthernet0',
+      type: 'dynamic',
+      age: 0
+    });
+    gatewayEndpoint.device.addArpEntry({
+      ipAddress: sourceHost.ipAddress,
+      macAddress: sourceMac,
+      interfaceName: gwIface?.name || gatewayEndpoint.interfaceName,
+      type: 'ARPA',
+      age: 0
+    });
 
     const gwDevice = gatewayEndpoint.device;
 
@@ -444,10 +496,39 @@ export class TopologyTraversal {
       // Cek apakah tujuan berada di segmen keluar router (LAN lain)
       for (const ep of exitEndpoints) {
         if (ep.device instanceof Host && ep.device.ipAddress === destIp) {
+          const remoteMac = ep.device.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6800';
+          router.addArpEntry({
+            ipAddress: destIp,
+            macAddress: remoteMac,
+            interfaceName: exitIface.name,
+            type: 'ARPA',
+            age: 0
+          });
+          ep.device.addArpEntry({
+            ipAddress: exitIface.ipAddress,
+            macAddress: exitIface.macAddress,
+            interfaceName: 'FastEthernet0',
+            type: 'dynamic',
+            age: 0
+          });
           return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [sourceHost.defaultGateway, destIp] };
         }
         for (const ifc of ep.device.interfaces.values()) {
           if (ifc.ipAddress === destIp && !ifc.isShutdown && ifc.status === 'up') {
+            router.addArpEntry({
+              ipAddress: destIp,
+              macAddress: ifc.macAddress,
+              interfaceName: exitIface.name,
+              type: 'ARPA',
+              age: 0
+            });
+            ep.device.addArpEntry({
+              ipAddress: exitIface.ipAddress,
+              macAddress: exitIface.macAddress,
+              interfaceName: ifc.name,
+              type: 'ARPA',
+              age: 0
+            });
             return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [sourceHost.defaultGateway, destIp] };
           }
         }

@@ -59,6 +59,25 @@ Simulator menyediakan simulasi penuh protokol CDP Layer 2 Cisco:
   - Routed Ports via `no switchport` pada physical interface untuk mengubah port switch menjadi port L3 dengan alamat IP langsung.
   - Longest Prefix Match (LPM) routing table lookup untuk meneruskan trafik IP antar subnet dan default gateway tanpa memerlukan router eksternal.
 
+### 🛡️ 4. Address Resolution Protocol (ARP) Engine di Semua Perangkat
+Simulator kini mendukung penuh protokol resolusi alamat (ARP) pada seluruh tipe node jaringan (Router, Switch L2/L3, PC, Server, Cloud):
+- **Resolusi Dinamis Dua Arah (Bidirectional Dynamic Learning)**:
+  - Setiap eksekusi ICMP ping (`ping <ip>`) atau penerusan paket otomatis melakukan resolusi IP ke MAC secara dua arah antara *source* dan *destination* (serta gateway hop-by-hop).
+  - Format MAC Cisco: `0050.7966.6800` (ARPA), format MAC Host: `00-aa-bb-cc-dd-ee`.
+- **Perintah Cisco IOS (Router & Switches)**:
+  - `show ip arp` / `show arp`: Menampilkan tabel ARP aktif dengan kolom *Protocol*, *Address*, *Age (min)*, *Hardware Addr*, *Type*, dan *Interface*.
+  - Antarmuka lokal ber-IP otomatis muncul dengan `Age = -` dan tipe `ARPA`.
+  - `clear ip arp` / `clear arp`: Membersihkan entri ARP dinamis dan cache resolusi.
+  - `arp <ip-address> <hardware-address> arpa [interface]`: Konfigurasi pemetaan ARP statis tingkat global.
+  - `no arp <ip-address>`: Menghapus entri ARP statis.
+  - Tersedia tombol cepat `sh ip arp` di toolbar konsol Cisco Terminal.
+- **Perintah Windows/Host Command Prompt (PC, Server, Cloud)**:
+  - `arp -a [inet_addr]`: Menampilkan tabel ARP IPv4 aktif.
+  - `arp -s <inet_addr> <eth_addr>`: Menambahkan entri ARP statis pada PC/Server.
+  - `arp -d [inet_addr]`: Menghapus entri ARP spesifik atau membersihkan seluruh tabel ARP host.
+  - Bantuan sintaks `arp /?` atau `arp -?` sesuai standar Microsoft Windows.
+  - Tersedia tombol cepat `arp -a` di toolbar konsol Host Terminal.
+
 ---
 
 ## 🚀 Cara Menjalankan Aplikasi

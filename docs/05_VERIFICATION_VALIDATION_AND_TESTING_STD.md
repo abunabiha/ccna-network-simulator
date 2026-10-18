@@ -47,6 +47,7 @@ Untuk menjamin keabsahan ilmiah (*scientific validity*) dan kesesuaian perilaku 
 | **TC-CLI-03** | CLI Terminal | Command History & Retyping Navigation | Tekan `ArrowUp`/`ArrowDown`/`Ctrl+P`/`Ctrl+N` | Riwayat perintah terjelajahi, draf tersimpan aman, dan kursor otomatis berada di akhir baris | PASS |
 | **TC-CDP-01** | L2 Protocols | Cisco Discovery Protocol (CDP v2) | Hubungkan 2 perangkat dan jalankan `show cdp neighbors [detail]` | Tetangga L2 terdeteksi dua arah, timer/holdtime akurat, dan format output Cisco IOS autentik | PASS |
 | **TC-L3-05**  | Multilayer Switch | Catalyst 9300 Cisco IOS-XE 17.12.6 Routing | Jalankan `show version`, buat SVI/routed port, dan uji rute LPM | Output menampilkan Version 17.12.6, routing aktif (`ip routing`), dan paket ter-forward via LPM | PASS |
+| **TC-ARP-01**  | L2/L3 Protocols | Address Resolution Protocol (ARP) Suite | Eksekusi dynamic ping, `show ip arp`, `arp <ip> <mac> arpa`, `clear ip arp`, serta Host `arp -a`, `arp -s`, `arp -d` | Tabel ARP dinamis terisi dua arah, entri statis tersimpan/terhapus, format ARPA/Windows valid | PASS |
 
 ---
 

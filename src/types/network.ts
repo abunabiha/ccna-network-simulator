@@ -88,8 +88,11 @@ export interface MacTableEntry {
 }
 
 export interface ArpEntry {
+  protocol?: string;         // 'Internet'
   ipAddress: string;
+  age?: number | '-';        // Age in minutes, or '-' for local/static
   macAddress: string;
+  type?: 'ARPA' | 'dynamic' | 'static';
   interfaceName: string;
 }
 
