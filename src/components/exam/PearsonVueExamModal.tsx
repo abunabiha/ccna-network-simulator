@@ -23,6 +23,7 @@ import {
   Check,
   Play
 } from 'lucide-react';
+import { useNetworkStore } from '../../store/useNetworkStore';
 
 interface PearsonVueExamModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ interface PearsonVueExamModalProps {
 }
 
 export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen, onClose }) => {
+  const userName = useNetworkStore((state) => state.userName);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, CandidateAnswer>>({});
   const [secondsRemaining, setSecondsRemaining] = useState<number>(120 * 60); // 120 minutes
@@ -282,7 +284,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
     const verdict: 'PASS' | 'FAIL' = scaledScore >= 825 ? 'PASS' : 'FAIL';
 
     setScoreReport({
-      candidateName: 'Imam Asrowardi / CCNA Candidate',
+      candidateName: userName ? `${userName} / CCNA Candidate` : 'Peserta CCNA / CCNA Candidate',
       examCode: '200-301 CCNA v1.1',
       examDate: new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }),
       passingScore: 825,
@@ -318,7 +320,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
               Cisco Certified Network Associate (CCNA 200-301 v1.1)
             </div>
             <div className="text-[11px] text-slate-300">
-              Candidate: <span className="font-semibold text-amber-300">Imam Asrowardi</span> | Registration: <span className="font-mono">CSCO1492048</span>
+              Candidate: <span className="font-semibold text-amber-300">{userName || 'Peserta CCNA'}</span> | Registration: <span className="font-mono">CSCO1492048</span>
             </div>
           </div>
         </div>

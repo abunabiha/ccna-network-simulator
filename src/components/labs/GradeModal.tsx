@@ -15,7 +15,8 @@ export const GradeModal: React.FC = () => {
     isGradeModalOpen, 
     closeGradeModal, 
     gradeReport, 
-    currentLab 
+    currentLab,
+    userName 
   } = useNetworkStore();
 
   if (!isGradeModalOpen || !gradeReport || !currentLab) return null;
@@ -40,7 +41,13 @@ export const GradeModal: React.FC = () => {
             <h2 className="text-lg font-extrabold text-white mt-1">
               Lab Assessment Scorecard
             </h2>
-            <p className="text-xs text-slate-400">{currentLab.title}</p>
+            <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+              <span>{currentLab.title}</span>
+              <span>•</span>
+              <span className="text-slate-300">
+                Kandidat: <strong className="text-cyan-400">{userName || 'Peserta CCNA'}</strong>
+              </span>
+            </div>
           </div>
           <button
             onClick={closeGradeModal}

@@ -31,7 +31,13 @@ interface NetworkState {
   isExamModalOpen: boolean;
   isLiveConnectorOpen: boolean;
 
+  userName: string;
+  isUserModalOpen: boolean;
+
   // Actions
+  setUserName: (name: string) => void;
+  openUserModal: () => void;
+  closeUserModal: () => void;
   openLiveConnector: () => void;
   closeLiveConnector: () => void;
   addDevice: (type: DeviceType, x: number, y: number, customName?: string) => Device;
@@ -163,6 +169,29 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
     activeHostConfigId: null,
     isExamModalOpen: false,
     isLiveConnectorOpen: false,
+
+    userName: typeof window !== 'undefined' ? (localStorage.getItem('ccna_username') || '') : '',
+    isUserModalOpen: typeof window !== 'undefined' ? !localStorage.getItem('ccna_username') : false,
+
+    setUserName: (name: string) => {
+      const trimmed = name.trim();
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('ccna_username', trimmed);
+        } catch (e) {
+          console.warn('Could not save username to localStorage:', e);
+        }
+      }
+      set({ userName: trimmed, isUserModalOpen: false });
+    },
+
+    openUserModal: () => {
+      set({ isUserModalOpen: true });
+    },
+
+    closeUserModal: () => {
+      set({ isUserModalOpen: false });
+    },
 
     openLiveConnector: () => {
       set({ isLiveConnectorOpen: true });
@@ -526,10 +555,11 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
     },
 
     exportTopologyJson: () => {
-      const { devices, links } = get();
+      const { devices, links, userName } = get();
       const exportData = {
         app: 'CCNA NetSim Pro',
         version: '1.1.0',
+        author: userName || 'Network Engineer',
         exportedAt: new Date().toISOString(),
         topology: {
           devices: devices.map(d => ({

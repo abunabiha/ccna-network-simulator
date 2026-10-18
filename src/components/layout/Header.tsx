@@ -1,26 +1,20 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNetworkStore } from '../../store/useNetworkStore';
 import { CCNA_LABS } from '../../data/ccnaLabs';
 import { 
   Network, 
   Award, 
-  Play, 
   RotateCcw, 
-  FileText, 
-  CheckCircle2, 
-  Clock, 
   Cpu,
-  Download,
-  Upload,
+  Save,
+  FolderOpen,
   BookOpenCheck,
-  Radio
+  Radio,
+  User,
+  Check
 } from 'lucide-react';
 
-interface HeaderProps {
-  onOpenDocs: () => void;
-}
-
-export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
+export const Header: React.FC = () => {
   const currentLab = useNetworkStore((state) => state.currentLab);
   const loadLab = useNetworkStore((state) => state.loadLab);
   const gradeCurrentLab = useNetworkStore((state) => state.gradeCurrentLab);
@@ -31,8 +25,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
   const openLiveConnector = useNetworkStore((state) => state.openLiveConnector);
   const exportTopologyJson = useNetworkStore((state) => state.exportTopologyJson);
   const importTopologyJson = useNetworkStore((state) => state.importTopologyJson);
+  const userName = useNetworkStore((state) => state.userName);
+  const openUserModal = useNetworkStore((state) => state.openUserModal);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   const handleExportTopology = () => {
     const jsonStr = exportTopologyJson();
@@ -40,11 +42,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cisco_topology_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '_')}.json`;
+    const authorSlug = (userName || 'user').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    a.download = `ccna_topology_${authorSlug}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '_')}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showToast('Topologi & konfigurasi berhasil disimpan (.json)!');
   };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,8 +59,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
       const content = event.target?.result as string;
       if (content) {
         const success = importTopologyJson(content);
-        if (!success) {
-          alert('Gagal mengimpor topologi. Format file JSON tidak valid.');
+        if (success) {
+          showToast('Topologi berhasil dimuat ke kanvas!');
+        } else {
+          alert('Gagal membuka topologi. Format berkas JSON tidak valid.');
         }
       }
     };
@@ -139,25 +145,40 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
           onChange={handleImportFile} 
         />
 
-        {/* Export / Import Topology Buttons */}
-        <div className="flex items-center bg-slate-950 rounded-lg border border-slate-800 p-0.5">
+        {/* Simpan & Open Topology Buttons */}
+        <div className="flex items-center gap-1.5 bg-slate-950 rounded-xl border border-slate-800 p-1">
           <button
             onClick={handleExportTopology}
-            title="Export Current Topology & Configurations (.json)"
-            className="flex items-center gap-1 px-2.5 py-1 text-slate-300 hover:text-cyan-400 hover:bg-slate-800 rounded-md text-xs font-medium transition-colors"
+            title="Simpan rancangan topologi & konfigurasi perangkat saat ini (.json)"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-950/80 hover:bg-sky-900 border border-sky-500/50 text-sky-200 rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden xl:inline">Export</span>
+            <Save className="w-3.5 h-3.5 text-sky-400" />
+            <span>Simpan</span>
           </button>
+
           <button
             onClick={() => fileInputRef.current?.click()}
-            title="Import Saved Topology (.json)"
-            className="flex items-center gap-1 px-2.5 py-1 text-slate-300 hover:text-cyan-400 hover:bg-slate-800 rounded-md text-xs font-medium transition-colors"
+            title="Buka / Impor berkas topologi yang telah disimpan (.json)"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
           >
-            <Upload className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden xl:inline">Import</span>
+            <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Open</span>
           </button>
         </div>
+
+        {/* User Identity / Student Name Badge */}
+        <button
+          onClick={openUserModal}
+          title="Nama Pengguna / Mahasiswa (Klik untuk mengubah profil)"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 transition-colors cursor-pointer"
+        >
+          <div className="w-5 h-5 rounded-full bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-cyan-400 text-[10px] font-bold">
+            {userName ? userName.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
+          </div>
+          <span className="max-w-[110px] truncate font-medium text-slate-300">
+            {userName || 'Nama Siswa'}
+          </span>
+        </button>
 
         {/* Reset Lab */}
         <button
@@ -187,15 +208,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
           <span>Live Device Link</span>
         </button>
 
-        {/* Scientific SDLC Docs */}
-        <button
-          onClick={onOpenDocs}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 font-medium transition-colors"
-        >
-          <FileText className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden lg:inline">SDLC Docs</span>
-        </button>
-
         {/* Check Lab / Grade Button */}
         <button
           onClick={gradeCurrentLab}
@@ -212,6 +224,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenDocs }) => {
           )}
         </button>
       </div>
+
+      {/* Floating Toast Notification */}
+      {toastMsg && (
+        <div className="fixed top-16 right-6 z-50 flex items-center gap-2 bg-slate-900/95 border border-cyan-500 text-cyan-300 px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-2 text-xs font-semibold">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
     </header>
   );
 };

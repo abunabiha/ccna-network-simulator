@@ -7,17 +7,16 @@ import { LabPanel } from './components/labs/LabPanel';
 import { SimulationBar } from './components/simulation/SimulationBar';
 import { PduInspector } from './components/simulation/PduInspector';
 import { GradeModal } from './components/labs/GradeModal';
-import { DocsModal } from './components/docs/DocsModal';
 import { HostConfigModal } from './components/devices/HostConfigModal';
 import { PearsonVueExamModal } from './components/exam/PearsonVueExamModal';
 import { LiveDeviceConnectorModal } from './components/devices/LiveDeviceConnectorModal';
+import { UserPromptModal } from './components/common/UserPromptModal';
 import { useNetworkStore } from './store/useNetworkStore';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { CableType } from './types/network';
 
 export const App: React.FC = () => {
   const [connectingCable, setConnectingCable] = useState<CableType | null>(null);
-  const [isDocsOpen, setIsDocsOpen] = useState<boolean>(false);
 
   const isHostConfigOpen = useNetworkStore((state) => state.isHostConfigOpen);
   const activeHostConfigId = useNetworkStore((state) => state.activeHostConfigId);
@@ -31,7 +30,7 @@ export const App: React.FC = () => {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100">
       {/* Top Application Header */}
       <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Header">
-        <Header onOpenDocs={() => setIsDocsOpen(true)} />
+        <Header />
       </ErrorBoundary>
 
       {/* Simulation Timeline Bar (Only visible when in Simulation mode) */}
@@ -107,12 +106,9 @@ export const App: React.FC = () => {
         <GradeModal />
       </ErrorBoundary>
 
-      {/* Scientific SDLC Documentation Modal */}
-      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Dokumentasi">
-        <DocsModal 
-          isOpen={isDocsOpen} 
-          onClose={() => setIsDocsOpen(false)} 
-        />
+      {/* User Onboarding / Name Identity Modal */}
+      <ErrorBoundary fallbackTitle="Terjadi Gangguan pada Dialog Profil Pengguna">
+        <UserPromptModal />
       </ErrorBoundary>
     </div>
   );
