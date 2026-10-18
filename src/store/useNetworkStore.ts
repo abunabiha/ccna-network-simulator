@@ -219,7 +219,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
           const prefixName = 
             type === 'router' ? 'Router' :
             type === 'switch' ? 'Switch' :
-            type === 'switch-l3' ? 'SwitchL3_' :
+            type === 'switch-l3' ? 'L3Switch' :
             type === 'server' ? 'Server' :
             'PC';
 

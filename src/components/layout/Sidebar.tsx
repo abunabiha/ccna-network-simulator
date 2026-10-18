@@ -122,8 +122,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ connectingCable, setConnecting
               <div className="w-10 h-10 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <CiscoL3SwitchIcon size={38} />
               </div>
-              <span className="text-[11px] font-semibold text-slate-200 mt-1">Catalyst 3650</span>
-              <span className="text-[9px] text-slate-500">Multilayer Switch</span>
+              <span className="text-[11px] font-semibold text-slate-200 mt-1">Catalyst 9300</span>
+              <span className="text-[9px] text-indigo-400 font-medium">L3 Switch (IOS-XE 17.12.6)</span>
             </div>
 
             {/* PC Desktop */}

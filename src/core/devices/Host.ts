@@ -57,6 +57,12 @@ export class Host extends Device {
     const cmd = commandLine.trim();
     if (!cmd) return { output: '' };
 
+    // Record command history on Host / PC
+    this.commandHistory.push(cmd);
+    if (this.commandHistory.length > 100) {
+      this.commandHistory.shift();
+    }
+
     const parts = cmd.split(/\s+/);
     const mainCmd = parts[0].toLowerCase();
 

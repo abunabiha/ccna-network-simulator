@@ -40,6 +40,10 @@ export class IOSCommands {
           { command: 'show access-lists', description: 'List access lists' },
           { command: 'show port-security', description: 'Show port security status' },
           { command: 'show version', description: 'System hardware and software status' },
+          { command: 'show cdp', description: 'CDP information' },
+          { command: 'show cdp neighbors', description: 'CDP neighbor information' },
+          { command: 'show cdp neighbors detail', description: 'Detailed CDP neighbor information' },
+          { command: 'show cdp interface', description: 'CDP interface status and configuration' },
           { command: 'show ip dhcp binding', description: 'DHCP address bindings' },
           { command: 'show ip dhcp pool', description: 'DHCP pool information' },
           { command: 'show dhcp lease', description: 'Show DHCP client leases' },
@@ -62,6 +66,12 @@ export class IOSCommands {
           { command: 'banner motd', description: 'Define a login banner' },
           { command: 'interface', description: 'Select an interface to configure' },
           { command: 'ip route', description: 'Establish static routes' },
+          { command: 'ip routing', description: 'Enable IP routing' },
+          { command: 'no ip routing', description: 'Disable IP routing' },
+          { command: 'cdp run', description: 'Enable CDP globally' },
+          { command: 'no cdp run', description: 'Disable CDP globally' },
+          { command: 'cdp timer', description: 'Specify the rate at which CDP packets are sent' },
+          { command: 'cdp holdtime', description: 'Specify the holdtime value to be sent in packets' },
           { command: 'router ospf', description: 'Enable OSPF routing protocol' },
           { command: 'ip dhcp pool', description: 'Configure DHCP server pool' },
           { command: 'ip dhcp excluded-address', description: 'Prevent IP addresses from being assigned' },
@@ -89,6 +99,8 @@ export class IOSCommands {
           { command: 'no ip address', description: 'Remove IP address' },
           { command: 'no shutdown', description: 'Enable interface' },
           { command: 'shutdown', description: 'Shut down interface' },
+          { command: 'cdp enable', description: 'Enable CDP on interface' },
+          { command: 'no cdp enable', description: 'Disable CDP on interface' },
           { command: 'description', description: 'Interface specific description' },
           { command: 'duplex', description: 'Configure duplex operation' },
           { command: 'speed', description: 'Configure speed operation' },
@@ -254,6 +266,9 @@ export class IOSCommands {
       if ('version'.startsWith(cmd1)) {
         return { output: this.renderVersion(device) };
       }
+      if ('cdp'.startsWith(cmd1)) {
+        return this.handleShowCdp(tokens, device, allDevices);
+      }
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -405,6 +420,11 @@ export class IOSCommands {
       // show port-security
       if ('port-security'.startsWith(cmd1)) {
         return { output: this.renderPortSecurity(device) };
+      }
+
+      // show cdp ...
+      if ('cdp'.startsWith(cmd1)) {
+        return this.handleShowCdp(tokens, device, allDevices);
       }
     }
 
@@ -662,6 +682,52 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // cdp run / no cdp run
+    if ('cdp'.startsWith(cmd0) && tokens.length >= 2 && 'run'.startsWith(tokens[1].toLowerCase())) {
+      device.cdpEnabled = true;
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 3 && 'cdp'.startsWith(tokens[1].toLowerCase()) && 'run'.startsWith(tokens[2].toLowerCase())) {
+      device.cdpEnabled = false;
+      return { output: '' };
+    }
+
+    // cdp timer <5-254>
+    if ('cdp'.startsWith(cmd0) && tokens.length >= 3 && 'timer'.startsWith(tokens[1].toLowerCase())) {
+      const sec = parseInt(tokens[2], 10);
+      if (!isNaN(sec) && sec >= 5 && sec <= 254) {
+        device.cdpTimer = sec;
+        return { output: '' };
+      }
+      return { output: '% Invalid timer value (5-254)' };
+    }
+
+    // cdp holdtime <10-255>
+    if ('cdp'.startsWith(cmd0) && tokens.length >= 3 && 'holdtime'.startsWith(tokens[1].toLowerCase())) {
+      const sec = parseInt(tokens[2], 10);
+      if (!isNaN(sec) && sec >= 10 && sec <= 255) {
+        device.cdpHoldtime = sec;
+        return { output: '' };
+      }
+      return { output: '% Invalid holdtime value (10-255)' };
+    }
+
+    // ip routing / no ip routing
+    if (cmd0 === 'ip' && tokens.length >= 2 && 'routing'.startsWith(tokens[1].toLowerCase())) {
+      device.ipRouting = true;
+      if (device instanceof Switch && device.isLayer3) {
+        device.updateL3ConnectedRoutes();
+      }
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 3 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'routing'.startsWith(tokens[2].toLowerCase())) {
+      device.ipRouting = false;
+      if (device instanceof Switch && device.isLayer3) {
+        device.routingTable = [];
+      }
+      return { output: '' };
+    }
+
     // access-list <num> permit/deny ...
     if ('access-list'.startsWith(cmd0) && tokens.length >= 4) {
       const aclNum = parseInt(tokens[1], 10);
@@ -833,6 +899,16 @@ export class IOSCommands {
       const vlan = parseInt(tokens[2], 10);
       if (isNaN(vlan) || vlan < 1 || vlan > 4094) return { output: `% Invalid VLAN.` };
       iface.dot1qVlan = vlan;
+      return { output: '' };
+    }
+
+    // cdp enable / no cdp enable
+    if (cmd0 === 'cdp' && tokens.length >= 2 && 'enable'.startsWith(tokens[1].toLowerCase())) {
+      iface.cdpEnabled = true;
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 3 && 'cdp'.startsWith(tokens[1].toLowerCase()) && 'enable'.startsWith(tokens[2].toLowerCase())) {
+      iface.cdpEnabled = false;
       return { output: '' };
     }
 
@@ -1619,6 +1695,73 @@ tcp  203.0.113.1:49201      192.168.1.10:49201     198.51.100.5:80        198.51
   }
 
   private static renderVersion(device: Device): string {
+    if (device.deviceType === 'switch-l3') {
+      return `
+Cisco IOS XE Software, Version 17.12.6
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_LITE_IOSXE), Version 17.12.6, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2024 by Cisco Systems, Inc.
+Compiled Fri 15-Mar-24 14:20 by mcpre
+
+ROM: IOS-XE ROMMON
+
+${device.hostname} uptime is 2 hours, 18 minutes
+Uptime for this control processor is 2 hours, 19 minutes
+System returned to ROM by power-on
+System image file is "bootflash:packages.conf"
+Last reload reason: Power-on
+
+cisco Catalyst 9300-24T (ARM64) processor with 4194304K/2097152K bytes of memory.
+Processor board ID FCW2145L099
+24 Gigabit Ethernet interfaces
+4 Ten Gigabit Ethernet interfaces
+2048K bytes of non-volatile configuration memory.
+4194304K bytes of physical memory.
+11272192K bytes of Bootflash at bootflash:
+
+Configuration register is 0x102
+`.trim();
+    }
+
+    if (device.deviceType === 'switch') {
+      return `
+Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2013 by Cisco Systems, Inc.
+Compiled Wed 26-Jun-13 02:49 by mario
+
+ROM: C2960 Boot Loader (C2960-HBOOT-M) Version 12.2(25r)FX, RELEASE SOFTWARE (fc4)
+
+${device.hostname} uptime is 2 hours, 15 minutes
+System returned to ROM by power-on
+System image file is "flash:c2960-lanbasek9-mz.150-2.SE4.bin"
+
+cisco WS-C2960-24TT-L (PowerPC405) processor (revision B0) with 65536K bytes of memory.
+Processor board ID FOC1438Z08R
+24 FastEthernet interfaces
+2 Gigabit Ethernet interfaces
+The password-recovery mechanism is enabled.
+64K bytes of flash-simulated non-volatile configuration memory.
+Base ethernet MAC Address       : 00:26:0B:44:A8:80
+Motherboard assembly number     : 73-10825-06
+Power supply part number        : 341-0097-02
+Motherboard serial number       : FOC1437340V
+Power supply serial number      : AZS14350H6X
+Model revision number           : B0
+Motherboard revision number     : C0
+Model number                    : WS-C2960-24TT-L
+System serial number            : FOC1438Z08R
+Top Assembly Part Number        : 800-29778-01
+Top Assembly Revision Number    : B0
+Version ID                      : V02
+CLEI Code Number                : COM3K00BRA
+Hardware Board Revision Number  : 0x01
+
+Configuration register is 0xF
+`.trim();
+    }
+
+    // Default Router (C2900 / ISR)
     return `
 Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.4(3)M2, RELEASE SOFTWARE (fc2)
 Technical Support: http://www.cisco.com/techsupport
@@ -1640,6 +1783,294 @@ DRAM configuration is 64 bits wide with parity disabled.
 
 Configuration register is 0x2102
 `.trim();
+  }
+
+  // ===================== CDP (CISCO DISCOVERY PROTOCOL) HANDLERS =====================
+  private static handleShowCdp(
+    tokens: string[],
+    device: Device,
+    allDevices: Device[]
+  ): CliExecutionResult {
+    if (!device.cdpEnabled) {
+      return { output: '% CDP is not enabled' };
+    }
+
+    if (tokens.length === 2) {
+      // show cdp
+      return { output: this.renderCdpStatus(device) };
+    }
+
+    const sub = tokens[2].toLowerCase();
+
+    // show cdp neighbors [detail]
+    if ('neighbors'.startsWith(sub)) {
+      if (tokens.length >= 4 && 'detail'.startsWith(tokens[3].toLowerCase())) {
+        return { output: this.renderCdpNeighborsDetail(device, allDevices) };
+      }
+      return { output: this.renderCdpNeighbors(device, allDevices) };
+    }
+
+    // show cdp entry <entry-name>
+    if ('entry'.startsWith(sub)) {
+      if (tokens.length < 4) {
+        return { output: '% Incomplete command. Specify neighbor device ID.' };
+      }
+      const entryName = tokens.slice(3).join(' ');
+      return { output: this.renderCdpNeighborsDetail(device, allDevices, entryName) };
+    }
+
+    // show cdp interface [interface-id]
+    if ('interface'.startsWith(sub) || sub === 'int') {
+      const targetIface = tokens[3];
+      return { output: this.renderCdpInterface(device, targetIface) };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  private static renderCdpStatus(device: Device): string {
+    if (!device.cdpEnabled) {
+      return '% CDP is not enabled';
+    }
+    return [
+      'Global CDP information:',
+      `    Sending CDP packets every ${device.cdpTimer} seconds`,
+      `    Sending a holdtime value of ${device.cdpHoldtime} seconds`,
+      `    Sending CDPv2 advertisements is enabled`,
+      `    CDP Version 2 is enabled`,
+      `    CDP is globally enabled`
+    ].join('\n');
+  }
+
+  private static getCdpNeighborsList(device: Device, allDevices: Device[]): Array<{
+    localPort: string;
+    localShort: string;
+    neighborDevice: Device;
+    neighborPort: string;
+    neighborShort: string;
+    holdtime: number;
+    capability: string;
+    capabilitiesLong: string;
+    platform: string;
+    platformFull: string;
+    ipAddress: string;
+    version: string;
+    duplex: string;
+    nativeVlan: number;
+  }> {
+    const list: Array<any> = [];
+    if (!device.cdpEnabled) return list;
+
+    for (const iface of device.interfaces.values()) {
+      if (iface.isShutdown || iface.status !== 'up') continue;
+      if (iface.cdpEnabled === false) continue;
+      // Skip logical interfaces like Vlan or Loopback for physical CDP neighbor discovery
+      const ifaceNameLower = iface.name.toLowerCase();
+      if (ifaceNameLower.startsWith('vlan') || ifaceNameLower.startsWith('loopback')) continue;
+
+      let peerDevId = iface.connectedDeviceId;
+      let peerPortName = iface.connectedPort;
+
+      // If not directly set on this interface, look in other devices' interfaces
+      if (!peerDevId) {
+        for (const otherDev of allDevices) {
+          if (otherDev.id === device.id) continue;
+          for (const otherIface of otherDev.interfaces.values()) {
+            if (
+              otherIface.connectedDeviceId === device.id &&
+              (otherIface.connectedPort === iface.name || otherIface.connectedPort === iface.shortName)
+            ) {
+              peerDevId = otherDev.id;
+              peerPortName = otherIface.name;
+              break;
+            }
+          }
+          if (peerDevId) break;
+        }
+      }
+
+      if (!peerDevId) continue;
+      const peerDev = allDevices.find(d => d.id === peerDevId);
+      if (!peerDev || peerDev.cdpEnabled === false) continue;
+
+      const peerIface = peerPortName 
+        ? (peerDev.getInterface(peerPortName) || Array.from(peerDev.interfaces.values()).find(i => i.name === peerPortName || i.shortName === peerPortName))
+        : undefined;
+
+      if (!peerIface || peerIface.isShutdown || peerIface.status !== 'up' || peerIface.cdpEnabled === false) continue;
+
+      let capability = 'R';
+      let capabilitiesLong = 'Router';
+      let platform = 'C2900';
+      let platformFull = 'cisco CISCO2911/K9';
+      let version = 'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.4(3)M2, RELEASE SOFTWARE (fc2)';
+
+      if (peerDev.deviceType === 'switch-l3') {
+        capability = 'R S I';
+        capabilitiesLong = 'Router Switch IGMP';
+        platform = 'cisco C9300-';
+        platformFull = 'cisco C9300-24T';
+        version = 'Cisco IOS XE Software, Version 17.12.6, Catalyst L3 Switch Software (CAT9K_LITE_IOSXE), RELEASE SOFTWARE (fc2)';
+      } else if (peerDev.deviceType === 'switch') {
+        capability = 'S I';
+        capabilitiesLong = 'Switch IGMP';
+        platform = 'WS-C2960-';
+        platformFull = 'cisco WS-C2960-24TT-L';
+        version = 'Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE4, RELEASE SOFTWARE (fc1)';
+      } else if (peerDev.deviceType === 'router') {
+        capability = 'R';
+        capabilitiesLong = 'Router';
+        platform = 'C2900';
+        platformFull = 'cisco CISCO2911/K9';
+        version = 'Cisco IOS Software, C2900 Software (C2900-UNIVERSALK9-M), Version 15.4(3)M2, RELEASE SOFTWARE (fc2)';
+      } else {
+        capability = 'H';
+        capabilitiesLong = 'Host';
+        platform = 'Host PC';
+        platformFull = 'Host Ethernet Workstation';
+        version = 'Host Network Station v1.0';
+      }
+
+      const ipAddress = peerIface.ipAddress || 
+        peerDev.interfaces.get('Vlan1')?.ipAddress || 
+        Array.from(peerDev.interfaces.values()).find(i => Boolean(i.ipAddress))?.ipAddress || 
+        (peerDev as any).ipAddress || 
+        '';
+
+      const holdtime = Math.max(10, device.cdpHoldtime - Math.min(30, (iface.name.length * 7 + peerDev.hostname.length * 3) % 25 + 5));
+
+      list.push({
+        localPort: iface.name,
+        localShort: iface.shortName,
+        neighborDevice: peerDev,
+        neighborPort: peerIface.name,
+        neighborShort: peerIface.shortName,
+        holdtime,
+        capability,
+        capabilitiesLong,
+        platform,
+        platformFull,
+        ipAddress,
+        version,
+        duplex: peerIface.duplex || 'full',
+        nativeVlan: peerIface.nativeVlan || 1
+      });
+    }
+
+    return list;
+  }
+
+  private static renderCdpNeighbors(device: Device, allDevices: Device[]): string {
+    if (!device.cdpEnabled) {
+      return '% CDP is not enabled';
+    }
+
+    const header = [
+      'Capability Codes: R - Router, T - Trans Bridge, B - Source Route Bridge',
+      '                  S - Switch, H - Host, I - IGMP, r - Repeater, P - Phone,',
+      '                  D - Remote, C - CVTA, M - Two-port Mac Relay',
+      '',
+      'Device ID        Local Intrfce     Holdtme    Capability  Platform  Port ID'
+    ];
+
+    const neighbors = this.getCdpNeighborsList(device, allDevices);
+    if (neighbors.length === 0) {
+      return header.join('\n');
+    }
+
+    for (const n of neighbors) {
+      const devIdCol = n.neighborDevice.hostname.padEnd(17);
+      const localCol = n.localShort.padEnd(18);
+      const holdCol = n.holdtime.toString().padEnd(11);
+      const capCol = n.capability.padStart(10).padEnd(12);
+      const platCol = n.platform.padEnd(10);
+      const portCol = n.neighborShort;
+      header.push(`${devIdCol}${localCol}${holdCol}${capCol}${platCol}${portCol}`);
+    }
+
+    return header.join('\n');
+  }
+
+  private static renderCdpNeighborsDetail(
+    device: Device, 
+    allDevices: Device[], 
+    filterEntry?: string
+  ): string {
+    if (!device.cdpEnabled) {
+      return '% CDP is not enabled';
+    }
+
+    let neighbors = this.getCdpNeighborsList(device, allDevices);
+    if (filterEntry && filterEntry !== '*') {
+      const filterLower = filterEntry.toLowerCase();
+      neighbors = neighbors.filter(n => 
+        n.neighborDevice.hostname.toLowerCase() === filterLower ||
+        n.neighborDevice.hostname.toLowerCase().startsWith(filterLower)
+      );
+    }
+
+    if (neighbors.length === 0) {
+      return '% Entry not found in CDP neighbor table';
+    }
+
+    const blocks: string[] = [];
+    for (const n of neighbors) {
+      blocks.push([
+        '-------------------------',
+        `Device ID: ${n.neighborDevice.hostname}`,
+        `Entry address(es):`,
+        `  IP address: ${n.ipAddress || 'unassigned'}`,
+        `Platform: ${n.platformFull},  Capabilities: ${n.capabilitiesLong}`,
+        `Interface: ${n.localPort},  Port ID (outgoing port): ${n.neighborPort}`,
+        `Holdtime : ${n.holdtime} sec`,
+        '',
+        'Version :',
+        n.version,
+        '',
+        'advertisement version: 2',
+        `Duplex: ${n.duplex}`,
+        `Native VLAN: ${n.nativeVlan}`,
+        '-------------------------'
+      ].join('\n'));
+    }
+
+    return blocks.join('\n\n');
+  }
+
+  private static renderCdpInterface(device: Device, targetIface?: string): string {
+    if (!device.cdpEnabled) {
+      return '% CDP is not enabled';
+    }
+
+    const ifaces = Array.from(device.interfaces.values());
+    let selected = ifaces;
+    if (targetIface) {
+      const matched = ifaces.find(i => 
+        i.name.toLowerCase() === targetIface.toLowerCase() || 
+        i.shortName.toLowerCase() === targetIface.toLowerCase()
+      );
+      if (!matched) {
+        return `% Invalid interface ${targetIface}`;
+      }
+      selected = [matched];
+    }
+
+    const sections: string[] = [];
+    for (const ifc of selected) {
+      if (ifc.name.toLowerCase().startsWith('vlan') || ifc.name.toLowerCase().startsWith('loopback')) continue;
+      const statusStr = ifc.isShutdown ? 'administratively down' : (ifc.status === 'up' ? 'up' : 'down');
+      const cdpLine = ifc.cdpEnabled === false
+        ? '  CDP is disabled on this interface'
+        : [
+            `  Encapsulation ARPA`,
+            `  Sending CDP packets every ${device.cdpTimer} seconds`,
+            `  Holdtime is ${device.cdpHoldtime} seconds`
+          ].join('\n');
+
+      sections.push(`${ifc.name} is ${statusStr}, line protocol is ${statusStr}\n${cdpLine}`);
+    }
+
+    return sections.length > 0 ? sections.join('\n\n') : '% No interfaces available for CDP.';
   }
 
   // ===================== PING HANDLER =====================

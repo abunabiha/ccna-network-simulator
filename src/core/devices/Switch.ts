@@ -137,6 +137,35 @@ export class Switch extends Device {
     }
   }
 
+  updateConnectedRoutes(): void {
+    this.updateL3ConnectedRoutes();
+  }
+
+  lookupRoute(destIp: string): RouteEntry | null {
+    if (!this.isLayer3 || !this.ipRouting) return null;
+    let bestMatch: RouteEntry | null = null;
+    let longestPrefix = -1;
+
+    for (const route of this.routingTable) {
+      if (route.network === '0.0.0.0' && route.mask === '0.0.0.0') {
+        // Default route match
+        if (longestPrefix < 0) {
+          bestMatch = route;
+          longestPrefix = 0;
+        }
+      } else {
+        if (SubnetUtils.isIpInSubnet(destIp, route.network, route.mask)) {
+          if (route.cidr > longestPrefix) {
+            longestPrefix = route.cidr;
+            bestMatch = route;
+          }
+        }
+      }
+    }
+
+    return bestMatch;
+  }
+
   executeCli(commandLine: string, context: CliContext): CliExecutionResult {
     return { output: '' };
   }
@@ -146,7 +175,7 @@ export class Switch extends Device {
       'Building configuration...',
       'Current configuration : 2410 bytes',
       '!',
-      'version 15.2',
+      this.isLayer3 ? 'version 17.12' : 'version 15.2',
       'no service timestamps log datetime msec',
       'no service timestamps debug datetime msec',
       this.servicePasswordEncryption ? 'service password-encryption' : 'no service password-encryption',
@@ -154,6 +183,13 @@ export class Switch extends Device {
       `hostname ${this.hostname}`,
       '!'
     ];
+
+    if (!this.cdpEnabled) {
+      lines.push('no cdp run', '!');
+    } else {
+      if (this.cdpTimer !== 60) lines.push(`cdp timer ${this.cdpTimer}`, '!');
+      if (this.cdpHoldtime !== 180) lines.push(`cdp holdtime ${this.cdpHoldtime}`, '!');
+    }
 
     if (this.bannerMotd) {
       lines.push(`banner motd ^C${this.bannerMotd}^C`, '!');
@@ -234,6 +270,10 @@ export class Switch extends Device {
             lines.push(` switchport port-security mac-address sticky ${mac}`);
           }
         }
+      }
+
+      if (iface.cdpEnabled === false) {
+        lines.push(' no cdp enable');
       }
 
       if (iface.isShutdown) {

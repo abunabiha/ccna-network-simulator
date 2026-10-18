@@ -273,4 +273,40 @@ const pingDomainRes = pcUser.executeCli('ping google.com', pcCtx, allDevsTest);
 console.log(`Ping google.com dari PC setelah routing lengkap: \n  Output: ${pingDomainRes.output}`);
 console.log(`  DNS + Hop-by-Hop Reachable check: ${pingDomainRes.output.includes('Reply from') ? 'PASS' : 'FAIL'}`);
 
+console.log('\n=== [8] PENGUJIAN CISCO DISCOVERY PROTOCOL (CDP) & L3 SWITCH IOS-XE 17.12.6 ===');
+// 1. CDP Status & Neighbors
+const cdpStatusRes = CliParser.execute('show cdp', { deviceId: 'R1', mode: 'priv-exec' }, r1, allDevsTest);
+console.log(`Show CDP check: ${cdpStatusRes.output.includes('CDP is globally enabled') && cdpStatusRes.output.includes('Version 2') ? 'PASS' : 'FAIL'}`);
+
+const cdpNeighborsRes = CliParser.execute('show cdp neighbors', { deviceId: 'R1', mode: 'priv-exec' }, r1, allDevsTest);
+console.log(`Show CDP neighbors check: ${cdpNeighborsRes.output.includes('Device ID') && cdpNeighborsRes.output.includes('Capability Codes') ? 'PASS' : 'FAIL'}`);
+
+// Test CDP timer/holdtime config
+CliParser.execute('cdp timer 30', { deviceId: 'R1', mode: 'global-config' }, r1, allDevsTest);
+CliParser.execute('cdp holdtime 90', { deviceId: 'R1', mode: 'global-config' }, r1, allDevsTest);
+console.log(`CDP timer & holdtime check: ${r1.cdpTimer === 30 && r1.cdpHoldtime === 90 ? 'PASS' : 'FAIL'}`);
+
+// 2. Layer 3 Switch with IOS-XE 17.12.6
+const swL3 = new Switch('SWL3', 'Catalyst9300', { x: 300, y: 300 }, true);
+const swL3Ctx = { deviceId: 'SWL3', mode: 'priv-exec' as const };
+const l3VersionRes = CliParser.execute('show version', swL3Ctx, swL3, [swL3]);
+console.log(`L3 Switch Version 17.12.6 check: ${l3VersionRes.output.includes('Cisco IOS XE Software, Version 17.12.6') && l3VersionRes.output.includes('Catalyst 9300') ? 'PASS' : 'FAIL'}`);
+
+// L3 Switch ip routing and SVI routing
+const swL3Global = { deviceId: 'SWL3', mode: 'global-config' as const };
+CliParser.execute('ip routing', swL3Global, swL3, [swL3]);
+console.log(`L3 Switch ip routing check: ${swL3.ipRouting ? 'PASS' : 'FAIL'}`);
+
+const sviEnterRes = CliParser.execute('interface Vlan10', swL3Global, swL3, [swL3]);
+const swL3Svi = { deviceId: 'SWL3', mode: 'interface-config' as const, targetInterface: sviEnterRes.contextUpdates?.targetInterface || 'Vlan10' };
+CliParser.execute('no shut', swL3Svi, swL3, [swL3]);
+CliParser.execute('ip address 10.10.10.1 255.255.255.0', swL3Svi, swL3, [swL3]);
+swL3.updateConnectedRoutes();
+const l3RouteMatch = swL3.lookupRoute('10.10.10.55');
+console.log(`L3 Switch LPM lookupRoute check: ${l3RouteMatch?.network === '10.10.10.0' && l3RouteMatch?.exitInterface === 'Vlan10' ? 'PASS' : 'FAIL'}`);
+
+// 3. Host Command History check
+console.log(`Host commandHistory recorded check: ${pcUser.commandHistory.length > 0 ? 'PASS' : 'FAIL'}`);
+
 console.log('\n=== SELURUH PENGUJIAN KERNEL & MODUL SELESAI DENGAN SUKSES! ===');
+

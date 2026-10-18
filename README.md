@@ -15,11 +15,49 @@
 **CCNA NetSim Pro** adalah aplikasi simulator jaringan komputer berkinerja tinggi yang dirancang setara dengan **Boson NetSim** dan **Cisco Packet Tracer**. Sistem ini dibangun khusus untuk memenuhi kebutuhan penguasaan 100% kompetensi teknis yang diujikan dalam sertifikasi **Cisco Certified Network Associate (CCNA 200-301 versi kurikulum terbaru v1.1)**.
 
 Aplikasi ini berbasis web murni (*zero-install client*), deterministik, responsif, dan dilengkapi dengan:
-1. **Cisco IOS CLI Engine**: Emulasi autentik sintaks perintah Cisco IOS (User Exec, Privileged Exec, Global Config, Interface, Sub-interface 802.1Q, VLAN, OSPF, dan Line modes).
-2. **Interactive Topology Canvas**: Kanvas drag-and-drop untuk menempatkan Router Cisco ISR, Catalyst Switch L2/L3, PC, dan Server dengan visualisasi kabel (Straight, Crossover) dan status link (Up/Down).
-3. **Automated Lab Grader**: Mesin penilaian otomatis berbasis aturan (*Rule-Based Assessment*) yang memeriksa sintaks konfigurasi, status operasional antarmuka, dan konektivitas data-plane dengan skor 0-100% serta feedback diagnostik mendalam.
-4. **OSI 7-Layer PDU Inspector**: Mode simulasi aliran paket langkah-demi-langkah (Play, Step Forward) untuk melihat de-enkapsulasi frame L2, paket IP L3, dan segmen L4 (*In-Layers vs Out-Layers*).
-5. **Dokumentasi Lengkap SDLC (IEEE Std)**: Berkas dokumen formal tahap demi tahap (SRS, SDD, STD, Formulasi Matematika, Metodologi Penelitian DSRM, Usability SUS) yang siap digunakan sebagai naskah pendukung publikasi artikel ilmiah (Jurnal/Konferensi Internasional).
+1. **Cisco IOS CLI Engine**: Emulasi autentik sintaks perintah Cisco IOS (User Exec, Privileged Exec, Global Config, Interface, Sub-interface 802.1Q, VLAN, OSPF, dan Line modes). Dilengkapi fitur **Navigasi Histori Perintah (Arrow Up/Down, Ctrl+P/N)**, draft preservation, dan auto-cursor di akhir baris untuk kemudahan pengetikan ulang (*retyping*).
+2. **Cisco Discovery Protocol (CDP)**: Simulasi protokol penemuan tetangga Layer 2 standar industri Cisco secara real-time (`show cdp neighbors [detail]`, `cdp timer/holdtime`, `cdp run/enable`).
+3. **Layer 3 Switches: Cisco IOS-XE 17.12.6+**: Dukungan multilayer switch Cisco Catalyst 9300-24T dengan image sistem Cisco IOS-XE Version 17.12.6, Switched Virtual Interfaces (SVI), routed ports (`no switchport`), dan Longest Prefix Match (LPM) inter-VLAN routing.
+4. **Interactive Topology Canvas**: Kanvas drag-and-drop untuk menempatkan Router Cisco ISR, Catalyst Switch L2 & L3, PC, dan Server dengan visualisasi kabel (Straight, Crossover) dan status link (Up/Down). Dilengkapi fitur Simpan & Buka file topologi (`.json`).
+5. **Automated Lab Grader**: Mesin penilaian otomatis berbasis aturan (*Rule-Based Assessment*) yang memeriksa sintaks konfigurasi, status operasional antarmuka, dan konektivitas data-plane dengan skor 0-100% serta feedback diagnostik mendalam.
+6. **OSI 7-Layer PDU Inspector**: Mode simulasi aliran paket langkah-demi-langkah (Play, Step Forward) untuk melihat de-enkapsulasi frame L2, paket IP L3, dan segmen L4 (*In-Layers vs Out-Layers*).
+7. **Pearson VUE CCNA Exam Engine**: Simulator ujian sertifikasi resmi dengan antarmuka otentik Pearson VUE, multiple-choice, drag-and-drop, serta interactive Simlet terminal.
+8. **Dokumentasi Lengkap SDLC (IEEE Std)**: Berkas dokumen formal tahap demi tahap (SRS, SDD, STD, Formulasi Matematika, Metodologi Penelitian DSRM, Usability SUS) yang siap digunakan sebagai naskah pendukung publikasi artikel ilmiah (Jurnal/Konferensi Internasional).
+
+---
+
+## 🌟 Fitur Baru & Kemampuan Protokol Enterprise
+
+### 🔄 1. Navigasi Histori Perintah & Ketik Ulang (Command History & Retyping)
+- **Tombol Panah Atas & Bawah (`ArrowUp` / `ArrowDown`)**: Menelusuri riwayat perintah terminal sebelumnya dan sesudahnya pada Cisco IOS CLI, PC/Host Terminal, serta Simlet Pearson VUE.
+- **Draft Preservation**: Menyimpan draf teks yang sedang diketik pengguna saat menelusuri riwayat dan mengembalikannya saat kembali ke prompt kosong.
+- **Auto-Cursor End-of-Line**: Kursor otomatis diletakkan di akhir string perintah riwayat (`setSelectionRange`), memungkinkan pengeditan cepat, *backspacing*, atau pengetikan ulang (*retyping*) tanpa jeda.
+- **Shortcut Alternatif**: Mendukung navigasi ala Emacs/UNIX (`Ctrl+P` untuk previous command, `Ctrl+N` untuk next command).
+
+### 🌐 2. Cisco Discovery Protocol (CDP) L2 Neighbor Discovery
+Simulator menyediakan simulasi penuh protokol CDP Layer 2 Cisco:
+- **Konfigurasi Global**:
+  - `cdp run` / `no cdp run` (mengaktifkan/menonaktifkan protokol CDP secara global pada perangkat).
+  - `cdp timer <5-254>` (mengatur interval transmisi paket advertisement CDP dalam detik, default: 60s).
+  - `cdp holdtime <10-255>` (mengatur durasi holdtime informasi tetangga dalam detik, default: 180s).
+- **Konfigurasi Interface**:
+  - `cdp enable` / `no cdp enable` (mengaktifkan/menonaktifkan pengiriman CDP per antarmuka spesifik).
+- **Perintah Verifikasi Operasional**:
+  - `show cdp`: Memeriksa status operasional CDP global, timer advertisement, holdtime, dan versi CDP (v2).
+  - `show cdp neighbors`: Menampilkan ringkasan tabel tetangga CDP (Device ID, Local Interface, Holdtime, Capability Codes `R/S/H`, Platform model, Port ID).
+  - `show cdp neighbors detail`: Menampilkan detail lengkap tetangga termasuk alamat IPv4 manajemen, nama IOS platform, dan kapabilitas interface.
+  - `show cdp entry <device-name>`: Menampilkan entri spesifik tetangga berdasarkan hostname perangkat.
+  - `show cdp interface [interface-id]`: Menampilkan status CDP dan timer pada antarmuka lokal.
+- **Running-Config & Help**: Seluruh perintah CDP terefleksikan pada `show running-config` dan terdaftar pada bantuan kontekstual `?` serta auto-complete `Tab`.
+
+### ⚡ 3. Layer 3 Switches: Version Cisco IOS-XE 17.12.6 or higher
+- **Perangkat Model**: Cisco Catalyst 9300-24T Multilayer Switch (`switch-l3`).
+- **Versi Sistem Operasi**: Output `show version` autentik menampilkan **Cisco IOS XE Software, Version 17.12.6** (Amsterdam/Dublin release train standard).
+- **Inter-VLAN Routing & Routed Ports**:
+  - Mengaktifkan routing IP tingkat Layer 3 via `ip routing` / `no ip routing`.
+  - Switched Virtual Interfaces (SVI) via `interface vlan <vlan-id>` dengan konfigurasi `ip address <ip> <mask>`.
+  - Routed Ports via `no switchport` pada physical interface untuk mengubah port switch menjadi port L3 dengan alamat IP langsung.
+  - Longest Prefix Match (LPM) routing table lookup untuk meneruskan trafik IP antar subnet dan default gateway tanpa memerlukan router eksternal.
 
 ---
 

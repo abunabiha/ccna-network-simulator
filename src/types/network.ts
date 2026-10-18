@@ -53,6 +53,9 @@ export interface InterfaceConfig {
   // Connected topology peer tracking
   connectedDeviceId?: string;
   connectedPort?: string;
+
+  // Cisco Discovery Protocol (CDP) per interface
+  cdpEnabled?: boolean;
 }
 
 export interface DevicePosition {

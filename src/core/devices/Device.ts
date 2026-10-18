@@ -16,6 +16,12 @@ export abstract class Device {
   ipRouting: boolean = true;
   commandHistory: string[] = [];
 
+  // Cisco Discovery Protocol (CDP)
+  cdpEnabled: boolean = true;
+  cdpTimer: number = 60;
+  cdpHoldtime: number = 180;
+  cdpVersion: number = 2;
+
   constructor(id: string, hostname: string, deviceType: DeviceType, position: DevicePosition) {
     this.id = id;
     this.hostname = hostname;

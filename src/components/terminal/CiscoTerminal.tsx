@@ -43,15 +43,19 @@ export const CiscoTerminal: React.FC = () => {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const savedDraftRef = useRef<string>('');
 
   // Auto-scroll on new output
   useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentOutputs]);
 
-  // Focus input when active tab changes
+  // Focus input and reset history draft when active tab changes
   useEffect(() => {
     inputRef.current?.focus();
+    setHistoryIndex(-1);
+    savedDraftRef.current = '';
+    setHelpList(null);
   }, [activeTerminalDeviceId]);
 
   if (!activeDevice || !activeContext) {
@@ -71,6 +75,7 @@ export const CiscoTerminal: React.FC = () => {
       executeCommand(activeDevice.id, inputVal);
       setInputVal('');
       setHistoryIndex(-1);
+      savedDraftRef.current = '';
       setHelpList(null);
       return;
     }
@@ -100,29 +105,60 @@ export const CiscoTerminal: React.FC = () => {
       return;
     }
 
-    // 4. Arrow Up (History Previous)
-    if (e.key === 'ArrowUp') {
+    // 4. Arrow Up (History Previous) / Ctrl+P
+    if (e.key === 'ArrowUp' || (e.ctrlKey && e.key.toLowerCase() === 'p')) {
       e.preventDefault();
-      const history = activeDevice.commandHistory;
+      const history = activeDevice.commandHistory || [];
       if (history.length === 0) return;
+
+      // Save user's current typed text before moving into history
+      if (historyIndex === -1) {
+        savedDraftRef.current = inputVal;
+      }
+
       const nextIndex = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
       setHistoryIndex(nextIndex);
-      setInputVal(history[nextIndex] || '');
+      const targetVal = history[nextIndex] || '';
+      setInputVal(targetVal);
+
+      // Move cursor to the end of input for immediate editing / retyping
+      requestAnimationFrame(() => {
+        if (inputRef.current) {
+          const pos = targetVal.length;
+          inputRef.current.setSelectionRange(pos, pos);
+        }
+      });
       return;
     }
 
-    // 5. Arrow Down (History Next)
-    if (e.key === 'ArrowDown') {
+    // 5. Arrow Down (History Next) / Ctrl+N
+    if (e.key === 'ArrowDown' || (e.ctrlKey && e.key.toLowerCase() === 'n')) {
       e.preventDefault();
-      const history = activeDevice.commandHistory;
+      const history = activeDevice.commandHistory || [];
       if (historyIndex === -1) return;
+
       const nextIndex = historyIndex + 1;
       if (nextIndex >= history.length) {
+        // Restore user draft
         setHistoryIndex(-1);
-        setInputVal('');
+        const restored = savedDraftRef.current;
+        setInputVal(restored);
+        requestAnimationFrame(() => {
+          if (inputRef.current) {
+            const pos = restored.length;
+            inputRef.current.setSelectionRange(pos, pos);
+          }
+        });
       } else {
         setHistoryIndex(nextIndex);
-        setInputVal(history[nextIndex]);
+        const targetVal = history[nextIndex] || '';
+        setInputVal(targetVal);
+        requestAnimationFrame(() => {
+          if (inputRef.current) {
+            const pos = targetVal.length;
+            inputRef.current.setSelectionRange(pos, pos);
+          }
+        });
       }
       return;
     }
@@ -132,6 +168,8 @@ export const CiscoTerminal: React.FC = () => {
       e.preventDefault();
       executeCommand(activeDevice.id, '^C');
       setInputVal('');
+      setHistoryIndex(-1);
+      savedDraftRef.current = '';
       setHelpList(null);
       return;
     }
@@ -300,7 +338,12 @@ export const CiscoTerminal: React.FC = () => {
             ref={inputRef}
             type="text"
             value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
+            onChange={(e) => {
+              setInputVal(e.target.value);
+              if (historyIndex === -1) {
+                savedDraftRef.current = e.target.value;
+              }
+            }}
             onKeyDown={handleKeyDown}
             autoFocus
             spellCheck={false}

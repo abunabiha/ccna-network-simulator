@@ -148,6 +148,13 @@ export class Router extends Device {
       lines.push('ip routing', '!');
     }
 
+    if (!this.cdpEnabled) {
+      lines.push('no cdp run', '!');
+    } else {
+      if (this.cdpTimer !== 60) lines.push(`cdp timer ${this.cdpTimer}`, '!');
+      if (this.cdpHoldtime !== 180) lines.push(`cdp holdtime ${this.cdpHoldtime}`, '!');
+    }
+
     // DHCP Excluded Addresses
     for (const exc of this.dhcpExcludedAddresses) {
       lines.push(`ip dhcp excluded-address ${exc}`);
@@ -184,6 +191,9 @@ export class Router extends Device {
       }
       if (iface.duplex) lines.push(` duplex ${iface.duplex}`);
       if (iface.speed) lines.push(` speed ${iface.speed}`);
+      if (iface.cdpEnabled === false) {
+        lines.push(` no cdp enable`);
+      }
       if (iface.isShutdown) {
         lines.push(` shutdown`);
       } else {

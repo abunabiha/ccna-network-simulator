@@ -83,6 +83,13 @@ export class SubnetUtils {
   }
 
   /**
+   * Menguji apakah suatu IP berada di dalam network/mask tertentu
+   */
+  static isIpInSubnet(ip: string, network: string, mask: string): boolean {
+    return this.matchesNetwork(ip, network, mask, false);
+  }
+
+  /**
    * Mengubah Subnet Mask ke Wildcard Mask (Inverted Mask)
    */
   static maskToWildcard(mask: string): string {

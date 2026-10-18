@@ -49,7 +49,10 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
   const [simletContext, setSimletContext] = useState<CliContext>({ deviceId: 'SIM', mode: 'user-exec' });
   const [simletLines, setSimletLines] = useState<string[]>([]);
   const [simletInput, setSimletInput] = useState<string>('');
+  const [simletHistoryIndex, setSimletHistoryIndex] = useState<number>(-1);
   const simletScrollRef = useRef<HTMLDivElement>(null);
+  const simletDraftRef = useRef<string>('');
+  const simletInputRef = useRef<HTMLInputElement>(null);
 
   const currentQ: ExamQuestion = CCNA_EXAM_QUESTIONS[currentIndex];
   const userAns = answers[currentQ.id] || { questionId: currentQ.id, selectedOptions: [], isMarkedForReview: false };
@@ -193,6 +196,8 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
     setSimletLines(newOutputs);
     setSimletContext(updatedContext);
     setSimletInput('');
+    setSimletHistoryIndex(-1);
+    simletDraftRef.current = '';
 
     // Check simlet task completion
     if (currentQ.simlet) {
@@ -219,6 +224,55 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
           simletCommands: [...(userAns.simletCommands || []), cmd]
         }
       }));
+    }
+  };
+
+  const handleSimletKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!simletDevice) return;
+    const history = simletDevice.commandHistory || [];
+
+    if (e.key === 'ArrowUp' || (e.ctrlKey && e.key.toLowerCase() === 'p')) {
+      e.preventDefault();
+      if (history.length === 0) return;
+      if (simletHistoryIndex === -1) {
+        simletDraftRef.current = simletInput;
+      }
+      const nextIdx = simletHistoryIndex === -1 ? history.length - 1 : Math.max(0, simletHistoryIndex - 1);
+      setSimletHistoryIndex(nextIdx);
+      const val = history[nextIdx] || '';
+      setSimletInput(val);
+      requestAnimationFrame(() => {
+        if (simletInputRef.current) {
+          simletInputRef.current.setSelectionRange(val.length, val.length);
+        }
+      });
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || (e.ctrlKey && e.key.toLowerCase() === 'n')) {
+      e.preventDefault();
+      if (simletHistoryIndex === -1) return;
+      const nextIdx = simletHistoryIndex + 1;
+      if (nextIdx >= history.length) {
+        setSimletHistoryIndex(-1);
+        const restored = simletDraftRef.current;
+        setSimletInput(restored);
+        requestAnimationFrame(() => {
+          if (simletInputRef.current) {
+            simletInputRef.current.setSelectionRange(restored.length, restored.length);
+          }
+        });
+      } else {
+        setSimletHistoryIndex(nextIdx);
+        const val = history[nextIdx] || '';
+        setSimletInput(val);
+        requestAnimationFrame(() => {
+          if (simletInputRef.current) {
+            simletInputRef.current.setSelectionRange(val.length, val.length);
+          }
+        });
+      }
+      return;
     }
   };
 
@@ -752,9 +806,16 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
                         {simletDevice?.getPrompt(simletContext) || `${currentQ.simlet.deviceHostname}#`}
                       </span>
                       <input
+                        ref={simletInputRef}
                         type="text"
                         value={simletInput}
-                        onChange={(e) => setSimletInput(e.target.value)}
+                        onChange={(e) => {
+                          setSimletInput(e.target.value);
+                          if (simletHistoryIndex === -1) {
+                            simletDraftRef.current = e.target.value;
+                          }
+                        }}
+                        onKeyDown={handleSimletKeyDown}
                         placeholder="Ketik perintah Cisco IOS (contoh: enable, conf t, interface ...)"
                         className="flex-1 bg-transparent text-xs font-mono text-white focus:outline-none px-1"
                         autoFocus
