@@ -80,6 +80,28 @@ export interface InterfaceConfig {
   // Dynamic Trunking Protocol (DTP) per interface
   dtpMode?: 'access' | 'trunk' | 'dynamic-auto' | 'dynamic-desirable';
   dtpNoNegotiate?: boolean;
+
+  // First Hop Redundancy Protocol (FHRP) per interface
+  hsrp?: {
+    group: number;
+    virtualIp: string;
+    priority: number;
+    preempt: boolean;
+    version: 1 | 2;
+    virtualMac?: string;
+    timers?: { hello: number; hold: number };
+    state?: 'Active' | 'Standby' | 'Listen' | 'Speak' | 'Init';
+  };
+  vrrp?: {
+    group: number;
+    virtualIp: string;
+    priority: number;
+    preempt: boolean;
+    version?: number;
+    virtualMac?: string;
+    advertisementInterval?: number;
+    state?: 'Master' | 'Backup' | 'Init' | 'Initialize';
+  };
 }
 
 export interface StpPortStatus {
@@ -116,8 +138,8 @@ export interface RouteEntry {
   cidr: number;                // 24
   nextHop?: string;            // '10.0.0.2'
   exitInterface?: string;      // 'GigabitEthernet0/0'
-  protocol: 'C' | 'S' | 'O' | 'D' | 'R' | 'L'; // Connected, Static, OSPF, EIGRP, RIP, Local
-  adminDistance: number;       // C=0, S=1, O=110
+  protocol: 'C' | 'S' | 'O' | 'O IA' | 'D' | 'D EX' | 'B' | 'R' | 'L'; // Connected, Static, OSPF Intra, OSPF Inter-Area, EIGRP, EIGRP External, BGP, RIP, Local
+  adminDistance: number;       // C=0, S=1, O=110, D=90, B=20/200
   metric: number;
 }
 
@@ -152,7 +174,45 @@ export interface OspfConfig {
     wildcard: string;
     area: number;
   }>;
+  areaRanges?: Array<{
+    area: number;
+    network: string;
+    mask: string;
+  }>;
   passiveInterfaces: string[];
+}
+
+export interface EigrpConfig {
+  enabled: boolean;
+  asNumber: number;
+  routerId?: string;
+  networks: Array<{
+    network: string;
+    wildcard?: string;
+  }>;
+  passiveInterfaces: string[];
+  autoSummary?: boolean;
+}
+
+export interface BgpNeighbor {
+  ipAddress: string;
+  ip?: string;
+  remoteAs: number;
+  description?: string;
+  updateSource?: string;
+  shutdown?: boolean;
+  state?: 'Idle' | 'Connect' | 'Active' | 'OpenSent' | 'OpenConfirm' | 'Established';
+}
+
+export interface BgpConfig {
+  enabled: boolean;
+  asNumber: number;
+  routerId?: string;
+  neighbors: Map<string, BgpNeighbor>;
+  networks: Array<{
+    network: string;
+    mask?: string;
+  }>;
 }
 
 export interface AclRule {

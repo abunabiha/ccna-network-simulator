@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, VlanInfo, MacTableEntry, RouteEntry, DhcpPool } from '../../types/network';
+import { DevicePosition, VlanInfo, MacTableEntry, RouteEntry, DhcpPool, OspfConfig, EigrpConfig, BgpConfig } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -8,6 +8,9 @@ export class Switch extends Device {
   macTable: MacTableEntry[] = [];
   isLayer3: boolean = false;
   routingTable: RouteEntry[] = [];
+  ospfConfig?: OspfConfig;
+  eigrpConfig?: EigrpConfig;
+  bgpConfig?: BgpConfig;
   spanningTreeMode: 'pvst' | 'rapid-pvst' | 'mst' = 'pvst';
   stpPriorities: Map<number, number> = new Map();
   vtp: { domain: string; mode: 'server' | 'client' | 'transparent' | 'off'; version: number } = { domain: '', mode: 'server', version: 2 };
@@ -322,6 +325,18 @@ export class Switch extends Device {
         }
       }
 
+      if (iface.hsrp) {
+        if (iface.hsrp.version === 2) lines.push(' standby version 2');
+        lines.push(` standby ${iface.hsrp.group} ip ${iface.hsrp.virtualIp}`);
+        if (iface.hsrp.priority && iface.hsrp.priority !== 100) lines.push(` standby ${iface.hsrp.group} priority ${iface.hsrp.priority}`);
+        if (iface.hsrp.preempt) lines.push(` standby ${iface.hsrp.group} preempt`);
+      }
+      if (iface.vrrp) {
+        lines.push(` vrrp ${iface.vrrp.group} ip ${iface.vrrp.virtualIp}`);
+        if (iface.vrrp.priority && iface.vrrp.priority !== 100) lines.push(` vrrp ${iface.vrrp.group} priority ${iface.vrrp.priority}`);
+        if (iface.vrrp.preempt) lines.push(` vrrp ${iface.vrrp.group} preempt`);
+      }
+
       if (iface.cdpEnabled === false) {
         lines.push(' no cdp enable');
       }
@@ -339,6 +354,55 @@ export class Switch extends Device {
       if (entry.type === 'static' || entry.age === '-') {
         lines.push(`arp ${entry.ipAddress} ${entry.macAddress} ARPA`);
       }
+    }
+
+    // OSPF
+    if (this.ospfConfig && this.ospfConfig.enabled) {
+      lines.push(`router ospf ${this.ospfConfig.processId}`);
+      if (this.ospfConfig.routerId) lines.push(` router-id ${this.ospfConfig.routerId}`);
+      for (const net of this.ospfConfig.networks) {
+        lines.push(` network ${net.network} ${net.wildcard} area ${net.area}`);
+      }
+      if (this.ospfConfig.areaRanges) {
+        for (const ar of this.ospfConfig.areaRanges) {
+          lines.push(` area ${ar.area} range ${ar.network} ${ar.mask}`);
+        }
+      }
+      for (const pIf of this.ospfConfig.passiveInterfaces) {
+        lines.push(` passive-interface ${pIf}`);
+      }
+      lines.push('!');
+    }
+
+    // EIGRP
+    if (this.eigrpConfig && this.eigrpConfig.enabled) {
+      lines.push(`router eigrp ${this.eigrpConfig.asNumber}`);
+      if (this.eigrpConfig.routerId) lines.push(` eigrp router-id ${this.eigrpConfig.routerId}`);
+      for (const net of this.eigrpConfig.networks) {
+        lines.push(` network ${net.network}${net.wildcard ? ` ${net.wildcard}` : ''}`);
+      }
+      for (const pIf of this.eigrpConfig.passiveInterfaces) {
+        lines.push(` passive-interface ${pIf}`);
+      }
+      if (this.eigrpConfig.autoSummary === false) lines.push(' no auto-summary');
+      lines.push('!');
+    }
+
+    // BGP
+    if (this.bgpConfig && this.bgpConfig.enabled) {
+      lines.push(`router bgp ${this.bgpConfig.asNumber}`);
+      if (this.bgpConfig.routerId) lines.push(` bgp router-id ${this.bgpConfig.routerId}`);
+      for (const nb of this.bgpConfig.neighbors.values()) {
+        const ip = nb.ipAddress || nb.ip;
+        lines.push(` neighbor ${ip} remote-as ${nb.remoteAs}`);
+        if (nb.updateSource) lines.push(` neighbor ${ip} update-source ${nb.updateSource}`);
+        if (nb.description) lines.push(` neighbor ${ip} description ${nb.description}`);
+        if (nb.shutdown) lines.push(` neighbor ${ip} shutdown`);
+      }
+      for (const net of this.bgpConfig.networks) {
+        lines.push(` network ${net.network}${net.mask ? ` mask ${net.mask}` : ''}`);
+      }
+      lines.push('!');
     }
 
     // Management lines

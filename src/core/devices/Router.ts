@@ -1,11 +1,13 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, OspfConfig, AclRule, DhcpPool, NatRule } from '../../types/network';
+import { DevicePosition, RouteEntry, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
 export class Router extends Device {
   routingTable: RouteEntry[] = [];
   ospfConfig?: OspfConfig;
+  eigrpConfig?: EigrpConfig;
+  bgpConfig?: BgpConfig;
   dhcpPools: Map<string, DhcpPool> = new Map();
   dhcpExcludedAddresses: string[] = [];
   accessLists: Map<number, AclRule[]> = new Map();
@@ -232,6 +234,17 @@ export class Router extends Device {
       } else {
         lines.push(` no ip address`);
       }
+      if (iface.hsrp) {
+        lines.push(` standby ${iface.hsrp.group} ip ${iface.hsrp.virtualIp}`);
+        if (iface.hsrp.priority !== 100) lines.push(` standby ${iface.hsrp.group} priority ${iface.hsrp.priority}`);
+        if (iface.hsrp.preempt) lines.push(` standby ${iface.hsrp.group} preempt`);
+        if (iface.hsrp.version === 2) lines.push(` standby version 2`);
+      }
+      if (iface.vrrp) {
+        lines.push(` vrrp ${iface.vrrp.group} ip ${iface.vrrp.virtualIp}`);
+        if (iface.vrrp.priority !== 100) lines.push(` vrrp ${iface.vrrp.group} priority ${iface.vrrp.priority}`);
+        if (iface.vrrp.preempt) lines.push(` vrrp ${iface.vrrp.group} preempt`);
+      }
       if (iface.natType) {
         lines.push(` ip nat ${iface.natType}`);
       }
@@ -255,8 +268,41 @@ export class Router extends Device {
       for (const net of this.ospfConfig.networks) {
         lines.push(` network ${net.network} ${net.wildcard} area ${net.area}`);
       }
+      if (this.ospfConfig.areaRanges) {
+        for (const ar of this.ospfConfig.areaRanges) {
+          lines.push(` area ${ar.area} range ${ar.network} ${ar.mask}`);
+        }
+      }
       for (const p of this.ospfConfig.passiveInterfaces) {
         lines.push(` passive-interface ${p}`);
+      }
+      lines.push('!');
+    }
+
+    // EIGRP
+    if (this.eigrpConfig && this.eigrpConfig.enabled) {
+      lines.push(`router eigrp ${this.eigrpConfig.asNumber}`);
+      if (this.eigrpConfig.routerId) lines.push(` eigrp router-id ${this.eigrpConfig.routerId}`);
+      for (const net of this.eigrpConfig.networks) {
+        lines.push(` network ${net.network}${net.wildcard ? ' ' + net.wildcard : ''}`);
+      }
+      for (const p of this.eigrpConfig.passiveInterfaces) {
+        lines.push(` passive-interface ${p}`);
+      }
+      lines.push('!');
+    }
+
+    // BGP
+    if (this.bgpConfig && this.bgpConfig.enabled) {
+      lines.push(`router bgp ${this.bgpConfig.asNumber}`);
+      if (this.bgpConfig.routerId) lines.push(` bgp router-id ${this.bgpConfig.routerId}`);
+      for (const n of this.bgpConfig.neighbors.values()) {
+        lines.push(` neighbor ${n.ipAddress} remote-as ${n.remoteAs}`);
+        if (n.updateSource) lines.push(` neighbor ${n.ipAddress} update-source ${n.updateSource}`);
+        if (n.description) lines.push(` neighbor ${n.ipAddress} description ${n.description}`);
+      }
+      for (const net of this.bgpConfig.networks) {
+        lines.push(` network ${net.network}${net.mask ? ' mask ' + net.mask : ''}`);
       }
       lines.push('!');
     }

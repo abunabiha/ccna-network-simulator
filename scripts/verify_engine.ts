@@ -509,7 +509,241 @@ console.log(`VTP domain CCNP-ENTERPRISE verified: ${vtpStatusRes.output.includes
 const dtpShowRes = CliParser.execute('show dtp interface Gi0/1', swAPriv, swA, stpTopologyDevs);
 console.log(`DTP show interface Gi0/1 verified: ${dtpShowRes.output.includes('DTP information for GigabitEthernet0/1') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1 & TAHAP 2 SELESAI DENGAN SUKSES! ===');
+console.log('\n=== [12] CCNP ENCOR/ENARSI TAHAP 3: ADVANCED ROUTING & FHRP (OSPF MULTI-AREA, EIGRP, BGP, HSRP, VRRP) ===');
+
+// 1. OSPF Multi-Area & Summarization
+const rAbr = new Router('R_ABR', 'R-ABR', { x: 300, y: 100 }, 'c8200l-1n-4t');
+const rArea1 = new Router('R_AREA1', 'R-Area1', { x: 100, y: 100 }, 'c8200l-1n-4t');
+const rBb = new Router('R_BB', 'R-Backbone', { x: 500, y: 100 }, 'c8200l-1n-4t');
+
+// Connect R_Area1 Gi0/0/0 <-> R_ABR Gi0/0/0 (Area 1: 10.1.0.0/24)
+rArea1.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '10.1.0.2';
+rArea1.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rArea1.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rArea1.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rArea1.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_ABR';
+rArea1.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/0';
+
+// R_Area1 LAN: Gi0/0/1 (192.168.10.1/24)
+rArea1.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '192.168.10.1';
+rArea1.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rArea1.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+rArea1.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+
+// R_ABR Gi0/0/0 (Area 1: 10.1.0.1/24)
+rAbr.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '10.1.0.1';
+rAbr.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rAbr.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rAbr.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rAbr.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_AREA1';
+rAbr.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/0';
+
+// R_ABR Gi0/0/1 <-> R_BB Gi0/0/0 (Area 0: 10.0.0.1/24 <-> 10.0.0.2/24)
+rAbr.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '10.0.0.1';
+rAbr.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rAbr.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+rAbr.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+rAbr.interfaces.get('GigabitEthernet0/0/1')!.connectedDeviceId = 'R_BB';
+rAbr.interfaces.get('GigabitEthernet0/0/1')!.connectedPort = 'GigabitEthernet0/0/0';
+
+rBb.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '10.0.0.2';
+rBb.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rBb.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rBb.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rBb.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_ABR';
+rBb.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/1';
+
+const ospfDevs = [rAbr, rArea1, rBb];
+
+// Config OSPF R_Area1
+const rArea1Global = { deviceId: 'R_AREA1', mode: 'global-config' as const };
+CliParser.execute('router ospf 1', rArea1Global, rArea1, ospfDevs);
+const rArea1Router = { deviceId: 'R_AREA1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 };
+CliParser.execute('router-id 1.1.1.1', rArea1Router, rArea1, ospfDevs);
+CliParser.execute('network 10.1.0.0 0.0.0.255 area 1', rArea1Router, rArea1, ospfDevs);
+CliParser.execute('network 192.168.10.0 0.0.0.255 area 1', rArea1Router, rArea1, ospfDevs);
+
+// Config OSPF R_ABR
+const rAbrGlobal = { deviceId: 'R_ABR', mode: 'global-config' as const };
+CliParser.execute('router ospf 1', rAbrGlobal, rAbr, ospfDevs);
+const rAbrRouter = { deviceId: 'R_ABR', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 };
+CliParser.execute('router-id 2.2.2.2', rAbrRouter, rAbr, ospfDevs);
+CliParser.execute('network 10.1.0.0 0.0.0.255 area 1', rAbrRouter, rAbr, ospfDevs);
+CliParser.execute('network 10.0.0.0 0.0.0.255 area 0', rAbrRouter, rAbr, ospfDevs);
+CliParser.execute('area 1 range 192.168.10.0 255.255.255.0', rAbrRouter, rAbr, ospfDevs);
+
+// Config OSPF R_BB
+const rBbGlobal = { deviceId: 'R_BB', mode: 'global-config' as const };
+CliParser.execute('router ospf 1', rBbGlobal, rBb, ospfDevs);
+const rBbRouter = { deviceId: 'R_BB', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 };
+CliParser.execute('router-id 3.3.3.3', rBbRouter, rBb, ospfDevs);
+CliParser.execute('network 10.0.0.0 0.0.0.255 area 0', rBbRouter, rBb, ospfDevs);
+
+// Verify OSPF Neighbors
+const rAbrPriv = { deviceId: 'R_ABR', mode: 'priv-exec' as const };
+const ospfNbrRes = CliParser.execute('show ip ospf neighbor', rAbrPriv, rAbr, ospfDevs);
+console.log(`OSPF Neighbors on ABR: ${ospfNbrRes.output.includes('1.1.1.1') && ospfNbrRes.output.includes('3.3.3.3') ? 'PASS' : 'FAIL'}`);
+
+// Verify OSPF Inter-Area Route (O IA) on R_BB
+const rBbPriv = { deviceId: 'R_BB', mode: 'priv-exec' as const };
+const rBbRouteRes = CliParser.execute('show ip route', rBbPriv, rBb, ospfDevs);
+console.log(`OSPF Multi-Area Inter-Area Route (O IA) on Backbone: ${rBbRouteRes.output.includes('O IA') && rBbRouteRes.output.includes('192.168.10.0') ? 'PASS' : 'FAIL'}`);
+
+// 2. EIGRP Testing
+const rE1 = new Router('R_E1', 'R-E1', { x: 100, y: 300 });
+const rE2 = new Router('R_E2', 'R-E2', { x: 300, y: 300 });
+
+// Connect R_E1 Gi0/0 <-> R_E2 Gi0/0 (172.16.1.0/24)
+rE1.interfaces.get('GigabitEthernet0/0')!.ipAddress = '172.16.1.1';
+rE1.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rE1.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rE1.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+rE1.interfaces.get('GigabitEthernet0/0')!.connectedDeviceId = 'R_E2';
+rE1.interfaces.get('GigabitEthernet0/0')!.connectedPort = 'GigabitEthernet0/0';
+
+rE1.interfaces.get('GigabitEthernet0/1')!.ipAddress = '172.16.20.1';
+rE1.interfaces.get('GigabitEthernet0/1')!.subnetMask = '255.255.255.0';
+rE1.interfaces.get('GigabitEthernet0/1')!.isShutdown = false;
+rE1.interfaces.get('GigabitEthernet0/1')!.status = 'up';
+
+rE2.interfaces.get('GigabitEthernet0/0')!.ipAddress = '172.16.1.2';
+rE2.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rE2.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rE2.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+rE2.interfaces.get('GigabitEthernet0/0')!.connectedDeviceId = 'R_E1';
+rE2.interfaces.get('GigabitEthernet0/0')!.connectedPort = 'GigabitEthernet0/0';
+
+const eigrpDevs = [rE1, rE2];
+
+const rE1Global = { deviceId: 'R_E1', mode: 'global-config' as const };
+CliParser.execute('router eigrp 100', rE1Global, rE1, eigrpDevs);
+const rE1Router = { deviceId: 'R_E1', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAsNumber: 100 };
+CliParser.execute('network 172.16.1.0 0.0.0.255', rE1Router, rE1, eigrpDevs);
+CliParser.execute('network 172.16.20.0 0.0.0.255', rE1Router, rE1, eigrpDevs);
+CliParser.execute('no auto-summary', rE1Router, rE1, eigrpDevs);
+
+const rE2Global = { deviceId: 'R_E2', mode: 'global-config' as const };
+CliParser.execute('router eigrp 100', rE2Global, rE2, eigrpDevs);
+const rE2Router = { deviceId: 'R_E2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAsNumber: 100 };
+CliParser.execute('network 172.16.1.0 0.0.0.255', rE2Router, rE2, eigrpDevs);
+CliParser.execute('no auto-summary', rE2Router, rE2, eigrpDevs);
+
+const rE2Priv = { deviceId: 'R_E2', mode: 'priv-exec' as const };
+const eigrpNbrRes = CliParser.execute('show ip eigrp neighbors', rE2Priv, rE2, eigrpDevs);
+console.log(`EIGRP Neighbors on R_E2: ${eigrpNbrRes.output.includes('172.16.1.1') ? 'PASS' : 'FAIL'}`);
+
+const rE2RouteRes = CliParser.execute('show ip route', rE2Priv, rE2, eigrpDevs);
+console.log(`EIGRP Route (D) on R_E2: ${rE2RouteRes.output.includes('D') && rE2RouteRes.output.includes('172.16.20.0') ? 'PASS' : 'FAIL'}`);
+
+// 3. BGP Testing (eBGP AS 65001 <-> AS 65002)
+const rB1 = new Router('R_B1', 'R-B1', { x: 100, y: 500 });
+const rB2 = new Router('R_B2', 'R-B2', { x: 300, y: 500 });
+
+rB1.interfaces.get('GigabitEthernet0/0')!.ipAddress = '198.51.100.1';
+rB1.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rB1.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rB1.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+rB1.interfaces.get('GigabitEthernet0/0')!.connectedDeviceId = 'R_B2';
+rB1.interfaces.get('GigabitEthernet0/0')!.connectedPort = 'GigabitEthernet0/0';
+
+rB2.interfaces.get('GigabitEthernet0/0')!.ipAddress = '198.51.100.2';
+rB2.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rB2.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rB2.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+rB2.interfaces.get('GigabitEthernet0/0')!.connectedDeviceId = 'R_B1';
+rB2.interfaces.get('GigabitEthernet0/0')!.connectedPort = 'GigabitEthernet0/0';
+
+const bgpDevs = [rB1, rB2];
+
+const rB1Global = { deviceId: 'R_B1', mode: 'global-config' as const };
+CliParser.execute('router bgp 65001', rB1Global, rB1, bgpDevs);
+const rB1Router = { deviceId: 'R_B1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65001 };
+CliParser.execute('neighbor 198.51.100.2 remote-as 65002', rB1Router, rB1, bgpDevs);
+CliParser.execute('network 203.0.113.0 mask 255.255.255.0', rB1Router, rB1, bgpDevs);
+
+const rB2Global = { deviceId: 'R_B2', mode: 'global-config' as const };
+CliParser.execute('router bgp 65002', rB2Global, rB2, bgpDevs);
+const rB2Router = { deviceId: 'R_B2', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65002 };
+CliParser.execute('neighbor 198.51.100.1 remote-as 65001', rB2Router, rB2, bgpDevs);
+
+const rB2Priv = { deviceId: 'R_B2', mode: 'priv-exec' as const };
+const bgpSumRes = CliParser.execute('show ip bgp summary', rB2Priv, rB2, bgpDevs);
+console.log(`BGP Summary on R_B2: ${bgpSumRes.output.includes('198.51.100.1') ? 'PASS' : 'FAIL'}`);
+
+const rB2RouteRes = CliParser.execute('show ip route', rB2Priv, rB2, bgpDevs);
+console.log(`BGP Route (B) on R_B2: ${rB2RouteRes.output.includes('B') && rB2RouteRes.output.includes('203.0.113.0') ? 'PASS' : 'FAIL'}`);
+
+// 4. HSRP Testing (Hot Standby Router Protocol)
+const rH1 = new Router('R_H1', 'R-H1', { x: 100, y: 700 });
+const rH2 = new Router('R_H2', 'R-H2', { x: 300, y: 700 });
+const pcHsrp = new Host('PC_HSRP', 'PC-HSRP', 'pc', { x: 200, y: 850 });
+
+rH1.interfaces.get('GigabitEthernet0/0')!.ipAddress = '192.168.100.1';
+rH1.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rH1.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rH1.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+
+rH2.interfaces.get('GigabitEthernet0/0')!.ipAddress = '192.168.100.2';
+rH2.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rH2.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rH2.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+
+pcHsrp.ipAddress = '192.168.100.50';
+pcHsrp.subnetMask = '255.255.255.0';
+pcHsrp.defaultGateway = '192.168.100.254'; // HSRP Virtual IP
+pcHsrp.interfaces.get('FastEthernet0')!.connectedDeviceId = 'R_H1';
+pcHsrp.interfaces.get('FastEthernet0')!.connectedPort = 'GigabitEthernet0/0';
+
+const hsrpDevs = [rH1, rH2, pcHsrp];
+
+// Configure HSRP on R_H1 (Active router: priority 110, preempt, version 2)
+const rH1IfCtx = { deviceId: 'R_H1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0' };
+CliParser.execute('standby version 2', rH1IfCtx, rH1, hsrpDevs);
+CliParser.execute('standby 1 ip 192.168.100.254', rH1IfCtx, rH1, hsrpDevs);
+CliParser.execute('standby 1 priority 110', rH1IfCtx, rH1, hsrpDevs);
+CliParser.execute('standby 1 preempt', rH1IfCtx, rH1, hsrpDevs);
+
+// Configure HSRP on R_H2 (Standby router: default priority 100, version 2)
+const rH2IfCtx = { deviceId: 'R_H2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0' };
+CliParser.execute('standby version 2', rH2IfCtx, rH2, hsrpDevs);
+CliParser.execute('standby 1 ip 192.168.100.254', rH2IfCtx, rH2, hsrpDevs);
+
+const rH1Priv = { deviceId: 'R_H1', mode: 'priv-exec' as const };
+const hsrpShowRes = CliParser.execute('show standby brief', rH1Priv, rH1, hsrpDevs);
+console.log(`HSRP R_H1 Active state: ${hsrpShowRes.output.includes('Active') && hsrpShowRes.output.includes('192.168.100.254') ? 'PASS' : 'FAIL'}`);
+
+// Test PC Reachability via HSRP Virtual Gateway
+const hsrpPingRes = pcHsrp.executeCli('ping 192.168.100.254', { deviceId: 'PC_HSRP', mode: 'user-exec' as const }, hsrpDevs);
+console.log(`PC Ping to HSRP VIP 192.168.100.254: ${hsrpPingRes.output.includes('Reply from 192.168.100.254') ? 'PASS' : 'FAIL'}`);
+
+// 5. VRRP Testing (Virtual Router Redundancy Protocol)
+const rV1 = new Router('R_V1', 'R-V1', { x: 500, y: 700 });
+const rV2 = new Router('R_V2', 'R-V2', { x: 700, y: 700 });
+
+rV1.interfaces.get('GigabitEthernet0/0')!.ipAddress = '192.168.200.1';
+rV1.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rV1.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rV1.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+
+rV2.interfaces.get('GigabitEthernet0/0')!.ipAddress = '192.168.200.2';
+rV2.interfaces.get('GigabitEthernet0/0')!.subnetMask = '255.255.255.0';
+rV2.interfaces.get('GigabitEthernet0/0')!.isShutdown = false;
+rV2.interfaces.get('GigabitEthernet0/0')!.status = 'up';
+
+const vrrpDevs = [rV1, rV2];
+
+const rV1IfCtx = { deviceId: 'R_V1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0' };
+CliParser.execute('vrrp 10 ip 192.168.200.254', rV1IfCtx, rV1, vrrpDevs);
+CliParser.execute('vrrp 10 priority 120', rV1IfCtx, rV1, vrrpDevs);
+
+const rV2IfCtx = { deviceId: 'R_V2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0' };
+CliParser.execute('vrrp 10 ip 192.168.200.254', rV2IfCtx, rV2, vrrpDevs);
+
+const rV1Priv = { deviceId: 'R_V1', mode: 'priv-exec' as const };
+const vrrpShowRes = CliParser.execute('show vrrp brief', rV1Priv, rV1, vrrpDevs);
+console.log(`VRRP R_V1 Master state: ${vrrpShowRes.output.includes('Master') && vrrpShowRes.output.includes('192.168.200.254') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, & 3 SELESAI DENGAN SUKSES! ===');
 
 
 

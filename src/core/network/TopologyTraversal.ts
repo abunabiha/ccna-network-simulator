@@ -13,6 +13,8 @@ import { Switch } from '../devices/Switch';
 import { Host } from '../devices/Host';
 import { SubnetUtils } from './Subnet';
 import { DhcpPool } from '../../types/network';
+import { RoutingProtocolEngine } from './RoutingProtocolEngine';
+import { FhrpEngine } from './FhrpEngine';
 
 export interface L2Endpoint {
   device: Device;
@@ -298,6 +300,10 @@ export class TopologyTraversal {
     destIp: string,
     allDevices: Device[]
   ): ReachabilityResult {
+    // 0. Converge dynamic routing protocols and FHRP state
+    RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+    FhrpEngine.convergeFhrp(allDevices);
+
     // 1. Validasi IP lokal pengirim
     if (!sourceHost.ipAddress || sourceHost.ipAddress === '0.0.0.0' || sourceHost.ipAddress.startsWith('169.254.')) {
       return {
@@ -337,23 +343,28 @@ export class TopologyTraversal {
           return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [destIp] };
         }
         for (const ifc of ep.device.interfaces.values()) {
-          if (ifc.ipAddress === destIp && !ifc.isShutdown && ifc.status === 'up') {
-            const sourceMac = sourceHost.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6801';
-            sourceHost.addArpEntry({
-              ipAddress: destIp,
-              macAddress: ifc.macAddress,
-              interfaceName: 'FastEthernet0',
-              type: 'dynamic',
-              age: 0
-            });
-            ep.device.addArpEntry({
-              ipAddress: sourceHost.ipAddress,
-              macAddress: sourceMac,
-              interfaceName: ifc.name,
-              type: 'ARPA',
-              age: 0
-            });
-            return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [destIp] };
+          if (!ifc.isShutdown && ifc.status === 'up') {
+            const isHsrpActive = ifc.hsrp?.virtualIp === destIp && ifc.hsrp.state === 'Active';
+            const isVrrpMaster = ifc.vrrp?.virtualIp === destIp && ifc.vrrp.state === 'Master';
+            if (ifc.ipAddress === destIp || isHsrpActive || isVrrpMaster) {
+              const targetMac = (isHsrpActive && ifc.hsrp?.virtualMac) || (isVrrpMaster && ifc.vrrp?.virtualMac) || ifc.macAddress;
+              const sourceMac = sourceHost.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6801';
+              sourceHost.addArpEntry({
+                ipAddress: destIp,
+                macAddress: targetMac,
+                interfaceName: 'FastEthernet0',
+                type: 'dynamic',
+                age: 0
+              });
+              ep.device.addArpEntry({
+                ipAddress: sourceHost.ipAddress,
+                macAddress: sourceMac,
+                interfaceName: ifc.name,
+                type: 'ARPA',
+                age: 0
+              });
+              return { isReachable: true, icmpType: 'reply', respondingIp: destIp, hops: [destIp] };
+            }
           }
         }
       }
@@ -398,6 +409,17 @@ export class TopologyTraversal {
       }
     }
 
+    // Jika tidak ditemukan secara fisik, periksa FHRP Virtual Gateway (HSRP / VRRP)
+    if (!gatewayEndpoint) {
+      const fhrpRes = FhrpEngine.resolveVirtualGateway(sourceHost.defaultGateway, allDevices);
+      if (fhrpRes) {
+        gatewayEndpoint = {
+          device: fhrpRes.activeDevice,
+          interfaceName: fhrpRes.activeInterface.name
+        };
+      }
+    }
+
     if (!gatewayEndpoint) {
       return {
         isReachable: false,
@@ -409,7 +431,17 @@ export class TopologyTraversal {
     // Dynamic ARP learning between sourceHost and default gateway router/switch
     const gwIface = gatewayEndpoint.device.getInterface(gatewayEndpoint.interfaceName) ||
       Array.from(gatewayEndpoint.device.interfaces.values()).find(i => i.ipAddress === sourceHost.defaultGateway);
-    const gwMac = gwIface?.macAddress || '0001.96a1.0001';
+    let gwMac = gwIface?.macAddress || '0001.96a1.0001';
+
+    // Periksa apakah gateway menggunakan FHRP virtual MAC
+    if (gwIface?.hsrp && gwIface.hsrp.virtualIp === sourceHost.defaultGateway) {
+      gwMac = gwIface.hsrp.virtualMac || (gwIface.hsrp.version === 2
+        ? `0000.0c9f.f${gwIface.hsrp.group.toString(16).padStart(3, '0')}`
+        : `0000.0c07.ac${gwIface.hsrp.group.toString(16).padStart(2, '0')}`);
+    } else if (gwIface?.vrrp && gwIface.vrrp.virtualIp === sourceHost.defaultGateway) {
+      gwMac = gwIface.vrrp.virtualMac || `0000.5e00.01${gwIface.vrrp.group.toString(16).padStart(2, '0')}`;
+    }
+
     const sourceMac = sourceHost.interfaces.get('FastEthernet0')?.macAddress || '0050.7966.6801';
 
     sourceHost.addArpEntry({

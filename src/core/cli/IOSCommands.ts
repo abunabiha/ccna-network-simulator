@@ -8,6 +8,8 @@ import { CliLexer } from './Lexer';
 import { SubnetUtils } from '../network/Subnet';
 import { SpanningTreeEngine } from '../network/SpanningTreeEngine';
 import { EtherChannelEngine } from '../network/EtherChannelEngine';
+import { RoutingProtocolEngine } from '../network/RoutingProtocolEngine';
+import { FhrpEngine } from '../network/FhrpEngine';
 
 export class IOSCommands {
   /**
@@ -25,6 +27,8 @@ export class IOSCommands {
           { command: 'show', description: 'Show running system information' },
           { command: 'show ip arp', description: 'IP ARP table' },
           { command: 'show arp', description: 'ARP table' },
+          { command: 'show standby', description: 'HSRP status and configuration' },
+          { command: 'show vrrp', description: 'VRRP status and configuration' },
           { command: 'exit', description: 'Exit from the EXEC' }
         );
         break;
@@ -40,6 +44,13 @@ export class IOSCommands {
           { command: 'show mac address-table', description: 'MAC forwarding table' },
           { command: 'show interfaces trunk', description: 'Trunking interfaces' },
           { command: 'show ip ospf neighbor', description: 'OSPF neighbor information' },
+          { command: 'show ip ospf database', description: 'OSPF database summary' },
+          { command: 'show ip eigrp neighbors', description: 'EIGRP neighbor information' },
+          { command: 'show ip bgp summary', description: 'BGP neighbor status' },
+          { command: 'show standby', description: 'HSRP status and configuration' },
+          { command: 'show standby brief', description: 'HSRP summary status' },
+          { command: 'show vrrp', description: 'VRRP status and configuration' },
+          { command: 'show vrrp brief', description: 'VRRP summary status' },
           { command: 'show ip nat translations', description: 'NAT translation table' },
           { command: 'show access-lists', description: 'List access lists' },
           { command: 'show port-security', description: 'Show port security status' },
@@ -83,6 +94,8 @@ export class IOSCommands {
           { command: 'cdp timer', description: 'Specify the rate at which CDP packets are sent' },
           { command: 'cdp holdtime', description: 'Specify the holdtime value to be sent in packets' },
           { command: 'router ospf', description: 'Enable OSPF routing protocol' },
+          { command: 'router eigrp', description: 'Enable EIGRP routing protocol' },
+          { command: 'router bgp', description: 'Enable BGP routing protocol' },
           { command: 'ip dhcp pool', description: 'Configure DHCP server pool' },
           { command: 'ip dhcp excluded-address', description: 'Prevent IP addresses from being assigned' },
           { command: 'ip default-gateway', description: 'Specify default gateway' },
@@ -111,6 +124,9 @@ export class IOSCommands {
           { command: 'shutdown', description: 'Shut down interface' },
           { command: 'cdp enable', description: 'Enable CDP on interface' },
           { command: 'no cdp enable', description: 'Disable CDP on interface' },
+          { command: 'standby', description: 'HSRP interface configuration commands' },
+          { command: 'standby version', description: 'HSRP version' },
+          { command: 'vrrp', description: 'VRRP interface configuration commands' },
           { command: 'description', description: 'Interface specific description' },
           { command: 'duplex', description: 'Configure duplex operation' },
           { command: 'speed', description: 'Configure speed operation' },
@@ -162,8 +178,11 @@ export class IOSCommands {
       case 'router-config':
         list.push(
           { command: 'network', description: 'Enable routing on an IP network' },
-          { command: 'router-id', description: 'Set OSPF router identifier' },
+          { command: 'neighbor', description: 'Specify a neighbor router (BGP)' },
+          { command: 'area', description: 'OSPF area parameters (range, etc.)' },
+          { command: 'router-id', description: 'Set router identifier' },
           { command: 'passive-interface', description: 'Suppress routing updates on an interface' },
+          { command: 'no auto-summary', description: 'Disable automatic network number summarization' },
           { command: 'exit', description: 'Exit from router configuration mode' },
           { command: 'end', description: 'Exit to privileged EXEC mode' }
         );
@@ -296,6 +315,31 @@ export class IOSCommands {
       if ('vtp'.startsWith(cmd1) && device instanceof Switch) {
         return this.handleShowVtp(tokens, device);
       }
+      if ('standby'.startsWith(cmd1)) {
+        FhrpEngine.convergeFhrp(allDevices);
+        const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
+        return { output: FhrpEngine.renderShowStandby(device, isBrief) };
+      }
+      if ('vrrp'.startsWith(cmd1)) {
+        FhrpEngine.convergeFhrp(allDevices);
+        const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
+        return { output: FhrpEngine.renderShowVrrp(device, isBrief) };
+      }
+      if ('ip'.startsWith(cmd1) && tokens.length > 2) {
+        const cmd2 = tokens[2].toLowerCase();
+        if ('ospf'.startsWith(cmd2)) {
+          RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+          return { output: RoutingProtocolEngine.renderShowIpOspfNeighbor(device, allDevices) };
+        }
+        if ('eigrp'.startsWith(cmd2)) {
+          RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+          return { output: RoutingProtocolEngine.renderShowIpEigrpNeighbors(device, allDevices) };
+        }
+        if ('bgp'.startsWith(cmd2)) {
+          RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+          return { output: RoutingProtocolEngine.renderShowIpBgpSummary(device, allDevices) };
+        }
+      }
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -398,14 +442,40 @@ export class IOSCommands {
 
         // show ip route
         if ('route'.startsWith(cmd2)) {
-          return { output: this.renderIpRoute(device) };
+          return { output: this.renderIpRoute(device, allDevices) };
         }
 
-        // show ip ospf neighbor
+        // show ip ospf ...
         if ('ospf'.startsWith(cmd2)) {
+          RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
           if (tokens.length >= 4 && 'neighbor'.startsWith(tokens[3].toLowerCase())) {
-            return { output: this.renderOspfNeighbors(device, allDevices) };
+            return { output: RoutingProtocolEngine.renderShowIpOspfNeighbor(device, allDevices) };
           }
+          if (tokens.length >= 4 && 'database'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpOspfDatabase(device, allDevices) };
+          }
+          return { output: RoutingProtocolEngine.renderShowIpOspf(device, allDevices) };
+        }
+
+        // show ip eigrp ...
+        if ('eigrp'.startsWith(cmd2)) {
+          RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+          if (tokens.length >= 4 && 'neighbors'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpEigrpNeighbors(device, allDevices) };
+          }
+          if (tokens.length >= 4 && 'topology'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpEigrpTopology(device, allDevices) };
+          }
+          return { output: RoutingProtocolEngine.renderShowIpEigrpNeighbors(device, allDevices) };
+        }
+
+        // show ip bgp ...
+        if ('bgp'.startsWith(cmd2)) {
+          RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+          if (tokens.length >= 4 && 'summary'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpBgpSummary(device, allDevices) };
+          }
+          return { output: RoutingProtocolEngine.renderShowIpBgp(device, allDevices) };
         }
 
         // show ip nat translations
@@ -493,6 +563,20 @@ export class IOSCommands {
       // show dtp ...
       if ('dtp'.startsWith(cmd1) && device instanceof Switch) {
         return this.handleShowDtp(tokens, device);
+      }
+
+      // show standby ...
+      if ('standby'.startsWith(cmd1)) {
+        FhrpEngine.convergeFhrp(allDevices);
+        const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
+        return { output: FhrpEngine.renderShowStandby(device, isBrief) };
+      }
+
+      // show vrrp ...
+      if ('vrrp'.startsWith(cmd1)) {
+        FhrpEngine.convergeFhrp(allDevices);
+        const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
+        return { output: FhrpEngine.renderShowVrrp(device, isBrief) };
       }
     }
 
@@ -645,7 +729,7 @@ export class IOSCommands {
         const pid = parseInt(tokens[2], 10);
         if (isNaN(pid) || pid < 1 || pid > 65535) return { output: `% Invalid process ID.` };
 
-        const target = device as Router;
+        const target = device as Router | Switch;
         if (!target.ospfConfig) {
           target.ospfConfig = {
             enabled: true,
@@ -660,8 +744,90 @@ export class IOSCommands {
         return {
           output: '',
           newMode: 'router-config',
-          contextUpdates: { targetRoutingProcess: `ospf-${pid}` }
+          contextUpdates: {
+            targetRoutingProcess: `ospf-${pid}`,
+            targetRoutingProtocol: 'ospf',
+            targetProcessId: pid
+          }
         };
+      }
+    }
+
+    // router eigrp <as>
+    if ('router'.startsWith(cmd0) && tokens.length >= 3 && 'eigrp'.startsWith(tokens[1].toLowerCase())) {
+      if (device instanceof Router || (device instanceof Switch && device.isLayer3)) {
+        const as = parseInt(tokens[2], 10);
+        if (isNaN(as) || as < 1 || as > 65535) return { output: `% Invalid AS number.` };
+
+        const target = device as Router | Switch;
+        if (!target.eigrpConfig) {
+          target.eigrpConfig = {
+            enabled: true,
+            asNumber: as,
+            networks: [],
+            passiveInterfaces: []
+          };
+        } else {
+          target.eigrpConfig.enabled = true;
+          target.eigrpConfig.asNumber = as;
+        }
+        return {
+          output: '',
+          newMode: 'router-config',
+          contextUpdates: {
+            targetRoutingProcess: `eigrp-${as}`,
+            targetRoutingProtocol: 'eigrp',
+            targetAsNumber: as
+          }
+        };
+      }
+    }
+
+    // router bgp <as>
+    if ('router'.startsWith(cmd0) && tokens.length >= 3 && 'bgp'.startsWith(tokens[1].toLowerCase())) {
+      if (device instanceof Router || (device instanceof Switch && device.isLayer3)) {
+        const as = parseInt(tokens[2], 10);
+        if (isNaN(as) || as < 1 || as > 65535) return { output: `% Invalid AS number.` };
+
+        const target = device as Router | Switch;
+        if (!target.bgpConfig) {
+          target.bgpConfig = {
+            enabled: true,
+            asNumber: as,
+            neighbors: new Map(),
+            networks: []
+          };
+        } else {
+          target.bgpConfig.enabled = true;
+          target.bgpConfig.asNumber = as;
+        }
+        return {
+          output: '',
+          newMode: 'router-config',
+          contextUpdates: {
+            targetRoutingProcess: `bgp-${as}`,
+            targetRoutingProtocol: 'bgp',
+            targetAsNumber: as
+          }
+        };
+      }
+    }
+
+    // no router ospf / eigrp / bgp
+    if (cmd0 === 'no' && tokens.length >= 3 && 'router'.startsWith(tokens[1].toLowerCase())) {
+      const proto = tokens[2].toLowerCase();
+      const target = device as Router | Switch;
+      if ('ospf'.startsWith(proto)) {
+        target.ospfConfig = undefined;
+        return { output: '' };
+      }
+      if ('eigrp'.startsWith(proto)) {
+        target.eigrpConfig = undefined;
+        return { output: '' };
+      }
+      if ('bgp'.startsWith(proto)) {
+        target.bgpConfig = undefined;
+        return { output: '' };
       }
     }
 
@@ -1299,6 +1465,145 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // ===================== FHRP: HSRP (HOT STANDBY ROUTER PROTOCOL) =====================
+    // standby version <1 | 2>
+    if ('standby'.startsWith(cmd0) && tokens.length >= 3 && 'version'.startsWith(tokens[1].toLowerCase())) {
+      const v = parseInt(tokens[2], 10);
+      if (v === 1 || v === 2) {
+        if (!iface.hsrp) {
+          iface.hsrp = { group: 1, virtualIp: '', priority: 100, preempt: false, version: v as (1 | 2), state: 'Init' };
+        } else {
+          iface.hsrp.version = v as (1 | 2);
+        }
+        return { output: '' };
+      }
+      return { output: `% Invalid HSRP version. Supported: 1, 2` };
+    }
+
+    // standby <group> ip <vip>
+    if ('standby'.startsWith(cmd0) && tokens.length >= 4 && 'ip'.startsWith(tokens[2].toLowerCase())) {
+      const grp = parseInt(tokens[1], 10);
+      const vip = tokens[3];
+      if (isNaN(grp) || grp < 0 || grp > 4095) return { output: `% Invalid group number.` };
+      if (!SubnetUtils.isValidIpv4(vip)) return { output: `% Invalid IP address: ${vip}` };
+
+      if (!iface.hsrp) {
+        iface.hsrp = { group: grp, virtualIp: vip, priority: 100, preempt: false, version: 1, state: 'Init' };
+      } else {
+        iface.hsrp.group = grp;
+        iface.hsrp.virtualIp = vip;
+      }
+      return { output: '' };
+    }
+
+    // standby <group> priority <prio>
+    if ('standby'.startsWith(cmd0) && tokens.length >= 4 && 'priority'.startsWith(tokens[2].toLowerCase())) {
+      const grp = parseInt(tokens[1], 10);
+      const prio = parseInt(tokens[3], 10);
+      if (isNaN(prio) || prio < 1 || prio > 255) return { output: `% Invalid priority (1-255).` };
+      if (!iface.hsrp) {
+        iface.hsrp = { group: isNaN(grp) ? 1 : grp, virtualIp: '', priority: prio, preempt: false, version: 1, state: 'Init' };
+      } else {
+        iface.hsrp.priority = prio;
+      }
+      return { output: '' };
+    }
+
+    // standby <group> preempt
+    if ('standby'.startsWith(cmd0) && tokens.length >= 3 && 'preempt'.startsWith(tokens[2].toLowerCase())) {
+      const grp = parseInt(tokens[1], 10);
+      if (!iface.hsrp) {
+        iface.hsrp = { group: isNaN(grp) ? 1 : grp, virtualIp: '', priority: 100, preempt: true, version: 1, state: 'Init' };
+      } else {
+        iface.hsrp.preempt = true;
+      }
+      return { output: '' };
+    }
+
+    // no standby <group> preempt
+    if (cmd0 === 'no' && tokens.length >= 4 && 'standby'.startsWith(tokens[1].toLowerCase()) && 'preempt'.startsWith(tokens[3].toLowerCase())) {
+      if (iface.hsrp) iface.hsrp.preempt = false;
+      return { output: '' };
+    }
+
+    // standby <group> timers [msec] <hello> [msec] <hold>
+    if ('standby'.startsWith(cmd0) && tokens.length >= 4 && 'timers'.startsWith(tokens[2].toLowerCase())) {
+      const hello = parseInt(tokens[3], 10);
+      const hold = parseInt(tokens[4] || `${hello * 3}`, 10);
+      if (iface.hsrp) {
+        iface.hsrp.timers = { hello: isNaN(hello) ? 3 : hello, hold: isNaN(hold) ? 10 : hold };
+      }
+      return { output: '' };
+    }
+
+    // no standby <group> ...
+    if (cmd0 === 'no' && tokens.length >= 3 && 'standby'.startsWith(tokens[1].toLowerCase())) {
+      iface.hsrp = undefined;
+      return { output: '' };
+    }
+
+    // ===================== FHRP: VRRP (VIRTUAL ROUTER REDUNDANCY PROTOCOL) =====================
+    // vrrp <group> ip <vip>
+    if ('vrrp'.startsWith(cmd0) && tokens.length >= 4 && 'ip'.startsWith(tokens[2].toLowerCase())) {
+      const grp = parseInt(tokens[1], 10);
+      const vip = tokens[3];
+      if (isNaN(grp) || grp < 1 || grp > 255) return { output: `% Invalid VRRP group number (1-255).` };
+      if (!SubnetUtils.isValidIpv4(vip)) return { output: `% Invalid IP address: ${vip}` };
+
+      if (!iface.vrrp) {
+        iface.vrrp = { group: grp, virtualIp: vip, priority: 100, preempt: true, version: 3, state: 'Initialize' };
+      } else {
+        iface.vrrp.group = grp;
+        iface.vrrp.virtualIp = vip;
+      }
+      return { output: '' };
+    }
+
+    // vrrp <group> priority <prio>
+    if ('vrrp'.startsWith(cmd0) && tokens.length >= 4 && 'priority'.startsWith(tokens[2].toLowerCase())) {
+      const grp = parseInt(tokens[1], 10);
+      const prio = parseInt(tokens[3], 10);
+      if (isNaN(prio) || prio < 1 || prio > 254) return { output: `% Invalid priority (1-254).` };
+      if (!iface.vrrp) {
+        iface.vrrp = { group: isNaN(grp) ? 1 : grp, virtualIp: '', priority: prio, preempt: true, version: 3, state: 'Initialize' };
+      } else {
+        iface.vrrp.priority = prio;
+      }
+      return { output: '' };
+    }
+
+    // vrrp <group> preempt
+    if ('vrrp'.startsWith(cmd0) && tokens.length >= 3 && 'preempt'.startsWith(tokens[2].toLowerCase())) {
+      const grp = parseInt(tokens[1], 10);
+      if (!iface.vrrp) {
+        iface.vrrp = { group: isNaN(grp) ? 1 : grp, virtualIp: '', priority: 100, preempt: true, version: 3, state: 'Initialize' };
+      } else {
+        iface.vrrp.preempt = true;
+      }
+      return { output: '' };
+    }
+
+    // no vrrp <group> preempt
+    if (cmd0 === 'no' && tokens.length >= 4 && 'vrrp'.startsWith(tokens[1].toLowerCase()) && 'preempt'.startsWith(tokens[3].toLowerCase())) {
+      if (iface.vrrp) iface.vrrp.preempt = false;
+      return { output: '' };
+    }
+
+    // vrrp <group> timers advertise <val>
+    if ('vrrp'.startsWith(cmd0) && tokens.length >= 5 && 'timers'.startsWith(tokens[2].toLowerCase()) && 'advertise'.startsWith(tokens[3].toLowerCase())) {
+      const adv = parseInt(tokens[4], 10);
+      if (iface.vrrp && !isNaN(adv)) {
+        iface.vrrp.advertisementInterval = adv;
+      }
+      return { output: '' };
+    }
+
+    // no vrrp <group> ...
+    if (cmd0 === 'no' && tokens.length >= 3 && 'vrrp'.startsWith(tokens[1].toLowerCase())) {
+      iface.vrrp = undefined;
+      return { output: '' };
+    }
+
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
@@ -1321,42 +1626,189 @@ export class IOSCommands {
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
-  // ===================== ROUTER OSPF CONFIG MODE =====================
+  // ===================== ROUTER CONFIG MODE (OSPF, EIGRP, BGP) =====================
   private static execRouterConfigMode(
     tokens: string[],
     _context: CliContext,
     device: Device
   ): CliExecutionResult {
     const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
 
-    // network <ip> <wildcard> area <area-id>
+    let proto = _context.targetRoutingProtocol;
+    if (!proto && _context.targetRoutingProcess) {
+      if (_context.targetRoutingProcess.startsWith('ospf')) proto = 'ospf';
+      else if (_context.targetRoutingProcess.startsWith('eigrp')) proto = 'eigrp';
+      else if (_context.targetRoutingProcess.startsWith('bgp')) proto = 'bgp';
+    }
+
+    // OSPF area range: area <area> range <network> <mask>
+    if ('area'.startsWith(cmd0) && tokens.length >= 5 && 'range'.startsWith(tokens[2].toLowerCase())) {
+      const area = parseInt(tokens[1], 10);
+      const net = tokens[3];
+      const mask = tokens[4];
+      if (target.ospfConfig) {
+        if (!target.ospfConfig.areaRanges) target.ospfConfig.areaRanges = [];
+        target.ospfConfig.areaRanges.push({ area, network: net, mask });
+        return { output: '' };
+      }
+    }
+
+    // OSPF network: network <ip> <wildcard> area <area-id>
     if ('network'.startsWith(cmd0) && tokens.length >= 5 && 'area'.startsWith(tokens[3].toLowerCase())) {
       const net = tokens[1];
       const wc = tokens[2];
       const area = parseInt(tokens[4], 10);
 
-      const target = device as Router;
       if (target.ospfConfig) {
         target.ospfConfig.networks.push({ network: net, wildcard: wc, area });
         return { output: '' };
       }
     }
 
-    // router-id <id>
-    if ('router-id'.startsWith(cmd0) && tokens.length > 1) {
-      const target = device as Router;
-      if (target.ospfConfig) {
-        target.ospfConfig.routerId = tokens[1];
+    // EIGRP network: network <ip> [wildcard]
+    if ('network'.startsWith(cmd0) && (proto === 'eigrp' || (!tokens.includes('area') && !tokens.includes('mask') && target.eigrpConfig && !target.ospfConfig && !target.bgpConfig))) {
+      const net = tokens[1];
+      const wc = tokens.length > 2 ? tokens[2] : undefined;
+      if (target.eigrpConfig) {
+        target.eigrpConfig.networks.push({ network: net, wildcard: wc });
         return { output: '' };
       }
+    }
+
+    // BGP network: network <ip> [mask <mask>]
+    if ('network'.startsWith(cmd0) && proto === 'bgp') {
+      const net = tokens[1];
+      let mask = '255.255.255.0';
+      if (tokens.length >= 4 && 'mask'.startsWith(tokens[2].toLowerCase())) {
+        mask = tokens[3];
+      }
+      if (target.bgpConfig) {
+        target.bgpConfig.networks.push({ network: net, mask });
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor: neighbor <ip> remote-as <as>
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'remote-as'.startsWith(tokens[2].toLowerCase())) {
+      const ip = tokens[1];
+      const as = parseInt(tokens[3], 10);
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(ip);
+        if (!nb) {
+          nb = { ipAddress: ip, ip, remoteAs: as };
+          target.bgpConfig.neighbors.set(ip, nb);
+        } else {
+          nb.remoteAs = as;
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor update-source: neighbor <ip> update-source <iface>
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'update-source'.startsWith(tokens[2].toLowerCase())) {
+      const ip = tokens[1];
+      const ifaceNorm = CliLexer.normalizeInterfaceName(tokens[3]);
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(ip);
+        if (!nb) {
+          nb = { ipAddress: ip, ip, remoteAs: target.bgpConfig.asNumber, updateSource: ifaceNorm };
+          target.bgpConfig.neighbors.set(ip, nb);
+        } else {
+          nb.updateSource = ifaceNorm;
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor description: neighbor <ip> description <desc>
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'description'.startsWith(tokens[2].toLowerCase())) {
+      const ip = tokens[1];
+      const desc = tokens.slice(3).join(' ');
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(ip);
+        if (!nb) {
+          nb = { ipAddress: ip, ip, remoteAs: target.bgpConfig.asNumber, description: desc };
+          target.bgpConfig.neighbors.set(ip, nb);
+        } else {
+          nb.description = desc;
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor shutdown: neighbor <ip> shutdown
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'shutdown'.startsWith(tokens[2].toLowerCase())) {
+      const ip = tokens[1];
+      if (target.bgpConfig) {
+        const nb = target.bgpConfig.neighbors.get(ip);
+        if (nb) nb.shutdown = true;
+        return { output: '' };
+      }
+    }
+
+    // BGP no neighbor <ip> shutdown
+    if (cmd0 === 'no' && tokens.length >= 4 && 'neighbor'.startsWith(tokens[1].toLowerCase()) && 'shutdown'.startsWith(tokens[3].toLowerCase())) {
+      const ip = tokens[2];
+      if (target.bgpConfig) {
+        const nb = target.bgpConfig.neighbors.get(ip);
+        if (nb) nb.shutdown = false;
+        return { output: '' };
+      }
+    }
+
+    // EIGRP router-id: eigrp router-id <id>
+    if ('eigrp'.startsWith(cmd0) && tokens.length >= 3 && 'router-id'.startsWith(tokens[1].toLowerCase())) {
+      if (target.eigrpConfig) {
+        target.eigrpConfig.routerId = tokens[2];
+        return { output: '' };
+      }
+    }
+
+    // BGP router-id: bgp router-id <id>
+    if ('bgp'.startsWith(cmd0) && tokens.length >= 3 && 'router-id'.startsWith(tokens[1].toLowerCase())) {
+      if (target.bgpConfig) {
+        target.bgpConfig.routerId = tokens[2];
+        return { output: '' };
+      }
+    }
+
+    // router-id <id>
+    if ('router-id'.startsWith(cmd0) && tokens.length > 1) {
+      const rid = tokens[1];
+      if (proto === 'eigrp' && target.eigrpConfig) {
+        target.eigrpConfig.routerId = rid;
+      } else if (proto === 'bgp' && target.bgpConfig) {
+        target.bgpConfig.routerId = rid;
+      } else if (target.ospfConfig) {
+        target.ospfConfig.routerId = rid;
+      }
+      return { output: '' };
     }
 
     // passive-interface <interface>
     if ('passive-interface'.startsWith(cmd0) && tokens.length > 1) {
       const norm = CliLexer.normalizeInterfaceName(tokens[1]);
-      const target = device as Router;
-      if (target.ospfConfig) {
+      if (proto === 'eigrp' && target.eigrpConfig) {
+        target.eigrpConfig.passiveInterfaces.push(norm);
+      } else if (target.ospfConfig) {
         target.ospfConfig.passiveInterfaces.push(norm);
+      }
+      return { output: '' };
+    }
+
+    // no auto-summary
+    if (cmd0 === 'no' && tokens.length >= 2 && 'auto-summary'.startsWith(tokens[1].toLowerCase())) {
+      if (target.eigrpConfig) {
+        target.eigrpConfig.autoSummary = false;
+        return { output: '' };
+      }
+    }
+
+    // auto-summary
+    if ('auto-summary'.startsWith(cmd0)) {
+      if (target.eigrpConfig) {
+        target.eigrpConfig.autoSummary = true;
         return { output: '' };
       }
     }
@@ -1817,7 +2269,10 @@ export class IOSCommands {
     return lines.join('\n');
   }
 
-  private static renderIpRoute(device: Device): string {
+  private static renderIpRoute(device: Device, allDevices: Device[] = []): string {
+    if (allDevices.length > 0) {
+      RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+    }
     let routingTable: RouteEntry[] = [];
     if (device instanceof Router) {
       routingTable = device.routingTable;
@@ -1859,7 +2314,15 @@ export class IOSCommands {
         const target = r.nextHop ? `[${r.adminDistance}/${r.metric}] via ${r.nextHop}` : `is directly connected, ${r.exitInterface}`;
         header.push(`S     ${r.network}/${r.cidr} ${target}`);
       } else if (r.protocol === 'O') {
-        header.push(`O     ${r.network}/${r.cidr} [110/${r.metric || 2}] via ${r.nextHop || '10.0.0.2'}, ${r.exitInterface || 'GigabitEthernet0/0'}`);
+        header.push(`O     ${r.network}/${r.cidr} [${r.adminDistance || 110}/${r.metric || 2}] via ${r.nextHop || '10.0.0.2'}, ${r.exitInterface || 'GigabitEthernet0/0'}`);
+      } else if (r.protocol === 'O IA') {
+        header.push(`O IA  ${r.network}/${r.cidr} [${r.adminDistance || 110}/${r.metric || 3}] via ${r.nextHop || '10.0.0.2'}, ${r.exitInterface || 'GigabitEthernet0/0'}`);
+      } else if (r.protocol === 'D') {
+        header.push(`D     ${r.network}/${r.cidr} [${r.adminDistance || 90}/${r.metric || 30720}] via ${r.nextHop || '10.0.0.2'}, ${r.exitInterface || 'GigabitEthernet0/0'}`);
+      } else if (r.protocol === 'D EX') {
+        header.push(`D EX  ${r.network}/${r.cidr} [${r.adminDistance || 170}/${r.metric || 30720}] via ${r.nextHop || '10.0.0.2'}, ${r.exitInterface || 'GigabitEthernet0/0'}`);
+      } else if (r.protocol === 'B') {
+        header.push(`B     ${r.network}/${r.cidr} [${r.adminDistance || 20}/${r.metric || 0}] via ${r.nextHop || '10.0.0.2'}, ${r.exitInterface || 'GigabitEthernet0/0'}`);
       }
     }
 
@@ -2546,6 +3009,14 @@ Configuration register is 0x2102
         }
       }
       if (targetDevice) break;
+    }
+
+    // Check if resolvedIp is an FHRP Virtual IP (HSRP / VRRP)
+    if (!targetDevice) {
+      const fhrpRes = FhrpEngine.resolveVirtualGateway(resolvedIp, allDevices);
+      if (fhrpRes) {
+        targetDevice = fhrpRes.activeDevice;
+      }
     }
 
     // Periksa apakah router/switch memiliki antarmuka aktif untuk merutekan ke luar / internet / Cloud bridge

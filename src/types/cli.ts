@@ -15,6 +15,9 @@ export interface CliContext {
   targetInterface?: string;
   targetVlan?: number;
   targetRoutingProcess?: string;
+  targetRoutingProtocol?: 'ospf' | 'eigrp' | 'bgp';
+  targetAsNumber?: number;
+  targetProcessId?: number;
   targetLine?: string;
   targetDhcpPool?: string;
 }
