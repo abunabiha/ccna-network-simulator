@@ -256,6 +256,69 @@ export interface CoppState {
   droppedPkts: number;
 }
 
+// ==================== TAHAP 7: NETWORK AUTOMATION, PROGRAMMABILITY & TELEMETRY ====================
+
+export interface EemEvent {
+  type: 'cli' | 'syslog' | 'timer';
+  pattern?: string;
+  sync?: boolean;
+  timeSec?: number;
+}
+
+export interface EemAction {
+  label: string; // e.g. "1.0", "2.0"
+  type: 'syslog' | 'cli';
+  argument?: string;
+  command?: string;
+  message?: string;
+}
+
+export interface EemApplet {
+  name: string;
+  event?: EemEvent;
+  actions: EemAction[];
+  registeredAt?: number;
+}
+
+export interface EemHistoryEntry {
+  appletName: string;
+  eventType: string;
+  timestamp: string;
+  triggeredBy: string;
+  actionsRun: string[];
+  eventTime?: string;
+  message?: string;
+}
+
+export interface MdtReceiver {
+  address: string;
+  port: number;
+  protocol: 'grpc-tcp' | 'grpc-tls' | 'native';
+}
+
+export interface MdtSubscription {
+  id: number;
+  encoding: 'encode-kvgpb' | 'encode-xml' | string;
+  filterXpath: string;
+  sourceAddress?: string;
+  stream: 'yang-push' | string;
+  updatePolicy: {
+    type: 'periodic' | 'on-change';
+    periodCentiseconds?: number;
+  };
+  updateIntervalCentisec?: number; // e.g. 1000 = 10s
+  receivers: MdtReceiver[];
+  state?: 'Active' | 'Suspended';
+}
+
+export interface NetconfSession {
+  sessionId: number;
+  username: string;
+  clientIp: string;
+  protocol: 'ssh' | 'tls';
+  loginTime: string;
+}
+
 export interface VrfRouteTarget {
   type: 'import' | 'export' | 'both';
   rt: string; // e.g. "65000:100" or "10.0.0.1:100"

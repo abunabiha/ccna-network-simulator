@@ -14,6 +14,7 @@ import { RoutingProtocolEngine } from '../src/core/network/RoutingProtocolEngine
 import { PolicyEngine } from '../src/core/network/PolicyEngine';
 import { SecurityVpnEngine } from '../src/core/network/SecurityVpnEngine';
 import { TopologyTraversal } from '../src/core/network/TopologyTraversal';
+import { TelemetryAutomationEngine } from '../src/core/network/TelemetryAutomationEngine';
 
 console.log('=== [1] PENGUJIAN MATEMATIKA PENGALAMATAN IP & SUBNETTING ===');
 const ip1 = '192.168.1.130';
@@ -1342,7 +1343,95 @@ console.log(`'show policy-map control-plane': ${showCoppRes.output.includes('Con
 const rFwRunConfig = rFw.getRunningConfig();
 console.log(`Running-config serializes ZBFW, Zones, and CoPP: ${rFwRunConfig.includes('zone security INSIDE') && rFwRunConfig.includes('zone-pair security ZP-IN-OUT') && rFwRunConfig.includes('control-plane') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, 4, 5, & 6 SELESAI DENGAN SUKSES! ===');
+console.log('\n=== [16] PENGUJIAN CCNP TAHAP 7: NETWORK AUTOMATION, PROGRAMMABILITY & TELEMETRY ===');
+// 1. Setup Router for Automation
+const rAuto = new Router('R_AUTO', 'R-AUTO', { x: 50, y: 50 });
+const autoDevs = [rAuto];
+
+// 2. Enable RESTCONF and NETCONF-YANG via CLI
+const rAutoGlobal = { deviceId: 'R_AUTO', mode: 'global-config' as const };
+CliParser.execute('restconf', rAutoGlobal, rAuto, autoDevs);
+CliParser.execute('netconf-yang', rAutoGlobal, rAuto, autoDevs);
+
+console.log(`RESTCONF Enabled flag: ${rAuto.restconfEnabled ? 'PASS' : 'FAIL'}`);
+console.log(`NETCONF-YANG Enabled flag: ${rAuto.netconfEnabled ? 'PASS' : 'FAIL'}`);
+
+// 3. RESTCONF RFC 8040 Query Handlers
+// GET /restconf/data/Cisco-IOS-XE-native:native
+const restconfNativeRes = TelemetryAutomationEngine.queryRestconf(rAuto, 'GET', '/restconf/data/Cisco-IOS-XE-native:native');
+console.log(`RESTCONF GET Native Data: ${restconfNativeRes.statusCode === 200 && restconfNativeRes.body['Cisco-IOS-XE-native:native'].hostname === 'R-AUTO' ? 'PASS' : 'FAIL'}`);
+
+// PATCH /restconf/data/Cisco-IOS-XE-native:native (Update Hostname via API)
+const restconfPatchRes = TelemetryAutomationEngine.queryRestconf(rAuto, 'PATCH', '/restconf/data/Cisco-IOS-XE-native:native', {
+  'Cisco-IOS-XE-native:native': { hostname: 'R-AUTO-PROG' }
+});
+console.log(`RESTCONF PATCH Hostname: ${restconfPatchRes.statusCode === 200 && rAuto.hostname === 'R-AUTO-PROG' ? 'PASS' : 'FAIL'}`);
+
+// GET /restconf/data/ietf-interfaces:interfaces
+const restconfIfRes = TelemetryAutomationEngine.queryRestconf(rAuto, 'GET', '/restconf/data/ietf-interfaces:interfaces');
+console.log(`RESTCONF GET Interfaces: ${restconfIfRes.statusCode === 200 && Array.isArray(restconfIfRes.body['ietf-interfaces:interfaces'].interface) ? 'PASS' : 'FAIL'}`);
+
+// 4. NETCONF RFC 6241 XML RPC Exchange
+const netconfGetConfigRpc = `<rpc message-id="101" xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
+  <get-config>
+    <source><running/></source>
+  </get-config>
+</rpc>`;
+const netconfReply = TelemetryAutomationEngine.executeNetconfRpc(rAuto, netconfGetConfigRpc);
+console.log(`NETCONF <get-config> XML RPC: ${netconfReply.includes('<rpc-reply message-id="101"') && netconfReply.includes('<hostname>R-AUTO-PROG</hostname>') ? 'PASS' : 'FAIL'}`);
+
+// 5. Embedded Event Manager (EEM) Applet Configuration & Execution
+CliParser.execute('event manager applet MONITOR-CLI', rAutoGlobal, rAuto, autoDevs);
+const rAutoApplet = { deviceId: 'R_AUTO', mode: 'eem-applet-config' as const, targetAppletName: 'MONITOR-CLI' };
+CliParser.execute('event cli pattern "show running-config" sync no', rAutoApplet, rAuto, autoDevs);
+CliParser.execute('action 1.0 syslog msg "EEM-AUDIT: running-config accessed by admin"', rAutoApplet, rAuto, autoDevs);
+
+// Verify EEM registered
+const showEemRes = CliParser.execute('show event manager policy registered', { deviceId: 'R_AUTO', mode: 'priv-exec' as const }, rAuto, autoDevs);
+console.log(`'show event manager policy registered': ${showEemRes.output.includes('MONITOR-CLI') && showEemRes.output.includes('CLI pattern') ? 'PASS' : 'FAIL'}`);
+
+// Trigger EEM via CLI command execution
+const triggerCliRes = CliParser.execute('show running-config', { deviceId: 'R_AUTO', mode: 'priv-exec' as const }, rAuto, autoDevs);
+console.log(`EEM CLI Interception & Syslog Injection: ${triggerCliRes.output.includes('%HA_EM-6-LOG: MONITOR-CLI: EEM-AUDIT: running-config accessed by admin') ? 'PASS' : 'FAIL'}`);
+
+// Check EEM History
+const showEemHistRes = CliParser.execute('show event manager history events', { deviceId: 'R_AUTO', mode: 'priv-exec' as const }, rAuto, autoDevs);
+console.log(`'show event manager history events': ${showEemHistRes.output.includes('MONITOR-CLI') && showEemHistRes.output.includes('show running-config') ? 'PASS' : 'FAIL'}`);
+
+// 6. Model-Driven Telemetry (MDT) Streaming Subscriptions
+CliParser.execute('telemetry ietf subscription 101', rAutoGlobal, rAuto, autoDevs);
+const rAutoMdt = { deviceId: 'R_AUTO', mode: 'mdt-subscription-config' as const, targetSubscriptionId: 101 };
+CliParser.execute('encoding encode-kvgpb', rAutoMdt, rAuto, autoDevs);
+CliParser.execute('filter xpath /ietf-interfaces:interfaces-state', rAutoMdt, rAuto, autoDevs);
+CliParser.execute('stream yang-push', rAutoMdt, rAuto, autoDevs);
+CliParser.execute('update-policy periodic 500', rAutoMdt, rAuto, autoDevs);
+CliParser.execute('receiver ip address 192.168.100.50 57500 protocol grpc-tcp', rAutoMdt, rAuto, autoDevs);
+
+// Verify Diagnostics: show telemetry ietf subscription all
+const showMdtSubRes = CliParser.execute('show telemetry ietf subscription all', { deviceId: 'R_AUTO', mode: 'priv-exec' as const }, rAuto, autoDevs);
+console.log(`'show telemetry ietf subscription all': ${showMdtSubRes.output.includes('101') && showMdtSubRes.output.includes('encode-kvgpb') ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show telemetry connection all
+const showMdtConnRes = CliParser.execute('show telemetry connection all', { deviceId: 'R_AUTO', mode: 'priv-exec' as const }, rAuto, autoDevs);
+console.log(`'show telemetry connection all': ${showMdtConnRes.output.includes('192.168.100.50') && showMdtConnRes.output.includes('CONNECTED') ? 'PASS' : 'FAIL'}`);
+
+// Verify Telemetry Snapshot Generation
+const telemetrySnapshot = TelemetryAutomationEngine.generateTelemetrySnapshot(rAuto, 101);
+console.log(`MDT Telemetry Snapshot Generation (KV-GPB): ${telemetrySnapshot && telemetrySnapshot.encoding === 'encode-kvgpb' && telemetrySnapshot.subscriptionIdStr === '101' ? 'PASS' : 'FAIL'}`);
+
+// 7. Verify Running-Config Serialization for Tahap 7
+const autoRunCfg = rAuto.getRunningConfig();
+console.log(`Running-config serializes RESTCONF, NETCONF-YANG, EEM, and MDT: ${
+  autoRunCfg.includes('restconf') &&
+  autoRunCfg.includes('netconf-yang') &&
+  autoRunCfg.includes('event manager applet MONITOR-CLI') &&
+  autoRunCfg.includes('telemetry ietf subscription 101') &&
+  autoRunCfg.includes('receiver ip address 192.168.100.50 57500 protocol grpc-tcp')
+    ? 'PASS'
+    : 'FAIL'
+}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, 4, 5, 6, & 7 SELESAI DENGAN SUKSES! ===');
 
 
 

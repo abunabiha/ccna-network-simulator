@@ -142,6 +142,10 @@ export abstract class Device {
         return `${host}(config-pmap-c)#`;
       case 'control-plane-config':
         return `${host}(config-cp)#`;
+      case 'eem-applet-config':
+        return `${host}(config-applet)#`;
+      case 'mdt-subscription-config':
+        return `${host}(config-mdt-sub)#`;
       default:
         return `${host}>`;
     }

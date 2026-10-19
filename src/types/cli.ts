@@ -18,7 +18,9 @@ export type CliMode =
   | 'class-map-inspect'  // Router(config-cmap)#
   | 'policy-map-inspect' // Router(config-pmap)#
   | 'policy-map-class-inspect' // Router(config-pmap-c)#
-  | 'control-plane-config'; // Router(config-cp)#
+  | 'control-plane-config' // Router(config-cp)#
+  | 'eem-applet-config'   // Router(config-applet)#
+  | 'mdt-subscription-config'; // Router(config-mdt-sub)#
 
 export interface CliContext {
   deviceId: string;
@@ -42,6 +44,8 @@ export interface CliContext {
   targetClassMapName?: string;
   targetPolicyMapName?: string;
   targetPolicyMapClass?: string;
+  targetAppletName?: string;
+  targetSubscriptionId?: number;
 }
 
 export interface CommandHelpItem {

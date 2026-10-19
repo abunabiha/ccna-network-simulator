@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState } from '../../types/network';
+import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState, EemApplet, EemHistoryEntry, MdtSubscription, NetconfSession } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -40,6 +40,14 @@ export class Router extends Device {
   // Control Plane Policing (CoPP)
   coppPolicy?: CoppPolicy;
   coppState: CoppState = { transmittedPkts: 0, droppedPkts: 0 };
+
+  // Network Automation, Programmability & Telemetry (CCNP Tahap 7)
+  restconfEnabled: boolean = false;
+  netconfEnabled: boolean = false;
+  eemApplets: Map<string, EemApplet> = new Map();
+  eemHistory: EemHistoryEntry[] = [];
+  mdtSubscriptions: Map<number, MdtSubscription> = new Map();
+  netconfSessions: NetconfSession[] = [];
 
   constructor(id: string, hostname: string, position: DevicePosition) {
     super(id, hostname, 'router', position);
@@ -617,6 +625,55 @@ export class Router extends Device {
     if (this.coppPolicy) {
       lines.push('control-plane');
       lines.push(` service-policy input ${this.coppPolicy.name}`);
+      lines.push('!');
+    }
+
+    // Automation & Telemetry (Tahap 7)
+    if (this.restconfEnabled) {
+      lines.push('restconf');
+    }
+    if (this.netconfEnabled) {
+      lines.push('netconf-yang');
+    }
+
+    // EEM Applets
+    for (const applet of this.eemApplets.values()) {
+      lines.push(`event manager applet ${applet.name}`);
+      if (applet.event) {
+        if (applet.event.type === 'cli') {
+          lines.push(` event cli pattern "${applet.event.pattern}" sync ${applet.event.sync ? 'yes' : 'no'}`);
+        } else if (applet.event.type === 'syslog') {
+          lines.push(` event syslog pattern "${applet.event.pattern}"`);
+        } else if (applet.event.type === 'timer') {
+          lines.push(` event timer watchdog time ${applet.event.timeSec}`);
+        }
+      }
+      for (const act of applet.actions) {
+        const arg = act.argument || (act.type === 'syslog' ? act.message : act.command) || '';
+        if (act.type === 'syslog') {
+          lines.push(` action ${act.label} syslog msg "${arg}"`);
+        } else if (act.type === 'cli') {
+          lines.push(` action ${act.label} cli command "${arg}"`);
+        }
+      }
+      lines.push('!');
+    }
+
+    // MDT Subscriptions
+    for (const sub of this.mdtSubscriptions.values()) {
+      lines.push(`telemetry ietf subscription ${sub.id}`);
+      lines.push(` encoding ${sub.encoding}`);
+      lines.push(` filter xpath ${sub.filterXpath}`);
+      lines.push(` source-address ${sub.sourceAddress || '0.0.0.0'}`);
+      lines.push(` stream ${sub.stream}`);
+      if (sub.updatePolicy.type === 'periodic') {
+        lines.push(` update-policy periodic ${sub.updatePolicy.periodCentiseconds}`);
+      } else {
+        lines.push(` update-policy on-change`);
+      }
+      for (const rx of sub.receivers) {
+        lines.push(` receiver ip address ${rx.address} ${rx.port} protocol ${rx.protocol}`);
+      }
       lines.push('!');
     }
 

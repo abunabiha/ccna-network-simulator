@@ -307,3 +307,53 @@ $$\text{PolicingAction}(P) = \begin{cases}
 \text{Drop} & \text{jika } T(t) < L(P) \implies \text{Exceeded}
 \end{cases}$$
 Statistik `conformed packets` dan `exceeded packets` diperbarui secara deterministik untuk pemantauan diagnosa jaringan (`show policy-map control-plane`).
+
+## 11. Formulasi Matematika & Algoritma Otomasi Jaringan, Programmability & Telemetri (CCNP Tahap 7)
+
+### 11.1 Pemodelan Data RESTCONF (RFC 8040) & NETCONF (RFC 6241)
+Arsitektur programmability berbasis model memetakan konfigurasi perangkat dan data operasional ke dalam struktur pohon skema YANG $\mathcal{T}_{YANG} = (V, E)$, di mana setiap simpul $v \in V$ memiliki path teridentifikasi unik (URI/XPath):
+
+1. **Mapping RESTCONF RFC 8040:**
+   Setiap permintaan HTTP $\mathcal{R} = \langle \text{method}, \text{URI}, \text{payload} \rangle$ diproses dengan pemetaan URI ke simpul skema:
+   $$\text{EvalRESTCONF}(\mathcal{R}) = \begin{cases}
+   \text{SerializeJSON}(Subtree(v)) & \text{jika } \text{method} = \text{GET} \land v \in \mathcal{T}_{YANG} \\
+   \text{MutateNode}(v, \text{payload}) \implies 200/204 & \text{jika } \text{method} \in \{\text{PUT}, \text{PATCH}\} \\
+   404 \text{ Not Found} & \text{jika } v \notin \mathcal{T}_{YANG} \\
+   503 \text{ Service Unavailable} & \text{jika } \text{restconfEnabled} = \text{false}
+   \end{cases}$$
+   Dukungan modul standar mencakup model native Cisco IOS-XE (`Cisco-IOS-XE-native:native`) dan IETF (`ietf-interfaces:interfaces`, `ietf-interfaces:interfaces-state`).
+
+2. **NETCONF RPC XML Exchange (RFC 6241):**
+   Protokol NETCONF mengeksekusi operasi transaksi konfigurasi atomik melalui pertukaran pesan XML ber-ID pesan unik:
+   $$\text{ProcessRPC}(M_{id}, \text{Operation}) \implies \langle \text{rpc-reply}, M_{id}, \text{Data} \mid \text{OK} \mid \text{rpc-error} \rangle$$
+   Operasi didukung: `<get-config>` (pembacaan running datastore), `<get>` (status operasional), `<edit-config>` (modifikasi konfigurasi running), dan `<close-session>`.
+
+### 11.2 Evaluasi Event Trigger & Algoritma Intersepsi Cisco Embedded Event Manager (EEM)
+Mesin EEM mengevaluasi applet kebijakan on-box $\mathcal{A} = \{ A_1, A_2, \dots \}$ terhadap peristiwa sistem:
+
+1. **Intersepsi CLI Synchronous/Asynchronous:**
+   Untuk setiap perintah CLI masukan $C$, pola ekspresi reguler event $\mathcal{P}_{event}$ dievaluasi:
+   $$\text{MatchCLI}(C, \mathcal{P}_{event}) = \begin{cases}
+   \text{true} & \text{jika } C \sim \mathcal{P}_{event} \\
+   \text{false} & \text{lainnya}
+   \end{cases}$$
+   Jika cocok:
+   $$\text{ExecutionFlow}(C) = \begin{cases}
+   \text{Execute}(\mathcal{Actions}) \land \text{Suppress}(C) & \text{jika } \text{sync} = \text{yes} \\
+   \text{Execute}(\mathcal{Actions}) \parallel \text{Execute}(C) & \text{jika } \text{sync} = \text{no}
+   \end{cases}$$
+   Daftar aksi $\mathcal{Actions} = [a_1, a_2, \dots]$ diurutkan berdasarkan label sekuensial (misal `1.0`, `2.0`), mendukung logging syslog (`%HA_EM-6-LOG`) dan eksekusi perintah CLI alternatif, dengan pencatatan otomatis ke dalam buffer riwayat (`show event manager history events`).
+
+### 11.3 Model Streaming Model-Driven Telemetry (MDT)
+Sistem MDT menyiarkan metrik operasional terstruktur secara berkala (*periodic*) atau dipicu peristiwa (*on-change*) ke endpoint penerima (*receivers*):
+
+1. **Fungsi Sampling Telemetri:**
+   Untuk langganan $S_k$ dengan XPath filter $\phi_k$, periode interval $\Delta t = \tau$ centiseconds, dan himpunan penerima $\mathcal{R}_k$:
+   $$M(t, \phi_k) = \text{ExtractSubtreeOperationalData}(\phi_k)$$
+2. **Serialisasi Enkoding:**
+   $$\text{EncodeTelemetry}(M(t), \text{enc}) = \begin{cases}
+   \text{FormatKVGPB}(M(t)) & \text{jika enc} = \texttt{encode-kvgpb} \\
+   \text{FormatXMLNotification}(M(t)) & \text{jika enc} = \texttt{encode-xml}
+   \end{cases}$$
+   Paket hasil enkoding dialirkan ke seluruh penerima $\langle IP_r, Port_r, Protocol_r \rangle \in \mathcal{R}_k$ melalui transport gRPC (TCP/TLS) atau native.
+

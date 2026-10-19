@@ -14,6 +14,7 @@ import { PolicyEngine } from '../network/PolicyEngine';
 import { VrfEngine } from '../network/VrfEngine';
 import { SecurityVpnEngine } from '../network/SecurityVpnEngine';
 import { TopologyTraversal } from '../network/TopologyTraversal';
+import { TelemetryAutomationEngine } from '../network/TelemetryAutomationEngine';
 
 export class IOSCommands {
   /**
@@ -305,6 +306,32 @@ export class IOSCommands {
           { command: 'end', description: 'Exit to privileged EXEC mode' }
         );
         break;
+
+      case 'eem-applet-config':
+        list.push(
+          { command: 'event cli pattern', description: 'Event trigger on CLI command match' },
+          { command: 'event syslog pattern', description: 'Event trigger on syslog message match' },
+          { command: 'event timer watchdog', description: 'Event trigger on periodic timer' },
+          { command: 'action syslog msg', description: 'Generate syslog message action' },
+          { command: 'action cli command', description: 'Execute CLI command action' },
+          { command: 'exit', description: 'Exit from applet configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'mdt-subscription-config':
+        list.push(
+          { command: 'encoding', description: 'Set streaming encoding (encode-kvgpb or encode-xml)' },
+          { command: 'filter xpath', description: 'Set XPath filter for telemetry stream' },
+          { command: 'source-address', description: 'Set local source address' },
+          { command: 'stream', description: 'Set telemetry stream type (e.g. yang-push)' },
+          { command: 'update-policy periodic', description: 'Set periodic update interval in centiseconds' },
+          { command: 'update-policy on-change', description: 'Set event-driven on-change telemetry update' },
+          { command: 'receiver ip address', description: 'Configure telemetry receiver destination' },
+          { command: 'exit', description: 'Exit from subscription configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
     }
 
     return list;
@@ -341,7 +368,7 @@ export class IOSCommands {
       if (context.mode === 'vrf-af-config') {
         return { output: '', newMode: 'vrf-config' };
       }
-      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config'].includes(context.mode)) {
+      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config', 'crypto-isakmp-policy', 'crypto-ipsec-profile', 'zone-pair-config', 'class-map-inspect', 'policy-map-inspect', 'policy-map-class-inspect', 'control-plane-config', 'eem-applet-config', 'mdt-subscription-config'].includes(context.mode)) {
         return { output: '', newMode: 'global-config' };
       }
       if (context.mode === 'global-config') {
@@ -362,50 +389,97 @@ export class IOSCommands {
       return this.execute(innerCmd, fakeContext, device, allDevices);
     }
 
-    // 2. Eksekusi berdasarkan Mode
-    switch (context.mode) {
-      case 'user-exec':
-        return this.execUserMode(tokens, context, device, allDevices);
-      case 'priv-exec':
-        return this.execPrivMode(tokens, context, device, allDevices);
-      case 'global-config':
-        return this.execGlobalConfigMode(tokens, raw, context, device, allDevices);
-      case 'interface-config':
-      case 'subinterface-config':
-        return this.execInterfaceConfigMode(tokens, raw, context, device, allDevices);
-      case 'vlan-config':
-        return this.execVlanConfigMode(tokens, context, device);
-      case 'router-config':
-        return this.execRouterConfigMode(tokens, context, device);
-      case 'line-config':
-        return this.execLineConfigMode(tokens, context, device);
-      case 'dhcp-config':
-        return this.execDhcpConfigMode(tokens, raw, context, device);
-      case 'route-map-config':
-        return this.execRouteMapConfigMode(tokens, raw, context, device);
-      case 'ip-sla-config':
-        return this.execIpSlaConfigMode(tokens, raw, context, device);
-      case 'vrf-config':
-        return this.execVrfConfigMode(tokens, raw, context, device);
-      case 'vrf-af-config':
-        return this.execVrfAfConfigMode(tokens, raw, context, device);
-      case 'crypto-isakmp-policy':
-        return this.execCryptoIsakmpPolicyMode(tokens, raw, context, device);
-      case 'crypto-ipsec-profile':
-        return this.execCryptoIpsecProfileMode(tokens, raw, context, device);
-      case 'zone-pair-config':
-        return this.execZonePairConfigMode(tokens, raw, context, device);
-      case 'class-map-inspect':
-        return this.execClassMapInspectMode(tokens, raw, context, device);
-      case 'policy-map-inspect':
-        return this.execPolicyMapInspectMode(tokens, raw, context, device);
-      case 'policy-map-class-inspect':
-        return this.execPolicyMapClassInspectMode(tokens, raw, context, device);
-      case 'control-plane-config':
-        return this.execControlPlaneConfigMode(tokens, raw, context, device);
+    // EEM CLI event evaluation
+    let eemPrefixOutput = '';
+    if (device instanceof Router && device.eemApplets.size > 0 && first !== 'exit' && first !== 'end' && context.mode !== 'eem-applet-config') {
+      const eemResult = TelemetryAutomationEngine.triggerEemCliEvent(device, raw, (subCmd) => {
+        return IOSCommands.execute(subCmd, { ...context, mode: 'priv-exec' }, device, allDevices).output;
+      });
+
+      if (eemResult.intercepted) {
+        if (eemResult.suppressCli) {
+          return { output: eemResult.output.join('\n') };
+        } else if (eemResult.output.length > 0) {
+          eemPrefixOutput = eemResult.output.join('\n') + '\n';
+        }
+      }
     }
 
-    return { output: `% Invalid input detected at '^' marker.` };
+    // 2. Eksekusi berdasarkan Mode
+    let result: CliExecutionResult;
+    switch (context.mode) {
+      case 'user-exec':
+        result = this.execUserMode(tokens, context, device, allDevices);
+        break;
+      case 'priv-exec':
+        result = this.execPrivMode(tokens, context, device, allDevices);
+        break;
+      case 'global-config':
+        result = this.execGlobalConfigMode(tokens, raw, context, device, allDevices);
+        break;
+      case 'interface-config':
+      case 'subinterface-config':
+        result = this.execInterfaceConfigMode(tokens, raw, context, device, allDevices);
+        break;
+      case 'vlan-config':
+        result = this.execVlanConfigMode(tokens, context, device);
+        break;
+      case 'router-config':
+        result = this.execRouterConfigMode(tokens, context, device);
+        break;
+      case 'line-config':
+        result = this.execLineConfigMode(tokens, context, device);
+        break;
+      case 'dhcp-config':
+        result = this.execDhcpConfigMode(tokens, raw, context, device);
+        break;
+      case 'route-map-config':
+        result = this.execRouteMapConfigMode(tokens, raw, context, device);
+        break;
+      case 'ip-sla-config':
+        result = this.execIpSlaConfigMode(tokens, raw, context, device);
+        break;
+      case 'vrf-config':
+        result = this.execVrfConfigMode(tokens, raw, context, device);
+        break;
+      case 'vrf-af-config':
+        result = this.execVrfAfConfigMode(tokens, raw, context, device);
+        break;
+      case 'crypto-isakmp-policy':
+        result = this.execCryptoIsakmpPolicyMode(tokens, raw, context, device);
+        break;
+      case 'crypto-ipsec-profile':
+        result = this.execCryptoIpsecProfileMode(tokens, raw, context, device);
+        break;
+      case 'zone-pair-config':
+        result = this.execZonePairConfigMode(tokens, raw, context, device);
+        break;
+      case 'class-map-inspect':
+        result = this.execClassMapInspectMode(tokens, raw, context, device);
+        break;
+      case 'policy-map-inspect':
+        result = this.execPolicyMapInspectMode(tokens, raw, context, device);
+        break;
+      case 'policy-map-class-inspect':
+        result = this.execPolicyMapClassInspectMode(tokens, raw, context, device);
+        break;
+      case 'control-plane-config':
+        result = this.execControlPlaneConfigMode(tokens, raw, context, device);
+        break;
+      case 'eem-applet-config':
+        result = this.execEemAppletConfigMode(tokens, raw, context, device);
+        break;
+      case 'mdt-subscription-config':
+        result = this.execMdtSubscriptionConfigMode(tokens, raw, context, device);
+        break;
+      default:
+        result = { output: `% Invalid input detected at '^' marker.` };
+    }
+
+    if (eemPrefixOutput && result) {
+      return { ...result, output: eemPrefixOutput + result.output };
+    }
+    return result;
   }
 
   // ===================== USER EXEC MODE =====================
@@ -836,6 +910,41 @@ export class IOSCommands {
           const zpName = tokens.length >= 6 ? tokens[5] : (tokens.length >= 5 && !'zone-pair'.startsWith(tokens[4].toLowerCase()) ? tokens[4] : undefined);
           return { output: SecurityVpnEngine.renderShowPolicyMapInspect(device, zpName) };
         }
+      }
+
+      // show restconf ...
+      if ('restconf'.startsWith(cmd1) && device instanceof Router) {
+        return { output: TelemetryAutomationEngine.renderShowRestconfStatus(device) };
+      }
+
+      // show netconf-yang ...
+      if ('netconf-yang'.startsWith(cmd1) && device instanceof Router) {
+        if (tokens.length >= 3 && 'sessions'.startsWith(tokens[2].toLowerCase())) {
+          return { output: TelemetryAutomationEngine.renderShowNetconfYangSessions(device) };
+        }
+        return { output: TelemetryAutomationEngine.renderShowNetconfYangStatus(device) };
+      }
+
+      // show event manager ...
+      if ('event'.startsWith(cmd1) && tokens.length >= 3 && 'manager'.startsWith(tokens[2].toLowerCase()) && device instanceof Router) {
+        if (tokens.length >= 4 && 'history'.startsWith(tokens[3].toLowerCase())) {
+          return { output: TelemetryAutomationEngine.renderShowEemHistory(device) };
+        }
+        return { output: TelemetryAutomationEngine.renderShowEemRegistered(device) };
+      }
+
+      // show telemetry ...
+      if ('telemetry'.startsWith(cmd1) && device instanceof Router) {
+        if (tokens.length >= 3 && 'connection'.startsWith(tokens[2].toLowerCase())) {
+          return { output: TelemetryAutomationEngine.renderShowTelemetryConnection(device) };
+        }
+        if (tokens.length >= 3 && 'ietf'.startsWith(tokens[2].toLowerCase())) {
+          if (tokens.length >= 5 && !isNaN(parseInt(tokens[4], 10))) {
+            return { output: TelemetryAutomationEngine.renderShowMdtSubscriptions(device, parseInt(tokens[4], 10)) };
+          }
+          return { output: TelemetryAutomationEngine.renderShowMdtSubscriptions(device) };
+        }
+        return { output: TelemetryAutomationEngine.renderShowMdtSubscriptions(device) };
       }
     }
 
@@ -1768,6 +1877,88 @@ export class IOSCommands {
         output: '',
         newMode: 'control-plane-config'
       };
+    }
+
+    // restconf
+    if (cmd0 === 'restconf') {
+      if (device instanceof Router) {
+        device.restconfEnabled = true;
+      }
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 2 && tokens[1].toLowerCase() === 'restconf') {
+      if (device instanceof Router) {
+        device.restconfEnabled = false;
+      }
+      return { output: '' };
+    }
+
+    // netconf-yang
+    if (cmd0 === 'netconf-yang') {
+      if (device instanceof Router) {
+        device.netconfEnabled = true;
+      }
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 2 && tokens[1].toLowerCase() === 'netconf-yang') {
+      if (device instanceof Router) {
+        device.netconfEnabled = false;
+      }
+      return { output: '' };
+    }
+
+    // event manager applet <name>
+    if ('event'.startsWith(cmd0) && tokens.length >= 4 && tokens[1].toLowerCase() === 'manager' && tokens[2].toLowerCase() === 'applet') {
+      const appletName = tokens[3];
+      if (device instanceof Router) {
+        if (!device.eemApplets.has(appletName)) {
+          device.eemApplets.set(appletName, { name: appletName, actions: [] });
+        }
+      }
+      return {
+        output: '',
+        newMode: 'eem-applet-config',
+        contextUpdates: { targetAppletName: appletName }
+      };
+    }
+
+    if (cmd0 === 'no' && tokens.length >= 5 && tokens[1].toLowerCase() === 'event' && tokens[2].toLowerCase() === 'manager' && tokens[3].toLowerCase() === 'applet') {
+      const appletName = tokens[4];
+      if (device instanceof Router) {
+        device.eemApplets.delete(appletName);
+      }
+      return { output: '' };
+    }
+
+    // telemetry ietf subscription <id>
+    if ('telemetry'.startsWith(cmd0) && tokens.length >= 4 && tokens[1].toLowerCase() === 'ietf' && tokens[2].toLowerCase() === 'subscription') {
+      const subId = parseInt(tokens[3], 10);
+      if (isNaN(subId)) return { output: '% Invalid subscription ID' };
+      if (device instanceof Router) {
+        if (!device.mdtSubscriptions.has(subId)) {
+          device.mdtSubscriptions.set(subId, {
+            id: subId,
+            encoding: 'encode-kvgpb',
+            filterXpath: '/ietf-interfaces:interfaces-state',
+            stream: 'yang-push',
+            updatePolicy: { type: 'periodic', periodCentiseconds: 1000 },
+            receivers: []
+          });
+        }
+      }
+      return {
+        output: '',
+        newMode: 'mdt-subscription-config',
+        contextUpdates: { targetSubscriptionId: subId }
+      };
+    }
+
+    if (cmd0 === 'no' && tokens.length >= 5 && tokens[1].toLowerCase() === 'telemetry' && tokens[2].toLowerCase() === 'ietf' && tokens[3].toLowerCase() === 'subscription') {
+      const subId = parseInt(tokens[4], 10);
+      if (device instanceof Router && !isNaN(subId)) {
+        device.mdtSubscriptions.delete(subId);
+      }
+      return { output: '' };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -3337,6 +3528,193 @@ export class IOSCommands {
     // end
     if (cmd0 === 'end') {
       return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== EEM APPLET CONFIG MODE =====================
+  private static execEemAppletConfigMode(
+    tokens: string[],
+    raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const appletName = context.targetAppletName;
+    if (!appletName || !(device instanceof Router)) return { output: '% No applet selected.' };
+
+    const applet = device.eemApplets.get(appletName);
+    if (!applet) return { output: `% Applet ${appletName} not found.` };
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // event cli pattern "<regex>" [sync yes|no]
+    if ('event'.startsWith(cmd0) && tokens.length >= 4 && 'cli'.startsWith(tokens[1].toLowerCase()) && 'pattern'.startsWith(tokens[2].toLowerCase())) {
+      const patternMatch = raw.match(/pattern\s+["']?([^"']+)["']?/i);
+      const pattern = patternMatch ? patternMatch[1] : tokens[3];
+      const isSync = raw.toLowerCase().includes('sync yes');
+      applet.event = {
+        type: 'cli',
+        pattern,
+        sync: isSync
+      };
+      return { output: '' };
+    }
+
+    // event syslog pattern "<regex>"
+    if ('event'.startsWith(cmd0) && tokens.length >= 4 && 'syslog'.startsWith(tokens[1].toLowerCase()) && 'pattern'.startsWith(tokens[2].toLowerCase())) {
+      const patternMatch = raw.match(/pattern\s+["']?([^"']+)["']?/i);
+      const pattern = patternMatch ? patternMatch[1] : tokens[3];
+      applet.event = {
+        type: 'syslog',
+        pattern
+      };
+      return { output: '' };
+    }
+
+    // event timer watchdog time <sec>
+    if ('event'.startsWith(cmd0) && tokens.length >= 5 && 'timer'.startsWith(tokens[1].toLowerCase()) && 'watchdog'.startsWith(tokens[2].toLowerCase()) && 'time'.startsWith(tokens[3].toLowerCase())) {
+      const timeSec = parseInt(tokens[4], 10) || 60;
+      applet.event = {
+        type: 'timer',
+        timeSec
+      };
+      return { output: '' };
+    }
+
+    // action <label> syslog msg "<msg>"
+    if ('action'.startsWith(cmd0) && tokens.length >= 5 && 'syslog'.startsWith(tokens[2].toLowerCase()) && 'msg'.startsWith(tokens[3].toLowerCase())) {
+      const label = tokens[1];
+      const msgMatch = raw.match(/msg\s+["']?([^"']+)["']?/i);
+      const msg = msgMatch ? msgMatch[1] : tokens.slice(4).join(' ');
+      applet.actions = applet.actions.filter(a => a.label !== label);
+      applet.actions.push({
+        label,
+        type: 'syslog',
+        argument: msg
+      });
+      return { output: '' };
+    }
+
+    // action <label> cli command "<cmd>"
+    if ('action'.startsWith(cmd0) && tokens.length >= 5 && 'cli'.startsWith(tokens[2].toLowerCase()) && 'command'.startsWith(tokens[3].toLowerCase())) {
+      const label = tokens[1];
+      const cmdMatch = raw.match(/command\s+["']?([^"']+)["']?/i);
+      const targetCmd = cmdMatch ? cmdMatch[1] : tokens.slice(4).join(' ');
+      applet.actions = applet.actions.filter(a => a.label !== label);
+      applet.actions.push({
+        label,
+        type: 'cli',
+        argument: targetCmd
+      });
+      return { output: '' };
+    }
+
+    // no event
+    if (cmd0 === 'no' && tokens.length >= 2 && 'event'.startsWith(tokens[1].toLowerCase())) {
+      applet.event = undefined;
+      return { output: '' };
+    }
+
+    // no action <label>
+    if (cmd0 === 'no' && tokens.length >= 3 && 'action'.startsWith(tokens[1].toLowerCase())) {
+      const label = tokens[2];
+      applet.actions = applet.actions.filter(a => a.label !== label);
+      return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== MDT SUBSCRIPTION CONFIG MODE =====================
+  private static execMdtSubscriptionConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const subId = context.targetSubscriptionId;
+    if (subId === undefined || !(device instanceof Router)) return { output: '% No subscription selected.' };
+
+    const sub = device.mdtSubscriptions.get(subId);
+    if (!sub) return { output: `% Subscription ${subId} not found.` };
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // encoding <encode-kvgpb | encode-xml>
+    if ('encoding'.startsWith(cmd0) && tokens.length >= 2) {
+      const enc = tokens[1].toLowerCase();
+      if (enc === 'encode-xml' || enc === 'xml') {
+        sub.encoding = 'encode-xml';
+      } else {
+        sub.encoding = 'encode-kvgpb';
+      }
+      return { output: '' };
+    }
+
+    // filter xpath <xpath>
+    if ('filter'.startsWith(cmd0) && tokens.length >= 3 && 'xpath'.startsWith(tokens[1].toLowerCase())) {
+      sub.filterXpath = tokens[2];
+      return { output: '' };
+    }
+
+    // source-address <ip>
+    if ('source-address'.startsWith(cmd0) && tokens.length >= 2) {
+      sub.sourceAddress = tokens[1];
+      return { output: '' };
+    }
+
+    // stream <streamName>
+    if ('stream'.startsWith(cmd0) && tokens.length >= 2) {
+      sub.stream = tokens[1];
+      return { output: '' };
+    }
+
+    // update-policy periodic <centiseconds>
+    if ('update-policy'.startsWith(cmd0) && tokens.length >= 3 && 'periodic'.startsWith(tokens[1].toLowerCase())) {
+      const cs = parseInt(tokens[2], 10) || 1000;
+      sub.updatePolicy = { type: 'periodic', periodCentiseconds: cs };
+      return { output: '' };
+    }
+
+    // update-policy on-change
+    if ('update-policy'.startsWith(cmd0) && tokens.length >= 2 && 'on-change'.startsWith(tokens[1].toLowerCase())) {
+      sub.updatePolicy = { type: 'on-change' };
+      return { output: '' };
+    }
+
+    // receiver ip address <address> <port> protocol <protocol>
+    if ('receiver'.startsWith(cmd0) && tokens.length >= 7 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase())) {
+      const address = tokens[3];
+      const port = parseInt(tokens[4], 10) || 57500;
+      const protocol = (tokens[6] || 'grpc-tcp').toLowerCase() as 'grpc-tcp' | 'grpc-tls' | 'native';
+      sub.receivers.push({ address, port, protocol });
+      return { output: '' };
+    }
+
+    // no receiver ip address <address> <port>
+    if (cmd0 === 'no' && tokens.length >= 5 && 'receiver'.startsWith(tokens[1].toLowerCase())) {
+      const address = tokens[4];
+      sub.receivers = sub.receivers.filter(r => r.address !== address);
+      return { output: '' };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
