@@ -1655,8 +1655,471 @@ export const CCNA_LABS: LabDefinition[] = [
         { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
         { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
         { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-bgp-01-ebgp-ibgp',
+    title: 'CCNP Enterprise Lab: Implement eBGP and iBGP',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Membangun konektivitas BGP skala enterprise menghubungkan AS 65000 (R1, R2, R3) dengan pelanggan AS 65001 (D1) dan AS 65002 (D2). Mengonfigurasi relasi eBGP peering menggunakan IPv4 dan IPv6 address family, iBGP full-mesh di internal AS 65000 menggunakan next-hop-self pada edge routers (R1 dan R3), mengiklankan network internal AS 65000 pada R2, serta menerapkan AS-path filtering untuk memastikan AS 65000 berfungsi sebagai Non-Transit AS.',
+    objectives: [
+      'Konfigurasi eBGP peering pada R1 dengan Switch D1 (AS 65001) untuk IPv4 dan IPv6 Address Families',
+      'Konfigurasi eBGP peering pada R3 dengan Switch D2 (AS 65002) untuk IPv4 dan IPv6 Address Families',
+      'Konfigurasi iBGP peering di AS 65000 pada R1, R2, dan R3 dengan next-hop-self pada R1 dan R3',
+      'Iklankan prefix 172.16.0.0/16 (IPv4) dan 2001:DB8:A000::/36 (IPv6) pada R2',
+      'Konfigurasi AS 65000 sebagai Non-Transit AS menggunakan ip as-path access-list 10 permit ^$ dan filter-list 10 out pada R1 dan R3'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-bgp1-1',
+        description: 'Konfigurasi eBGP peering pada R1 dengan D1 (209.165.200.6, AS 65001) di Address Family IPv4',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '209.165.200.6', remoteAs: 65001, addressFamily: 'ipv4', activate: true },
+        hint: 'router bgp 65000 -> neighbor 209.165.200.6 remote-as 65001 -> address-family ipv4 unicast -> neighbor 209.165.200.6 activate'
+      },
+      {
+        id: 'task-ccnp-bgp1-2',
+        description: 'Konfigurasi eBGP peering pada R3 dengan D2 (209.165.200.10, AS 65002) di Address Family IPv4',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '209.165.200.10', remoteAs: 65002, addressFamily: 'ipv4', activate: true },
+        hint: 'router bgp 65000 -> neighbor 209.165.200.10 remote-as 65002 -> address-family ipv4 unicast -> neighbor 209.165.200.10 activate'
+      },
+      {
+        id: 'task-ccnp-bgp1-3',
+        description: 'Konfigurasi next-hop-self pada Router R1 ke iBGP peer 10.0.0.1 under Address Family IPv4',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '10.0.0.1', nextHopSelf: true, addressFamily: 'ipv4' },
+        hint: 'router bgp 65000 -> address-family ipv4 unicast -> neighbor 10.0.0.1 next-hop-self'
+      },
+      {
+        id: 'task-ccnp-bgp1-4',
+        description: 'Iklankan network internal 172.16.0.0 mask 255.255.0.0 pada Router R2 di bawah Address Family IPv4',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'bgp_network',
+        expectedValue: { network: '172.16.0.0', mask: '255.255.0.0', addressFamily: 'ipv4' },
+        hint: 'router bgp 65000 -> address-family ipv4 unicast -> network 172.16.0.0 mask 255.255.0.0'
+      },
+      {
+        id: 'task-ccnp-bgp1-5',
+        description: 'Konfigurasi AS 65000 sebagai Non-Transit AS dengan AS-Path ACL 10 permit ^$ dan filter-list 10 out pada R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'as_path_acl',
+        expectedValue: { number: 10, action: 'permit', regex: '^$' },
+        hint: 'ip as-path access-list 10 permit ^$ -> router bgp 65000 -> address-family ipv4 unicast -> neighbor 209.165.200.6 filter-list 10 out'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-bgp-02-advanced-features',
+    title: 'CCNP Enterprise Lab: Configure BGP Advanced Features',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Mengonfigurasi fitur-fitur lanjutan BGP enterprise pada router gateway GW1 dan GW2 yang terhubung ke multi-homed upstream ISP (ISP1 AS 65100, ISP2 AS 65200, dan ISP3 AS 4279500803): penggunaan BGP Peer Group ISP-PEERS untuk konsistensi kebijakan, autentikasi MD5 password, filtering rute dengan AS-path ACL, manipulasi rute masuk dengan Local Preference via route-map PREFER-ISP1-ISP2, manipulasi rute keluar menggunakan MED (metric) via route-map SET-MED-ISP2, default-originate pada ISP1, dan agregasi rute summary-only pada ISP3.',
+    objectives: [
+      'Konfigurasi BGP Peer Group ISP-PEERS pada GW1 dengan update-source dan MD5 password authentication',
+      'Terapkan AS-path filtering outbound pada GW1 untuk membatasi iklan hanya rute lokal AS 65000',
+      'Konfigurasi route-map PREFER-ISP1-ISP2 pada GW1 dengan set local-preference 200',
+      'Konfigurasi route-map SET-MED-ISP2 pada GW2 dengan set metric 50',
+      'Konfigurasi default-originate pada ISP1 dan aggregate-address summary-only pada ISP3'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-bgp2-1',
+        description: 'Konfigurasi BGP peer-group ISP-PEERS pada Gateway GW1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'GW1',
+        expectedProperty: 'bgp_peer_group',
+        expectedValue: { name: 'ISP-PEERS' },
+        hint: 'router bgp 65000 -> neighbor ISP-PEERS peer-group'
+      },
+      {
+        id: 'task-ccnp-bgp2-2',
+        description: 'Konfigurasi autentikasi MD5 password cisco123 untuk peering ke ISP1 (209.165.201.1) pada GW1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'GW1',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '209.165.201.1', password: 'cisco123' },
+        hint: 'router bgp 65000 -> neighbor 209.165.201.1 password cisco123'
+      },
+      {
+        id: 'task-ccnp-bgp2-3',
+        description: 'Konfigurasi route-map PREFER-ISP1-ISP2 dengan set local-preference 200 pada GW1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'GW1',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'PREFER-ISP1-ISP2', sequence: 10, setLocalPreference: 200 },
+        hint: 'route-map PREFER-ISP1-ISP2 permit 10 -> set local-preference 200'
+      },
+      {
+        id: 'task-ccnp-bgp2-4',
+        description: 'Konfigurasi route-map SET-MED-ISP2 dengan set metric 50 pada GW2',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'GW2',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'SET-MED-ISP2', sequence: 10, setMetric: 50 },
+        hint: 'route-map SET-MED-ISP2 permit 10 -> set metric 50'
+      },
+      {
+        id: 'task-ccnp-bgp2-5',
+        description: 'Konfigurasi aggregate-address 203.0.112.0 255.255.252.0 summary-only pada Router ISP3',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'ISP3',
+        expectedProperty: 'bgp_aggregate_address',
+        expectedValue: { prefix: '203.0.112.0', mask: '255.255.252.0', summaryOnly: true },
+        hint: 'router bgp 4279500803 -> aggregate-address 203.0.112.0 255.255.252.0 summary-only'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'GW1', hostname: 'GW1', type: 'router', x: 220, y: 150 },
+        { id: 'GW2', hostname: 'GW2', type: 'router', x: 220, y: 320 },
+        { id: 'ISP1', hostname: 'ISP1', type: 'router', x: 500, y: 120 },
+        { id: 'ISP2', hostname: 'ISP2', type: 'router', x: 500, y: 240 },
+        { id: 'ISP3', hostname: 'ISP3', type: 'router', x: 500, y: 360 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'GW1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'GW2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'GW1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'ISP1', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'GW2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'ISP2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'ISP2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'ISP3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-bgp-03-route-reflector',
+    title: 'CCNP Enterprise Lab: Configure BGP Route Reflector',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Mengurangi kompleksitas iBGP full-mesh dalam AS 65000 dengan mendesain R2 sebagai BGP Route Reflector (RR) yang melayani client R1 dan R3. Mengonfigurasi cluster-id 999 pada R2, menetapkan neighbor R1 dan R3 sebagai route-reflector-client untuk IPv4 dan IPv6 address families, serta memverifikasi bahwa rute yang diterima dari satu client berhasil direfleksikan ke client lainnya tanpa sesi peering langsung antara R1 dan R3.',
+    objectives: [
+      'Konfigurasi BGP cluster-id 999 pada Route Reflector R2',
+      'Tetapkan neighbor 10.0.0.2 dan 10.0.0.6 sebagai route-reflector-client pada R2 untuk Address Family IPv4',
+      'Tetapkan neighbor 2001:db8:feed:1::2 dan 2001:db8:feed:2::6 sebagai route-reflector-client pada R2 untuk Address Family IPv6',
+      'Pastikan sesi iBGP langsung antara R1 dan R3 ditiadakan sehingga seluruh pertukaran rute melalui R2'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-bgp3-1',
+        description: 'Konfigurasi proses BGP AS 65000 dengan cluster-id 999 pada Route Reflector R2',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'bgp_configured',
+        expectedValue: { asNumber: 65000, clusterId: '999' },
+        hint: 'router bgp 65000 -> bgp cluster-id 999'
+      },
+      {
+        id: 'task-ccnp-bgp3-2',
+        description: 'Konfigurasi neighbor 10.0.0.2 sebagai route-reflector-client pada R2 under Address Family IPv4',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '10.0.0.2', routeReflectorClient: true, addressFamily: 'ipv4' },
+        hint: 'router bgp 65000 -> address-family ipv4 unicast -> neighbor 10.0.0.2 route-reflector-client'
+      },
+      {
+        id: 'task-ccnp-bgp3-3',
+        description: 'Konfigurasi neighbor 10.0.0.6 sebagai route-reflector-client pada R2 under Address Family IPv4',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '10.0.0.6', routeReflectorClient: true, addressFamily: 'ipv4' },
+        hint: 'router bgp 65000 -> address-family ipv4 unicast -> neighbor 10.0.0.6 route-reflector-client'
+      },
+      {
+        id: 'task-ccnp-bgp3-4',
+        description: 'Konfigurasi neighbor 2001:db8:feed:1::2 sebagai route-reflector-client pada R2 under Address Family IPv6',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '2001:db8:feed:1::2', routeReflectorClient: true, addressFamily: 'ipv6' },
+        hint: 'router bgp 65000 -> address-family ipv6 unicast -> neighbor 2001:db8:feed:1::2 route-reflector-client'
+      },
+      {
+        id: 'task-ccnp-bgp3-5',
+        description: 'Konfigurasi neighbor 2001:db8:feed:2::6 sebagai route-reflector-client pada R2 under Address Family IPv6',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '2001:db8:feed:2::6', routeReflectorClient: true, addressFamily: 'ipv6' },
+        hint: 'router bgp 65000 -> address-family ipv6 unicast -> neighbor 2001:db8:feed:2::6 route-reflector-client'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-bgp-04-path-manipulation',
+    title: 'CCNP Enterprise Lab: Implement BGP Path Manipulation',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 40,
+    difficulty: 'Advanced',
+    scenario: 'Menerapkan manipulasi pemilihan jalur terbaik (BGP Best Path Selection) pada Router R1 yang terhubung multihomed ke AS tetangga (R2 AS 500 dan R3 AS 300). Mengimplementasikan parameter Weight (lokal ke router), Local Preference (disebarkan ke seluruh iBGP), AS-Path Prepending (mempengaruhi rute masuk dari AS eksternal), dan Multi-Exit Discriminator (MED) untuk kontrol rekayasa lalu lintas IPv4 dan IPv6.',
+    objectives: [
+      'Konfigurasi BGP router-id 1.1.1.1 dan no bgp default ipv4-unicast pada R1',
+      'Manipulasi pemilihan jalur masuk menggunakan Local Preference via route-map USE_THIS_PATH_FOR_IPV4',
+      'Manipulasi pemilihan rute masuk dari AS eksternal menggunakan AS-Path Prepending via route-map PREPEND_AS',
+      'Konfigurasi MED via route-map SET_METRIC untuk mempengaruhi exit point pada upstream peers'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-bgp4-1',
+        description: 'Konfigurasi BGP AS 6500 dengan router-id 1.1.1.1 dan no bgp default ipv4-unicast pada R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_configured',
+        expectedValue: { asNumber: 6500, routerId: '1.1.1.1', noBgpDefaultIpv4Unicast: true },
+        hint: 'router bgp 6500 -> bgp router-id 1.1.1.1 -> no bgp default ipv4-unicast'
+      },
+      {
+        id: 'task-ccnp-bgp4-2',
+        description: 'Konfigurasi route-map USE_THIS_PATH_FOR_IPV4 dengan set local-preference 300 pada R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'USE_THIS_PATH_FOR_IPV4', sequence: 10, setLocalPreference: 300 },
+        hint: 'route-map USE_THIS_PATH_FOR_IPV4 permit 10 -> set local-preference 300'
+      },
+      {
+        id: 'task-ccnp-bgp4-3',
+        description: 'Terapkan route-map USE_THIS_PATH_FOR_IPV4 inbound pada neighbor 10.1.3.130 under Address Family IPv4',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '10.1.3.130', routeMapIn: 'USE_THIS_PATH_FOR_IPV4', addressFamily: 'ipv4' },
+        hint: 'router bgp 6500 -> address-family ipv4 unicast -> neighbor 10.1.3.130 route-map USE_THIS_PATH_FOR_IPV4 in'
+      },
+      {
+        id: 'task-ccnp-bgp4-4',
+        description: 'Konfigurasi route-map PREPEND_AS dengan set as-path prepend 6500 6500 pada R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'PREPEND_AS', sequence: 10, setAsPathPrepend: '6500 6500' },
+        hint: 'route-map PREPEND_AS permit 10 -> set as-path prepend 6500 6500'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 250, y: 220 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 550, y: 140 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 550, y: 300 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-bgp-05-mp-bgp',
+    title: 'CCNP Enterprise Lab: Implement MP-BGP',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 40,
+    difficulty: 'Advanced',
+    scenario: 'Mengimplementasikan Multiprotocol BGP (MP-BGP) pada jaringan enterprise yang menjalankan routing dual-stack (IPv4 dan IPv6) antara R1 (AS 1000), R2 (AS 500), dan R3 (AS 300). Mengonfigurasi neighbor peering di bawah Address Family ipv4 unicast dan ipv6 unicast dengan aktivasi eksplisit, mengiklankan prefix dual-stack, serta melakukan agregasi dan peringkasan prefix IPv6 menggunakan aggregate-address summary-only.',
+    objectives: [
+      'Konfigurasi proses BGP AS 1000 dengan router-id 1.1.1.1 pada R1',
+      'Aktifkan neighbor IPv4 di bawah address-family ipv4 unicast',
+      'Aktifkan neighbor IPv6 di bawah address-family ipv6 unicast',
+      'Iklankan prefix IPv4 dan IPv6 secara independen di setiap address family',
+      'Lakukan peringkasan IPv6 pada R1 menggunakan aggregate-address 2001:db8:acad:1000::/52 summary-only'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-bgp5-1',
+        description: 'Konfigurasi proses BGP AS 1000 dengan router-id 1.1.1.1 pada Router R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_configured',
+        expectedValue: { asNumber: 1000, routerId: '1.1.1.1' },
+        hint: 'router bgp 1000 -> bgp router-id 1.1.1.1'
+      },
+      {
+        id: 'task-ccnp-bgp5-2',
+        description: 'Aktifkan neighbor 10.1.2.2 under Address Family IPv4 pada Router R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '10.1.2.2', activate: true, addressFamily: 'ipv4' },
+        hint: 'router bgp 1000 -> address-family ipv4 unicast -> neighbor 10.1.2.2 activate'
+      },
+      {
+        id: 'task-ccnp-bgp5-3',
+        description: 'Aktifkan neighbor 2001:db8:acad:1012::2 under Address Family IPv6 pada Router R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '2001:db8:acad:1012::2', activate: true, addressFamily: 'ipv6' },
+        hint: 'router bgp 1000 -> address-family ipv6 unicast -> neighbor 2001:db8:acad:1012::2 activate'
+      },
+      {
+        id: 'task-ccnp-bgp5-4',
+        description: 'Iklankan prefix IPv6 2001:db8:acad:1001::/64 under Address Family IPv6 pada R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_network',
+        expectedValue: { network: '2001:db8:acad:1001::/64', addressFamily: 'ipv6' },
+        hint: 'router bgp 1000 -> address-family ipv6 unicast -> network 2001:db8:acad:1001::/64'
+      },
+      {
+        id: 'task-ccnp-bgp5-5',
+        description: 'Konfigurasi aggregate-address 2001:db8:acad:1000::/52 summary-only under Address Family IPv6 pada R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_aggregate_address',
+        expectedValue: { prefix: '2001:db8:acad:1000::/52', summaryOnly: true, addressFamily: 'ipv6' },
+        hint: 'router bgp 1000 -> address-family ipv6 unicast -> aggregate-address 2001:db8:acad:1000::/52 summary-only'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 250, y: 220 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 550, y: 140 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 550, y: 300 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-bgp-06-troubleshoot-bgp',
+    title: 'CCNP Enterprise Lab: Troubleshooting BGP',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Melakukan pemecahan masalah (troubleshooting) jaringan BGP enterprise yang mengalami kegagalan propagasi rute dan ketidakkonsistenan pemilihan jalur: Trouble Ticket 20.1.1.1 (Edge router R1 dan R3 gagal memperbarui next-hop attribute ke alamat dirinya sendiri pada iBGP peering ke R2, menyebabkan rute eBGP tidak dapat dijangkau oleh internal AS) dan Trouble Ticket 20.1.1.2 (Rekayasa jalur gagal karena penggunaan atribut Weight yang bersifat non-transitif lokal ke router alih-alih Local Preference pada rute masuk).',
+    objectives: [
+      'Identifikasi dan perbaiki missing next-hop-self pada R1 untuk iBGP peering IPv4 dan IPv6 ke R2 (Ticket 20.1.1.1)',
+      'Identifikasi dan perbaiki missing next-hop-self pada R3 untuk iBGP peering IPv4 dan IPv6 ke R2 (Ticket 20.1.1.1)',
+      'Koreksi route-map manipulasi jalur pada R1 dengan mengganti set weight menjadi set local-preference 100 (Ticket 20.1.1.2)',
+      'Koreksi route-map manipulasi jalur pada R3 dengan mengganti set weight menjadi set local-preference 400 (Ticket 20.1.1.2)'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-bgp6-1',
+        description: 'Perbaiki missing next-hop-self pada R1 untuk peering iBGP IPv4 ke 192.168.99.2 (Ticket 20.1.1.1)',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '192.168.99.2', nextHopSelf: true, addressFamily: 'ipv4' },
+        hint: 'router bgp 65000 -> address-family ipv4 unicast -> neighbor 192.168.99.2 next-hop-self'
+      },
+      {
+        id: 'task-ccnp-bgp6-2',
+        description: 'Perbaiki missing next-hop-self pada R3 untuk peering iBGP IPv4 ke 192.168.99.2 (Ticket 20.1.1.1)',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'bgp_neighbor',
+        expectedValue: { neighborIp: '192.168.99.2', nextHopSelf: true, addressFamily: 'ipv4' },
+        hint: 'router bgp 65000 -> address-family ipv4 unicast -> neighbor 192.168.99.2 next-hop-self'
+      },
+      {
+        id: 'task-ccnp-bgp6-3',
+        description: 'Koreksi route-map SET-LP pada Router R1 menjadi set local-preference 100 (Ticket 20.1.1.2)',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'SET-LP', sequence: 10, setLocalPreference: 100 },
+        hint: 'route-map SET-LP permit 10 -> set local-preference 100'
+      },
+      {
+        id: 'task-ccnp-bgp6-4',
+        description: 'Koreksi route-map SET-LP pada Router R3 menjadi set local-preference 400 (Ticket 20.1.1.2)',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'SET-LP', sequence: 10, setLocalPreference: 400 },
+        hint: 'route-map SET-LP permit 10 -> set local-preference 400'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
         { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
       ]
     }
   }
 ];
+

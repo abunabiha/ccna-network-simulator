@@ -55,6 +55,7 @@ export interface CliContext {
   targetKeyId?: number;
   targetAfProto?: 'ipv4' | 'ipv6';
   targetAfInterface?: string;
+  targetAfType?: 'eigrp' | 'bgp';
   targetEigrpName?: string;
 }
 

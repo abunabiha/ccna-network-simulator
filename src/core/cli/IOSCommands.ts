@@ -756,6 +756,18 @@ export class IOSCommands {
           return { output: RoutingProtocolEngine.renderShowIpBgp(device, allDevices) };
         }
 
+        // show ip as-path-access-list [num]
+        if ('as-path-access-list'.startsWith(cmd2) || (cmd2 === 'as-path' && tokens.length >= 4 && 'access-list'.startsWith(tokens[3].toLowerCase()))) {
+          const lines: string[] = [];
+          for (const [num, rules] of device.asPathAccessLists.entries()) {
+            for (const r of rules) {
+              lines.push(`AS path access list ${num}`);
+              lines.push(`    ${r.action} ${r.regex}`);
+            }
+          }
+          return { output: lines.length > 0 ? lines.join('\n') : '% No AS-path access-list configured.' };
+        }
+
         // show ip nat translations
         if ('nat'.startsWith(cmd2)) {
           return { output: this.renderNatTranslations(device) };
@@ -855,6 +867,17 @@ export class IOSCommands {
         FhrpEngine.convergeFhrp(allDevices);
         const isBrief = tokens.length >= 3 && 'brief'.startsWith(tokens[2].toLowerCase());
         return { output: FhrpEngine.renderShowVrrp(device, isBrief) };
+      }
+
+      // show bgp [ipv4 | ipv6] [unicast] [summary]
+      if ('bgp'.startsWith(cmd1)) {
+        RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+        const afType = (tokens.length >= 3 && tokens[2].toLowerCase().includes('6')) ? 'ipv6' : 'ipv4';
+        const isSummary = tokens.some(t => t.toLowerCase() === 'summary');
+        if (isSummary) {
+          return { output: RoutingProtocolEngine.renderShowBgpSummary(device, afType, allDevices) };
+        }
+        return { output: RoutingProtocolEngine.renderShowBgpTable(device, afType, allDevices) };
       }
 
       // show route-map ...
@@ -1312,8 +1335,16 @@ export class IOSCommands {
     // router bgp <as>
     if ('router'.startsWith(cmd0) && tokens.length >= 3 && 'bgp'.startsWith(tokens[1].toLowerCase())) {
       if (device instanceof Router || (device instanceof Switch && device.isLayer3)) {
-        const as = parseInt(tokens[2], 10);
-        if (isNaN(as) || as < 1 || as > 65535) return { output: `% Invalid AS number.` };
+        let as = parseInt(tokens[2], 10);
+        if (tokens[2].includes('.')) {
+          const parts = tokens[2].split('.');
+          const hi = parseInt(parts[0], 10);
+          const lo = parseInt(parts[1], 10);
+          if (!isNaN(hi) && !isNaN(lo)) {
+            as = hi * 65536 + lo;
+          }
+        }
+        if (isNaN(as) || as < 1 || as > 4294967295) return { output: `% Invalid AS number.` };
 
         const target = device as Router | Switch;
         if (!target.bgpConfig) {
@@ -1420,6 +1451,29 @@ export class IOSCommands {
         target.routeMaps.delete(mapName);
       }
       return { output: '' };
+    }
+
+    // ip as-path access-list <num> {permit | deny} <regex>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'as-path'.startsWith(tokens[1].toLowerCase()) && 'access-list'.startsWith(tokens[2].toLowerCase())) {
+      const aclNum = parseInt(tokens[3], 10);
+      const action = tokens[4].toLowerCase() as 'permit' | 'deny';
+      const regex = tokens.slice(5).join(' ');
+      if (!isNaN(aclNum) && (action === 'permit' || action === 'deny')) {
+        if (!device.asPathAccessLists.has(aclNum)) {
+          device.asPathAccessLists.set(aclNum, []);
+        }
+        device.asPathAccessLists.get(aclNum)!.push({ action, regex });
+        return { output: '' };
+      }
+    }
+
+    // no ip as-path access-list <num>
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'as-path'.startsWith(tokens[2].toLowerCase()) && 'access-list'.startsWith(tokens[3].toLowerCase())) {
+      const aclNum = parseInt(tokens[4], 10);
+      if (!isNaN(aclNum)) {
+        device.asPathAccessLists.delete(aclNum);
+        return { output: '' };
+      }
     }
 
     // ip prefix-list <name> [seq <seq>] {permit | deny} <network/len> [ge <ge>] [le <le>]
@@ -2969,49 +3023,83 @@ export class IOSCommands {
       else if (_context.targetRoutingProcess.startsWith('bgp')) proto = 'bgp';
     }
 
-    // address-family <ipv4|ipv6> unicast autonomous-system <as>
-    if ('address-family'.startsWith(cmd0) && tokens.length >= 5) {
+    // address-family <ipv4|ipv6> [unicast] [autonomous-system <as>]
+    if ('address-family'.startsWith(cmd0) && tokens.length >= 2) {
       const afProto = tokens[1].toLowerCase() as 'ipv4' | 'ipv6';
-      const as = parseInt(tokens[4], 10);
-      if (isNaN(as)) return { output: '% Invalid autonomous-system number.' };
+      if (afProto === 'ipv4' || afProto === 'ipv6') {
+        const asIdx = tokens.findIndex(t => 'autonomous-system'.startsWith(t.toLowerCase()));
+        if (asIdx !== -1 && asIdx + 1 < tokens.length) {
+          const as = parseInt(tokens[asIdx + 1], 10);
+          if (isNaN(as)) return { output: '% Invalid autonomous-system number.' };
 
-      if (afProto === 'ipv4') {
-        if (!target.eigrpConfig) {
-          target.eigrpConfig = {
-            enabled: true,
-            asNumber: as,
-            name: _context.targetEigrpName,
-            networks: [],
-            passiveInterfaces: []
+          if (afProto === 'ipv4') {
+            if (!target.eigrpConfig) {
+              target.eigrpConfig = {
+                enabled: true,
+                asNumber: as,
+                name: _context.targetEigrpName,
+                networks: [],
+                passiveInterfaces: []
+              };
+            } else {
+              target.eigrpConfig.enabled = true;
+              target.eigrpConfig.asNumber = as;
+              if (_context.targetEigrpName) target.eigrpConfig.name = _context.targetEigrpName;
+            }
+          } else if (afProto === 'ipv6') {
+            if (!target.eigrpV6Config) {
+              target.eigrpV6Config = {
+                enabled: true,
+                asNumber: as,
+                name: _context.targetEigrpName,
+                passiveInterfaces: []
+              };
+            } else {
+              target.eigrpV6Config.enabled = true;
+              target.eigrpV6Config.asNumber = as;
+              if (_context.targetEigrpName) target.eigrpV6Config.name = _context.targetEigrpName;
+            }
+          }
+
+          return {
+            output: '',
+            newMode: 'router-af-config',
+            contextUpdates: {
+              targetAfProto: afProto,
+              targetAsNumber: as,
+              targetAfType: 'eigrp'
+            }
           };
-        } else {
-          target.eigrpConfig.enabled = true;
-          target.eigrpConfig.asNumber = as;
-          if (_context.targetEigrpName) target.eigrpConfig.name = _context.targetEigrpName;
-        }
-      } else if (afProto === 'ipv6') {
-        if (!target.eigrpV6Config) {
-          target.eigrpV6Config = {
-            enabled: true,
-            asNumber: as,
-            name: _context.targetEigrpName,
-            passiveInterfaces: []
+        } else if (proto === 'bgp' || target.bgpConfig) {
+          if (!target.bgpConfig) {
+            target.bgpConfig = {
+              enabled: true,
+              asNumber: _context.targetAsNumber || 65000,
+              neighbors: new Map(),
+              networks: []
+            };
+          }
+          if (!target.bgpConfig.addressFamilies) {
+            target.bgpConfig.addressFamilies = new Map();
+          }
+          if (!target.bgpConfig.addressFamilies.has(afProto)) {
+            target.bgpConfig.addressFamilies.set(afProto, {
+              type: afProto,
+              subType: 'unicast',
+              networks: [],
+              neighbors: new Map()
+            });
+          }
+          return {
+            output: '',
+            newMode: 'router-af-config',
+            contextUpdates: {
+              targetAfProto: afProto,
+              targetAfType: 'bgp'
+            }
           };
-        } else {
-          target.eigrpV6Config.enabled = true;
-          target.eigrpV6Config.asNumber = as;
-          if (_context.targetEigrpName) target.eigrpV6Config.name = _context.targetEigrpName;
         }
       }
-
-      return {
-        output: '',
-        newMode: 'router-af-config',
-        contextUpdates: {
-          targetAfProto: afProto,
-          targetAsNumber: as
-        }
-      };
     }
 
     // eigrp stub [receive-only | connected | summary | static | leak-map]*
@@ -3174,17 +3262,112 @@ export class IOSCommands {
       }
     }
 
-    // BGP neighbor: neighbor <ip> remote-as <as>
-    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'remote-as'.startsWith(tokens[2].toLowerCase())) {
+    // BGP log-neighbor-changes
+    if ('bgp'.startsWith(cmd0) && tokens.length >= 2 && 'log-neighbor-changes'.startsWith(tokens[1].toLowerCase())) {
+      if (target.bgpConfig) {
+        target.bgpConfig.logNeighborChanges = true;
+        return { output: '' };
+      }
+    }
+
+    // BGP cluster-id <id>
+    if ('bgp'.startsWith(cmd0) && tokens.length >= 3 && 'cluster-id'.startsWith(tokens[1].toLowerCase())) {
+      if (target.bgpConfig) {
+        target.bgpConfig.clusterId = tokens[2];
+        return { output: '' };
+      }
+    }
+
+    // BGP asnotation dot
+    if ('bgp'.startsWith(cmd0) && tokens.length >= 3 && 'asnotation'.startsWith(tokens[1].toLowerCase()) && tokens[2].toLowerCase() === 'dot') {
+      if (target.bgpConfig) {
+        target.bgpConfig.asnotation = 'dot';
+        return { output: '' };
+      }
+    }
+
+    // no bgp default ipv4-unicast
+    if (cmd0 === 'no' && tokens.length >= 4 && 'bgp'.startsWith(tokens[1].toLowerCase()) && 'default'.startsWith(tokens[2].toLowerCase())) {
+      if (target.bgpConfig) {
+        target.bgpConfig.noBgpDefaultIpv4Unicast = true;
+        return { output: '' };
+      }
+    }
+
+    // BGP aggregate-address <prefix> <mask|cidr> [summary-only] [as-set]
+    if ('aggregate-address'.startsWith(cmd0) && tokens.length >= 3) {
+      if (target.bgpConfig) {
+        if (!target.bgpConfig.aggregateAddresses) target.bgpConfig.aggregateAddresses = [];
+        const prefix = tokens[1];
+        const mask = tokens[2];
+        const summaryOnly = tokens.some(t => t.toLowerCase() === 'summary-only');
+        const asSet = tokens.some(t => t.toLowerCase() === 'as-set');
+        target.bgpConfig.aggregateAddresses.push({ prefix, mask, summaryOnly, asSet });
+        return { output: '' };
+      }
+    }
+    if (cmd0 === 'no' && tokens.length >= 3 && 'aggregate-address'.startsWith(tokens[1].toLowerCase())) {
+      if (target.bgpConfig && target.bgpConfig.aggregateAddresses) {
+        const prefix = tokens[2];
+        target.bgpConfig.aggregateAddresses = target.bgpConfig.aggregateAddresses.filter(a => a.prefix !== prefix);
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor peer-group creation: neighbor <name> peer-group
+    if ('neighbor'.startsWith(cmd0) && tokens.length === 3 && 'peer-group'.startsWith(tokens[2].toLowerCase())) {
+      const pgName = tokens[1];
+      if (target.bgpConfig) {
+        if (!target.bgpConfig.peerGroups) target.bgpConfig.peerGroups = new Map();
+        if (!target.bgpConfig.peerGroups.has(pgName)) {
+          target.bgpConfig.peerGroups.set(pgName, {
+            ipAddress: pgName,
+            remoteAs: target.bgpConfig.asNumber,
+            isPeerGroup: true
+          });
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor assign to peer-group: neighbor <ip> peer-group <group>
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'peer-group'.startsWith(tokens[2].toLowerCase())) {
       const ip = tokens[1];
-      const as = parseInt(tokens[3], 10);
+      const pgName = tokens[3];
       if (target.bgpConfig) {
         let nb = target.bgpConfig.neighbors.get(ip);
         if (!nb) {
-          nb = { ipAddress: ip, ip, remoteAs: as };
+          const pg = target.bgpConfig.peerGroups?.get(pgName);
+          nb = { ipAddress: ip, ip, remoteAs: pg?.remoteAs || target.bgpConfig.asNumber, peerGroup: pgName };
           target.bgpConfig.neighbors.set(ip, nb);
         } else {
-          nb.remoteAs = as;
+          nb.peerGroup = pgName;
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor: neighbor <ip> remote-as <as>
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'remote-as'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      let as = parseInt(tokens[3], 10);
+      if (tokens[3].includes('.')) {
+        const parts = tokens[3].split('.');
+        const hi = parseInt(parts[0], 10);
+        const lo = parseInt(parts[1], 10);
+        if (!isNaN(hi) && !isNaN(lo)) as = hi * 65536 + lo;
+      }
+      if (target.bgpConfig) {
+        if (target.bgpConfig.peerGroups && target.bgpConfig.peerGroups.has(peer)) {
+          target.bgpConfig.peerGroups.get(peer)!.remoteAs = as;
+        } else {
+          let nb = target.bgpConfig.neighbors.get(peer);
+          if (!nb) {
+            nb = { ipAddress: peer, ip: peer, remoteAs: as };
+            target.bgpConfig.neighbors.set(peer, nb);
+          } else {
+            nb.remoteAs = as;
+          }
         }
         return { output: '' };
       }
@@ -3192,16 +3375,143 @@ export class IOSCommands {
 
     // BGP neighbor update-source: neighbor <ip> update-source <iface>
     if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'update-source'.startsWith(tokens[2].toLowerCase())) {
-      const ip = tokens[1];
+      const peer = tokens[1];
       const ifaceNorm = CliLexer.normalizeInterfaceName(tokens[3]);
       if (target.bgpConfig) {
-        let nb = target.bgpConfig.neighbors.get(ip);
-        if (!nb) {
-          nb = { ipAddress: ip, ip, remoteAs: target.bgpConfig.asNumber, updateSource: ifaceNorm };
-          target.bgpConfig.neighbors.set(ip, nb);
+        if (target.bgpConfig.peerGroups?.has(peer)) {
+          target.bgpConfig.peerGroups.get(peer)!.updateSource = ifaceNorm;
         } else {
-          nb.updateSource = ifaceNorm;
+          let nb = target.bgpConfig.neighbors.get(peer);
+          if (!nb) {
+            nb = { ipAddress: peer, ip: peer, remoteAs: target.bgpConfig.asNumber, updateSource: ifaceNorm };
+            target.bgpConfig.neighbors.set(peer, nb);
+          } else {
+            nb.updateSource = ifaceNorm;
+          }
         }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor password: neighbor <ip/name> password <pwd>
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'password'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      const pwd = tokens[3];
+      if (target.bgpConfig) {
+        if (target.bgpConfig.peerGroups?.has(peer)) {
+          target.bgpConfig.peerGroups.get(peer)!.password = pwd;
+        } else {
+          let nb = target.bgpConfig.neighbors.get(peer);
+          if (nb) nb.password = pwd;
+          else target.bgpConfig.neighbors.set(peer, { ipAddress: peer, remoteAs: target.bgpConfig.asNumber, password: pwd });
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor default-originate: neighbor <ip/name> default-originate
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'default-originate'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(peer);
+        if (nb) nb.defaultOriginate = true;
+        else target.bgpConfig.neighbors.set(peer, { ipAddress: peer, remoteAs: target.bgpConfig.asNumber, defaultOriginate: true });
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor next-hop-self: neighbor <ip/name> next-hop-self
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'next-hop-self'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(peer);
+        if (nb) nb.nextHopSelf = true;
+        else target.bgpConfig.neighbors.set(peer, { ipAddress: peer, remoteAs: target.bgpConfig.asNumber, nextHopSelf: true });
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor route-reflector-client: neighbor <ip/name> route-reflector-client
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'route-reflector-client'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(peer);
+        if (nb) nb.routeReflectorClient = true;
+        else target.bgpConfig.neighbors.set(peer, { ipAddress: peer, remoteAs: target.bgpConfig.asNumber, routeReflectorClient: true });
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor filter-list: neighbor <ip/name> filter-list <num> in|out
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 5 && 'filter-list'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      const aclNum = parseInt(tokens[3], 10);
+      const dir = tokens[4].toLowerCase() as 'in' | 'out';
+      if (target.bgpConfig) {
+        const item = target.bgpConfig.peerGroups?.get(peer) || target.bgpConfig.neighbors.get(peer);
+        if (item) {
+          if (dir === 'in') item.filterListIn = aclNum;
+          else item.filterListOut = aclNum;
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor route-map: neighbor <ip/name> route-map <map> in|out
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 5 && 'route-map'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      const mapName = tokens[3];
+      const dir = tokens[4].toLowerCase() as 'in' | 'out';
+      if (target.bgpConfig) {
+        const item = target.bgpConfig.peerGroups?.get(peer) || target.bgpConfig.neighbors.get(peer);
+        if (item) {
+          if (dir === 'in') item.routeMapIn = mapName;
+          else item.routeMapOut = mapName;
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor prefix-list: neighbor <ip/name> prefix-list <list> in|out
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 5 && 'prefix-list'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      const listName = tokens[3];
+      const dir = tokens[4].toLowerCase() as 'in' | 'out';
+      if (target.bgpConfig) {
+        const item = target.bgpConfig.peerGroups?.get(peer) || target.bgpConfig.neighbors.get(peer);
+        if (item) {
+          if (dir === 'in') item.prefixListIn = listName;
+          else item.prefixListOut = listName;
+        }
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor weight: neighbor <ip/name> weight <val>
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'weight'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      const wVal = parseInt(tokens[3], 10);
+      if (target.bgpConfig) {
+        const item = target.bgpConfig.peerGroups?.get(peer) || target.bgpConfig.neighbors.get(peer);
+        if (item) item.weight = wVal;
+        return { output: '' };
+      }
+    }
+
+    // BGP neighbor activate: neighbor <ip> activate
+    if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'activate'.startsWith(tokens[2].toLowerCase())) {
+      const peer = tokens[1];
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(peer);
+        if (nb) nb.activate = true;
+        return { output: '' };
+      }
+    }
+    if (cmd0 === 'no' && tokens.length >= 4 && 'neighbor'.startsWith(tokens[1].toLowerCase()) && 'activate'.startsWith(tokens[3].toLowerCase())) {
+      const peer = tokens[2];
+      if (target.bgpConfig) {
+        let nb = target.bgpConfig.neighbors.get(peer);
+        if (nb) nb.activate = false;
         return { output: '' };
       }
     }
@@ -3532,8 +3842,8 @@ export class IOSCommands {
     device: Device
   ): CliExecutionResult {
     const cmd0 = tokens[0].toLowerCase();
-    const mapName = context.targetRouteMapName;
-    const seq = context.targetRouteMapSeq || 10;
+    const mapName = context.targetRouteMapName || (context as any).targetRouteMap;
+    const seq = context.targetRouteMapSeq || (context as any).targetSequence || 10;
     const target = device as Router | Switch;
 
     if (!mapName || !target.routeMaps) {
@@ -3611,6 +3921,45 @@ export class IOSCommands {
       }
       clause.setIpNextHopTrack = { nextHop, trackId };
       clause.setIpNextHop = nextHop;
+      return { output: '' };
+    }
+
+    // match as-path <acl-id>
+    if ('match'.startsWith(cmd0) && tokens.length >= 3 && 'as-path'.startsWith(tokens[1].toLowerCase())) {
+      const aclId = parseInt(tokens[2], 10);
+      if (!isNaN(aclId)) {
+        clause.matchAsPath = aclId;
+        return { output: '' };
+      }
+    }
+
+    // match ipv6 address prefix-list <name>
+    if ('match'.startsWith(cmd0) && tokens.length >= 5 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase()) && 'prefix-list'.startsWith(tokens[3].toLowerCase())) {
+      clause.matchIpv6AddressPrefixList = tokens[4];
+      return { output: '' };
+    }
+
+    // set weight <val>
+    if ('set'.startsWith(cmd0) && tokens.length >= 3 && 'weight'.startsWith(tokens[1].toLowerCase())) {
+      const wVal = parseInt(tokens[2], 10);
+      if (!isNaN(wVal)) {
+        clause.setWeight = wVal;
+        return { output: '' };
+      }
+    }
+
+    // set local-preference <val>
+    if ('set'.startsWith(cmd0) && tokens.length >= 3 && 'local-preference'.startsWith(tokens[1].toLowerCase())) {
+      const lpVal = parseInt(tokens[2], 10);
+      if (!isNaN(lpVal)) {
+        clause.setLocalPreference = lpVal;
+        return { output: '' };
+      }
+    }
+
+    // set as-path prepend <as-string...>
+    if ('set'.startsWith(cmd0) && tokens.length >= 4 && 'as-path'.startsWith(tokens[1].toLowerCase()) && 'prepend'.startsWith(tokens[2].toLowerCase())) {
+      clause.setAsPathPrepend = tokens.slice(3).join(' ');
       return { output: '' };
     }
 
@@ -4334,6 +4683,136 @@ export class IOSCommands {
     }
     if (cmd0 === 'end') {
       return { output: '', newMode: 'priv-exec' };
+    }
+
+    const isBgp = context.targetAfType === 'bgp' || (!!target.bgpConfig && !target.eigrpConfig && !target.eigrpV6Config);
+    const afKey = context.targetAfProto || 'ipv4';
+
+    if (isBgp && target.bgpConfig) {
+      if (!target.bgpConfig.addressFamilies) target.bgpConfig.addressFamilies = new Map();
+      if (!target.bgpConfig.addressFamilies.has(afKey)) {
+        target.bgpConfig.addressFamilies.set(afKey, {
+          type: afKey as any,
+          subType: 'unicast',
+          networks: [],
+          neighbors: new Map()
+        });
+      }
+      const af = target.bgpConfig.addressFamilies.get(afKey)!;
+
+      // network <ip|prefix> [mask <mask>]
+      if ('network'.startsWith(cmd0) && tokens.length >= 2) {
+        const net = tokens[1];
+        let mask: string | undefined;
+        if (tokens.length >= 4 && 'mask'.startsWith(tokens[2].toLowerCase())) {
+          mask = tokens[3];
+        }
+        af.networks.push({ network: net, mask });
+        return { output: '' };
+      }
+
+      // aggregate-address <prefix> <mask|cidr> [summary-only] [as-set]
+      if ('aggregate-address'.startsWith(cmd0) && tokens.length >= 3) {
+        if (!af.aggregateAddresses) af.aggregateAddresses = [];
+        const prefix = tokens[1];
+        const mask = tokens[2];
+        const summaryOnly = tokens.some(t => t.toLowerCase() === 'summary-only');
+        const asSet = tokens.some(t => t.toLowerCase() === 'as-set');
+        af.aggregateAddresses.push({ prefix, mask, summaryOnly, asSet });
+        return { output: '' };
+      }
+      if (cmd0 === 'no' && tokens.length >= 3 && 'aggregate-address'.startsWith(tokens[1].toLowerCase())) {
+        if (af.aggregateAddresses) {
+          const prefix = tokens[2];
+          af.aggregateAddresses = af.aggregateAddresses.filter(a => a.prefix !== prefix);
+        }
+        return { output: '' };
+      }
+
+      // neighbor <ip> activate
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'activate'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        af.neighbors.get(peer)!.activate = true;
+        return { output: '' };
+      }
+
+      // no neighbor <ip> activate
+      if (cmd0 === 'no' && tokens.length >= 4 && 'neighbor'.startsWith(tokens[1].toLowerCase()) && 'activate'.startsWith(tokens[3].toLowerCase())) {
+        const peer = tokens[2];
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        af.neighbors.get(peer)!.activate = false;
+        return { output: '' };
+      }
+
+      // neighbor <ip> next-hop-self
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'next-hop-self'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        af.neighbors.get(peer)!.nextHopSelf = true;
+        return { output: '' };
+      }
+
+      // neighbor <ip> route-reflector-client
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'route-reflector-client'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        af.neighbors.get(peer)!.routeReflectorClient = true;
+        return { output: '' };
+      }
+
+      // neighbor <ip> filter-list <num> in|out
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 5 && 'filter-list'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        const aclNum = parseInt(tokens[3], 10);
+        const dir = tokens[4].toLowerCase() as 'in' | 'out';
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        const ncfg = af.neighbors.get(peer)!;
+        if (dir === 'in') ncfg.filterListIn = aclNum;
+        else ncfg.filterListOut = aclNum;
+        return { output: '' };
+      }
+
+      // neighbor <ip> route-map <name> in|out
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 5 && 'route-map'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        const mapName = tokens[3];
+        const dir = tokens[4].toLowerCase() as 'in' | 'out';
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        const ncfg = af.neighbors.get(peer)!;
+        if (dir === 'in') ncfg.routeMapIn = mapName;
+        else ncfg.routeMapOut = mapName;
+        return { output: '' };
+      }
+
+      // neighbor <ip> prefix-list <name> in|out
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 5 && 'prefix-list'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        const listName = tokens[3];
+        const dir = tokens[4].toLowerCase() as 'in' | 'out';
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        const ncfg = af.neighbors.get(peer)!;
+        if (dir === 'in') ncfg.prefixListIn = listName;
+        else ncfg.prefixListOut = listName;
+        return { output: '' };
+      }
+
+      // neighbor <ip> weight <val>
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 4 && 'weight'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        const wVal = parseInt(tokens[3], 10);
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        af.neighbors.get(peer)!.weight = wVal;
+        return { output: '' };
+      }
+
+      // neighbor <ip> default-originate
+      if ('neighbor'.startsWith(cmd0) && tokens.length >= 3 && 'default-originate'.startsWith(tokens[2].toLowerCase())) {
+        const peer = tokens[1];
+        if (!af.neighbors.has(peer)) af.neighbors.set(peer, {});
+        af.neighbors.get(peer)!.defaultOriginate = true;
+        return { output: '' };
+      }
     }
 
     // network <ip> [wildcard] (IPv4)

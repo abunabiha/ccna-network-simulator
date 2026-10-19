@@ -685,16 +685,100 @@ export class Switch extends Device {
     if (this.bgpConfig && this.bgpConfig.enabled) {
       lines.push(`router bgp ${this.bgpConfig.asNumber}`);
       if (this.bgpConfig.routerId) lines.push(` bgp router-id ${this.bgpConfig.routerId}`);
+      if (this.bgpConfig.clusterId) lines.push(` bgp cluster-id ${this.bgpConfig.clusterId}`);
+      if (this.bgpConfig.asnotation === 'dot') lines.push(` bgp asnotation dot`);
+      if (this.bgpConfig.logNeighborChanges) lines.push(` bgp log-neighbor-changes`);
+      if (this.bgpConfig.noBgpDefaultIpv4Unicast) lines.push(` no bgp default ipv4-unicast`);
+
+      // Peer Groups
+      if (this.bgpConfig.peerGroups) {
+        for (const [pgName, pg] of this.bgpConfig.peerGroups.entries()) {
+          lines.push(` neighbor ${pgName} peer-group`);
+          if (pg.remoteAs) lines.push(` neighbor ${pgName} remote-as ${pg.remoteAs}`);
+          if (pg.updateSource) lines.push(` neighbor ${pgName} update-source ${pg.updateSource}`);
+          if (pg.password) lines.push(` neighbor ${pgName} password ${pg.password}`);
+          if (pg.filterListOut) lines.push(` neighbor ${pgName} filter-list ${pg.filterListOut} out`);
+          if (pg.filterListIn) lines.push(` neighbor ${pgName} filter-list ${pg.filterListIn} in`);
+          if (pg.routeMapOut) lines.push(` neighbor ${pgName} route-map ${pg.routeMapOut} out`);
+          if (pg.routeMapIn) lines.push(` neighbor ${pgName} route-map ${pg.routeMapIn} in`);
+        }
+      }
+
+      // Global Neighbors
       for (const nb of this.bgpConfig.neighbors.values()) {
         const ip = nb.ipAddress || nb.ip;
-        lines.push(` neighbor ${ip} remote-as ${nb.remoteAs}`);
+        if (nb.peerGroup) {
+          lines.push(` neighbor ${ip} peer-group ${nb.peerGroup}`);
+        }
+        if (nb.remoteAs) lines.push(` neighbor ${ip} remote-as ${nb.remoteAs}`);
         if (nb.updateSource) lines.push(` neighbor ${ip} update-source ${nb.updateSource}`);
+        if (nb.password) lines.push(` neighbor ${ip} password ${nb.password}`);
         if (nb.description) lines.push(` neighbor ${ip} description ${nb.description}`);
+        if (nb.defaultOriginate) lines.push(` neighbor ${ip} default-originate`);
+        if (nb.weight !== undefined) lines.push(` neighbor ${ip} weight ${nb.weight}`);
+        if (nb.nextHopSelf) lines.push(` neighbor ${ip} next-hop-self`);
+        if (nb.routeReflectorClient) lines.push(` neighbor ${ip} route-reflector-client`);
+        if (nb.filterListOut) lines.push(` neighbor ${ip} filter-list ${nb.filterListOut} out`);
+        if (nb.filterListIn) lines.push(` neighbor ${ip} filter-list ${nb.filterListIn} in`);
+        if (nb.routeMapOut) lines.push(` neighbor ${ip} route-map ${nb.routeMapOut} out`);
+        if (nb.routeMapIn) lines.push(` neighbor ${ip} route-map ${nb.routeMapIn} in`);
+        if (nb.prefixListOut) lines.push(` neighbor ${ip} prefix-list ${nb.prefixListOut} out`);
+        if (nb.prefixListIn) lines.push(` neighbor ${ip} prefix-list ${nb.prefixListIn} in`);
         if (nb.shutdown) lines.push(` neighbor ${ip} shutdown`);
       }
+
+      // Global Networks
       for (const net of this.bgpConfig.networks) {
         lines.push(` network ${net.network}${net.mask ? ` mask ${net.mask}` : ''}`);
       }
+
+      // Global Aggregates
+      if (this.bgpConfig.aggregateAddresses) {
+        for (const agg of this.bgpConfig.aggregateAddresses) {
+          let cmd = ` aggregate-address ${agg.prefix} ${agg.mask}`;
+          if (agg.summaryOnly) cmd += ' summary-only';
+          if (agg.asSet) cmd += ' as-set';
+          lines.push(cmd);
+        }
+      }
+
+      // Address Families
+      if (this.bgpConfig.addressFamilies) {
+        for (const [afKey, af] of this.bgpConfig.addressFamilies.entries()) {
+          lines.push(` !`);
+          lines.push(` address-family ${af.type}${af.subType ? ' ' + af.subType : ''}`);
+          for (const net of af.networks) {
+            lines.push(`  network ${net.network}${net.mask ? ' mask ' + net.mask : ''}`);
+          }
+          if (af.aggregateAddresses) {
+            for (const agg of af.aggregateAddresses) {
+              let cmd = `  aggregate-address ${agg.prefix} ${agg.mask}`;
+              if (agg.summaryOnly) cmd += ' summary-only';
+              if (agg.asSet) cmd += ' as-set';
+              lines.push(cmd);
+            }
+          }
+          for (const [nip, ncfg] of af.neighbors.entries()) {
+            if (ncfg.activate === false) {
+              lines.push(`  no neighbor ${nip} activate`);
+            } else if (ncfg.activate === true) {
+              lines.push(`  neighbor ${nip} activate`);
+            }
+            if (ncfg.nextHopSelf) lines.push(`  neighbor ${nip} next-hop-self`);
+            if (ncfg.routeReflectorClient) lines.push(`  neighbor ${nip} route-reflector-client`);
+            if (ncfg.filterListOut) lines.push(`  neighbor ${nip} filter-list ${ncfg.filterListOut} out`);
+            if (ncfg.filterListIn) lines.push(`  neighbor ${nip} filter-list ${ncfg.filterListIn} in`);
+            if (ncfg.routeMapOut) lines.push(`  neighbor ${nip} route-map ${ncfg.routeMapOut} out`);
+            if (ncfg.routeMapIn) lines.push(`  neighbor ${nip} route-map ${ncfg.routeMapIn} in`);
+            if (ncfg.prefixListOut) lines.push(`  neighbor ${nip} prefix-list ${ncfg.prefixListOut} out`);
+            if (ncfg.prefixListIn) lines.push(`  neighbor ${nip} prefix-list ${ncfg.prefixListIn} in`);
+            if (ncfg.weight !== undefined) lines.push(`  neighbor ${nip} weight ${ncfg.weight}`);
+            if (ncfg.defaultOriginate) lines.push(`  neighbor ${nip} default-originate`);
+          }
+          lines.push(` exit-address-family`);
+        }
+      }
+
       if (this.bgpConfig.redistributions) {
         for (const r of this.bgpConfig.redistributions) {
           let cmd = ` redistribute ${r.protocol}`;
@@ -705,6 +789,13 @@ export class Switch extends Device {
         }
       }
       lines.push('!');
+    }
+
+    // AS-Path Access Lists
+    for (const [num, rules] of this.asPathAccessLists.entries()) {
+      for (const rule of rules) {
+        lines.push(`ip as-path access-list ${num} ${rule.action} ${rule.regex}`);
+      }
     }
 
     // IP Prefix Lists
@@ -723,6 +814,8 @@ export class Switch extends Device {
         lines.push(`route-map ${rm.name} ${c.action} ${c.sequence}`);
         if (c.matchAcl) lines.push(` match ip address ${c.matchAcl}`);
         if (c.matchPrefixList) lines.push(` match ip address prefix-list ${c.matchPrefixList}`);
+        if (c.matchIpv6AddressPrefixList) lines.push(` match ipv6 address prefix-list ${c.matchIpv6AddressPrefixList}`);
+        if (c.matchAsPath) lines.push(` match as-path ${c.matchAsPath}`);
         if (c.matchTag) lines.push(` match tag ${c.matchTag}`);
         if (c.matchInterface) lines.push(` match interface ${c.matchInterface}`);
         if (c.setMetric !== undefined) lines.push(` set metric ${c.setMetric}`);
@@ -730,6 +823,9 @@ export class Switch extends Device {
         if (c.setTag !== undefined) lines.push(` set tag ${c.setTag}`);
         if (c.setIpNextHop) lines.push(` set ip next-hop ${c.setIpNextHop}`);
         if (c.setIpNextHopTrack) lines.push(` set ip next-hop verify-availability ${c.setIpNextHopTrack.nextHop} 1 track ${c.setIpNextHopTrack.trackId}`);
+        if (c.setWeight !== undefined) lines.push(` set weight ${c.setWeight}`);
+        if (c.setLocalPreference !== undefined) lines.push(` set local-preference ${c.setLocalPreference}`);
+        if (c.setAsPathPrepend) lines.push(` set as-path prepend ${c.setAsPathPrepend}`);
         lines.push('!');
       }
     }

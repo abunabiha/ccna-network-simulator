@@ -1786,7 +1786,204 @@ const runCfgR1 = r1Eigrp1.getRunningConfig();
 console.log(`Running-config includes router eigrp BASIC-EIGRP-LAB: ${runCfgR1.includes('router eigrp BASIC-EIGRP-LAB') ? 'PASS' : 'FAIL'}`);
 console.log(`Running-config includes address-family ipv4: ${runCfgR1.includes('address-family ipv4 unicast autonomous-system 27') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB CCNP OSPF, DAN 5 LAB CCNP EIGRP SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+console.log('\n=== [20] PENGUJIAN 6 LAB RESMI CCNP ENTERPRISE BGP & AUTO-GRADER ===');
+
+// Test CCNP BGP Lab 1: Implement eBGP and iBGP
+const ccnpBgpLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-01-ebgp-ibgp')!;
+console.log(`CCNP BGP Lab 01 Exists: ${ccnpBgpLab1 ? 'PASS' : 'FAIL'}`);
+
+const r1Bgp1 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Bgp1 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Bgp1 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Bgp1 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Bgp1 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const bgp1Devs = [r1Bgp1, r2Bgp1, r3Bgp1, d1Bgp1, d2Bgp1];
+
+// R1: eBGP peering to D1 (209.165.200.6, AS 65001), iBGP next-hop-self to 10.0.0.1, AS-path ACL 10 permit ^$
+CliParser.execute('router bgp 65000', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp1, bgp1Devs);
+CliParser.execute('neighbor 209.165.200.6 remote-as 65001', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r1Bgp1, bgp1Devs);
+CliParser.execute('neighbor 10.0.0.1 remote-as 65000', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r1Bgp1, bgp1Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r1Bgp1, bgp1Devs);
+CliParser.execute('neighbor 209.165.200.6 activate', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r1Bgp1, bgp1Devs);
+CliParser.execute('neighbor 10.0.0.1 activate', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r1Bgp1, bgp1Devs);
+CliParser.execute('neighbor 10.0.0.1 next-hop-self', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r1Bgp1, bgp1Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-af-config' as const }, r1Bgp1, bgp1Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-config' as const }, r1Bgp1, bgp1Devs);
+CliParser.execute('ip as-path access-list 10 permit ^$', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp1, bgp1Devs);
+
+// R3: eBGP peering to D2 (209.165.200.10, AS 65002)
+CliParser.execute('router bgp 65000', { deviceId: 'R3', mode: 'global-config' as const }, r3Bgp1, bgp1Devs);
+CliParser.execute('neighbor 209.165.200.10 remote-as 65002', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r3Bgp1, bgp1Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r3Bgp1, bgp1Devs);
+CliParser.execute('neighbor 209.165.200.10 activate', { deviceId: 'R3', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r3Bgp1, bgp1Devs);
+CliParser.execute('exit', { deviceId: 'R3', mode: 'router-af-config' as const }, r3Bgp1, bgp1Devs);
+
+// R2: network 172.16.0.0 mask 255.255.0.0
+CliParser.execute('router bgp 65000', { deviceId: 'R2', mode: 'global-config' as const }, r2Bgp1, bgp1Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r2Bgp1, bgp1Devs);
+CliParser.execute('network 172.16.0.0 mask 255.255.0.0', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r2Bgp1, bgp1Devs);
+
+const reportBgp1 = LabGrader.grade(ccnpBgpLab1, bgp1Devs);
+console.log(`CCNP BGP Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportBgp1.totalScore === 100 && reportBgp1.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp1.totalScore}%)`);
+
+// Test CCNP BGP Lab 2: Configure BGP Advanced Features
+const ccnpBgpLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-02-advanced-features')!;
+console.log(`CCNP BGP Lab 02 Exists: ${ccnpBgpLab2 ? 'PASS' : 'FAIL'}`);
+
+const gw1Bgp2 = new Router('GW1', 'GW1', { x: 220, y: 150 });
+const gw2Bgp2 = new Router('GW2', 'GW2', { x: 220, y: 320 });
+const isp1Bgp2 = new Router('ISP1', 'ISP1', { x: 500, y: 120 });
+const isp2Bgp2 = new Router('ISP2', 'ISP2', { x: 500, y: 240 });
+const isp3Bgp2 = new Router('ISP3', 'ISP3', { x: 500, y: 360 });
+const bgp2Devs = [gw1Bgp2, gw2Bgp2, isp1Bgp2, isp2Bgp2, isp3Bgp2];
+
+// GW1: ISP-PEERS peer-group, password cisco123 on 209.165.201.1, route-map PREFER-ISP1-ISP2 set local-preference 200
+CliParser.execute('router bgp 65000', { deviceId: 'GW1', mode: 'global-config' as const }, gw1Bgp2, bgp2Devs);
+CliParser.execute('neighbor ISP-PEERS peer-group', { deviceId: 'GW1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, gw1Bgp2, bgp2Devs);
+CliParser.execute('neighbor 209.165.201.1 remote-as 65100', { deviceId: 'GW1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, gw1Bgp2, bgp2Devs);
+CliParser.execute('neighbor 209.165.201.1 peer-group ISP-PEERS', { deviceId: 'GW1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, gw1Bgp2, bgp2Devs);
+CliParser.execute('neighbor 209.165.201.1 password cisco123', { deviceId: 'GW1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, gw1Bgp2, bgp2Devs);
+CliParser.execute('exit', { deviceId: 'GW1', mode: 'router-config' as const }, gw1Bgp2, bgp2Devs);
+CliParser.execute('route-map PREFER-ISP1-ISP2 permit 10', { deviceId: 'GW1', mode: 'global-config' as const }, gw1Bgp2, bgp2Devs);
+CliParser.execute('set local-preference 200', { deviceId: 'GW1', mode: 'route-map-config' as const, targetRouteMapName: 'PREFER-ISP1-ISP2', targetRouteMapSeq: 10 }, gw1Bgp2, bgp2Devs);
+
+// GW2: route-map SET-MED-ISP2 permit 10 -> set metric 50
+CliParser.execute('route-map SET-MED-ISP2 permit 10', { deviceId: 'GW2', mode: 'global-config' as const }, gw2Bgp2, bgp2Devs);
+CliParser.execute('set metric 50', { deviceId: 'GW2', mode: 'route-map-config' as const, targetRouteMapName: 'SET-MED-ISP2', targetRouteMapSeq: 10 }, gw2Bgp2, bgp2Devs);
+
+// ISP3: router bgp 4279500803 -> aggregate-address 203.0.112.0 255.255.252.0 summary-only
+CliParser.execute('router bgp 4279500803', { deviceId: 'ISP3', mode: 'global-config' as const }, isp3Bgp2, bgp2Devs);
+CliParser.execute('aggregate-address 203.0.112.0 255.255.252.0 summary-only', { deviceId: 'ISP3', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 4279500803 }, isp3Bgp2, bgp2Devs);
+
+const reportBgp2 = LabGrader.grade(ccnpBgpLab2, bgp2Devs);
+console.log(`CCNP BGP Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportBgp2.totalScore === 100 && reportBgp2.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp2.totalScore}%)`);
+
+// Test CCNP BGP Lab 3: Configure BGP Route Reflector
+const ccnpBgpLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-03-route-reflector')!;
+console.log(`CCNP BGP Lab 03 Exists: ${ccnpBgpLab3 ? 'PASS' : 'FAIL'}`);
+
+const r1Bgp3 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Bgp3 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Bgp3 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Bgp3 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Bgp3 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const bgp3Devs = [r1Bgp3, r2Bgp3, r3Bgp3, d1Bgp3, d2Bgp3];
+
+// R2: cluster-id 999, route-reflector-client for IPv4 (10.0.0.2, 10.0.0.6) and IPv6 (2001:db8:feed:1::2, 2001:db8:feed:2::6)
+CliParser.execute('router bgp 65000', { deviceId: 'R2', mode: 'global-config' as const }, r2Bgp3, bgp3Devs);
+CliParser.execute('bgp cluster-id 999', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r2Bgp3, bgp3Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r2Bgp3, bgp3Devs);
+CliParser.execute('neighbor 10.0.0.2 route-reflector-client', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r2Bgp3, bgp3Devs);
+CliParser.execute('neighbor 10.0.0.6 route-reflector-client', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r2Bgp3, bgp3Devs);
+CliParser.execute('exit', { deviceId: 'R2', mode: 'router-af-config' as const }, r2Bgp3, bgp3Devs);
+CliParser.execute('address-family ipv6 unicast', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r2Bgp3, bgp3Devs);
+CliParser.execute('neighbor 2001:db8:feed:1::2 route-reflector-client', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv6', targetAsNumber: 65000 }, r2Bgp3, bgp3Devs);
+CliParser.execute('neighbor 2001:db8:feed:2::6 route-reflector-client', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv6', targetAsNumber: 65000 }, r2Bgp3, bgp3Devs);
+
+const reportBgp3 = LabGrader.grade(ccnpBgpLab3, bgp3Devs);
+console.log(`CCNP BGP Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportBgp3.totalScore === 100 && reportBgp3.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp3.totalScore}%)`);
+
+// Test CCNP BGP Lab 4: Implement BGP Path Manipulation
+const ccnpBgpLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-04-path-manipulation')!;
+console.log(`CCNP BGP Lab 04 Exists: ${ccnpBgpLab4 ? 'PASS' : 'FAIL'}`);
+
+const r1Bgp4 = new Router('R1', 'R1', { x: 250, y: 220 });
+const r2Bgp4 = new Router('R2', 'R2', { x: 550, y: 140 });
+const r3Bgp4 = new Router('R3', 'R3', { x: 550, y: 300 });
+const bgp4Devs = [r1Bgp4, r2Bgp4, r3Bgp4];
+
+// R1: router bgp 6500 -> router-id 1.1.1.1 -> no bgp default ipv4-unicast -> neighbor 10.1.3.130 route-map USE_THIS_PATH_FOR_IPV4 in
+CliParser.execute('router bgp 6500', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp4, bgp4Devs);
+CliParser.execute('bgp router-id 1.1.1.1', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 6500 }, r1Bgp4, bgp4Devs);
+CliParser.execute('no bgp default ipv4-unicast', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 6500 }, r1Bgp4, bgp4Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 6500 }, r1Bgp4, bgp4Devs);
+CliParser.execute('neighbor 10.1.3.130 route-map USE_THIS_PATH_FOR_IPV4 in', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 6500 }, r1Bgp4, bgp4Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-af-config' as const }, r1Bgp4, bgp4Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-config' as const }, r1Bgp4, bgp4Devs);
+
+// Route-maps on R1: USE_THIS_PATH_FOR_IPV4 (set local-preference 300) and PREPEND_AS (set as-path prepend 6500 6500)
+CliParser.execute('route-map USE_THIS_PATH_FOR_IPV4 permit 10', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp4, bgp4Devs);
+CliParser.execute('set local-preference 300', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'USE_THIS_PATH_FOR_IPV4', targetRouteMapSeq: 10 }, r1Bgp4, bgp4Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'route-map-config' as const }, r1Bgp4, bgp4Devs);
+
+CliParser.execute('route-map PREPEND_AS permit 10', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp4, bgp4Devs);
+CliParser.execute('set as-path prepend 6500 6500', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'PREPEND_AS', targetRouteMapSeq: 10 }, r1Bgp4, bgp4Devs);
+
+const reportBgp4 = LabGrader.grade(ccnpBgpLab4, bgp4Devs);
+console.log(`CCNP BGP Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportBgp4.totalScore === 100 && reportBgp4.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp4.totalScore}%)`);
+
+// Test CCNP BGP Lab 5: Implement MP-BGP
+const ccnpBgpLab5 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-05-mp-bgp')!;
+console.log(`CCNP BGP Lab 05 Exists: ${ccnpBgpLab5 ? 'PASS' : 'FAIL'}`);
+
+const r1Bgp5 = new Router('R1', 'R1', { x: 250, y: 220 });
+const r2Bgp5 = new Router('R2', 'R2', { x: 550, y: 140 });
+const r3Bgp5 = new Router('R3', 'R3', { x: 550, y: 300 });
+const bgp5Devs = [r1Bgp5, r2Bgp5, r3Bgp5];
+
+// R1: router bgp 1000, router-id 1.1.1.1, AF ipv4 neighbor 10.1.2.2 activate, AF ipv6 neighbor 2001:db8:acad:1012::2 activate, network 2001:db8:acad:1001::/64, aggregate-address 2001:db8:acad:1000::/52 summary-only
+CliParser.execute('router bgp 1000', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp5, bgp5Devs);
+CliParser.execute('bgp router-id 1.1.1.1', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 1000 }, r1Bgp5, bgp5Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 1000 }, r1Bgp5, bgp5Devs);
+CliParser.execute('neighbor 10.1.2.2 activate', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 1000 }, r1Bgp5, bgp5Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-af-config' as const }, r1Bgp5, bgp5Devs);
+CliParser.execute('address-family ipv6 unicast', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 1000 }, r1Bgp5, bgp5Devs);
+CliParser.execute('neighbor 2001:db8:acad:1012::2 activate', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv6', targetAsNumber: 1000 }, r1Bgp5, bgp5Devs);
+CliParser.execute('network 2001:db8:acad:1001::/64', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv6', targetAsNumber: 1000 }, r1Bgp5, bgp5Devs);
+CliParser.execute('aggregate-address 2001:db8:acad:1000::/52 summary-only', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv6', targetAsNumber: 1000 }, r1Bgp5, bgp5Devs);
+
+const reportBgp5 = LabGrader.grade(ccnpBgpLab5, bgp5Devs);
+console.log(`CCNP BGP Lab 05 Auto-Grader Evaluation (100% Mastery): ${reportBgp5.totalScore === 100 && reportBgp5.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp5.totalScore}%)`);
+
+// Test CCNP BGP Lab 6: Troubleshooting BGP
+const ccnpBgpLab6 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-06-troubleshoot-bgp')!;
+console.log(`CCNP BGP Lab 06 Exists: ${ccnpBgpLab6 ? 'PASS' : 'FAIL'}`);
+
+const r1Bgp6 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Bgp6 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Bgp6 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Bgp6 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Bgp6 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const bgp6Devs = [r1Bgp6, r2Bgp6, r3Bgp6, d1Bgp6, d2Bgp6];
+
+// R1 fix: neighbor 192.168.99.2 next-hop-self in AF ipv4, route-map SET-LP permit 10 set local-preference 100
+CliParser.execute('router bgp 65000', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp6, bgp6Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r1Bgp6, bgp6Devs);
+CliParser.execute('neighbor 192.168.99.2 next-hop-self', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r1Bgp6, bgp6Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-af-config' as const }, r1Bgp6, bgp6Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-config' as const }, r1Bgp6, bgp6Devs);
+CliParser.execute('route-map SET-LP permit 10', { deviceId: 'R1', mode: 'global-config' as const }, r1Bgp6, bgp6Devs);
+CliParser.execute('set local-preference 100', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'SET-LP', targetRouteMapSeq: 10 }, r1Bgp6, bgp6Devs);
+
+// R3 fix: neighbor 192.168.99.2 next-hop-self in AF ipv4, route-map SET-LP permit 10 set local-preference 400
+CliParser.execute('router bgp 65000', { deviceId: 'R3', mode: 'global-config' as const }, r3Bgp6, bgp6Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'bgp' as const, targetAsNumber: 65000 }, r3Bgp6, bgp6Devs);
+CliParser.execute('neighbor 192.168.99.2 next-hop-self', { deviceId: 'R3', mode: 'router-af-config' as const, targetRoutingProtocol: 'bgp' as const, targetAfType: 'bgp' as const, targetAfProto: 'ipv4', targetAsNumber: 65000 }, r3Bgp6, bgp6Devs);
+CliParser.execute('exit', { deviceId: 'R3', mode: 'router-af-config' as const }, r3Bgp6, bgp6Devs);
+CliParser.execute('exit', { deviceId: 'R3', mode: 'router-config' as const }, r3Bgp6, bgp6Devs);
+CliParser.execute('route-map SET-LP permit 10', { deviceId: 'R3', mode: 'global-config' as const }, r3Bgp6, bgp6Devs);
+CliParser.execute('set local-preference 400', { deviceId: 'R3', mode: 'route-map-config' as const, targetRouteMapName: 'SET-LP', targetRouteMapSeq: 10 }, r3Bgp6, bgp6Devs);
+
+const reportBgp6 = LabGrader.grade(ccnpBgpLab6, bgp6Devs);
+console.log(`CCNP BGP Lab 06 Auto-Grader Evaluation (100% Mastery): ${reportBgp6.totalScore === 100 && reportBgp6.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp6.totalScore}%)`);
+
+// Test BGP Show Commands & Running Config
+console.log('\n--- Test BGP Show Commands & Running Config ---');
+const showBgpSummary = CliParser.execute('show bgp ipv4 unicast summary', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Bgp1, bgp1Devs);
+console.log(`show bgp ipv4 unicast summary output executes cleanly: ${showBgpSummary.output.includes('BGP router identifier') ? 'PASS' : 'FAIL'}`);
+
+const showBgpIpv6Summary = CliParser.execute('show bgp ipv6 unicast summary', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Bgp5, bgp5Devs);
+console.log(`show bgp ipv6 unicast summary output executes cleanly: ${showBgpIpv6Summary.output.includes('BGP router identifier') ? 'PASS' : 'FAIL'}`);
+
+const showAsPathAcl = CliParser.execute('show ip as-path-access-list', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Bgp1, bgp1Devs);
+console.log(`show ip as-path-access-list output contains ACL 10: ${showAsPathAcl.output.includes('AS path access list 10') ? 'PASS' : 'FAIL'}`);
+
+const runCfgBgpR1 = r1Bgp1.getRunningConfig();
+console.log(`Running-config includes router bgp 65000: ${runCfgBgpR1.includes('router bgp 65000') ? 'PASS' : 'FAIL'}`);
+console.log(`Running-config includes ip as-path access-list 10: ${runCfgBgpR1.includes('ip as-path access-list 10 permit ^$') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, DAN 6 LAB BGP SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+
 
 
 

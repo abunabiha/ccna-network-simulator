@@ -534,18 +534,72 @@ export interface BgpNeighbor {
   updateSource?: string;
   shutdown?: boolean;
   state?: 'Idle' | 'Connect' | 'Active' | 'OpenSent' | 'OpenConfirm' | 'Established';
+  nextHopSelf?: boolean;
+  password?: string;
+  routeReflectorClient?: boolean;
+  routeMapIn?: string;
+  routeMapOut?: string;
+  filterListIn?: number;
+  filterListOut?: number;
+  prefixListIn?: string;
+  prefixListOut?: string;
+  peerGroup?: string;
+  isPeerGroup?: boolean;
+  activate?: boolean;
+  ebgpMultihop?: number;
+  defaultOriginate?: boolean;
+  weight?: number;
+}
+
+export interface BgpAddressFamily {
+  type: 'ipv4' | 'ipv6';
+  subType?: 'unicast' | 'multicast';
+  networks: Array<{
+    network: string;
+    mask?: string;
+  }>;
+  aggregateAddresses?: Array<{
+    prefix: string;
+    mask: string;
+    summaryOnly?: boolean;
+    asSet?: boolean;
+  }>;
+  neighbors: Map<string, Partial<BgpNeighbor>>;
+  redistributions?: RedistributionConfig[];
 }
 
 export interface BgpConfig {
   enabled: boolean;
   asNumber: number;
   routerId?: string;
+  clusterId?: string | number;
+  asnotation?: 'dot' | 'plain';
+  noBgpDefaultIpv4Unicast?: boolean;
+  logNeighborChanges?: boolean;
   neighbors: Map<string, BgpNeighbor>;
+  peerGroups?: Map<string, BgpNeighbor>;
   networks: Array<{
     network: string;
     mask?: string;
   }>;
+  aggregateAddresses?: Array<{
+    prefix: string;
+    mask: string;
+    summaryOnly?: boolean;
+    asSet?: boolean;
+  }>;
+  addressFamilies?: Map<string, BgpAddressFamily>;
   redistributions?: RedistributionConfig[];
+}
+
+export interface AsPathAclRule {
+  action: 'permit' | 'deny';
+  regex: string;
+}
+
+export interface AsPathAcl {
+  number: number;
+  rules: AsPathAclRule[];
 }
 
 export interface RouteMapClause {
@@ -553,6 +607,8 @@ export interface RouteMapClause {
   action: 'permit' | 'deny';
   matchAcl?: number;
   matchPrefixList?: string;
+  matchIpv6AddressPrefixList?: string;
+  matchAsPath?: number;
   matchTag?: number;
   matchInterface?: string;
   setMetric?: number;
@@ -563,6 +619,9 @@ export interface RouteMapClause {
     nextHop: string;
     trackId: number;
   };
+  setWeight?: number;
+  setLocalPreference?: number;
+  setAsPathPrepend?: string;
 }
 
 export interface RouteMap {

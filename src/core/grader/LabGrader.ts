@@ -474,17 +474,236 @@ export class LabGrader {
     }
 
     // CCNP: Check BGP Configuration
-    if (prop === 'bgp_configured' && device instanceof Router) {
+    if (prop === 'bgp_configured' && (device instanceof Router || device instanceof Switch)) {
       const bgp = device.bgpConfig;
-      const passed = !!(bgp && bgp.enabled);
+      let passed = !!(bgp && bgp.enabled);
+      if (passed && typeof expected === 'number') {
+        passed = bgp!.asNumber === expected;
+      } else if (passed && typeof expected === 'object' && expected !== null) {
+        const exp = expected as any;
+        if (exp.asNumber !== undefined && bgp!.asNumber !== exp.asNumber) passed = false;
+        if (exp.routerId !== undefined && bgp!.routerId !== exp.routerId) passed = false;
+        if (exp.clusterId !== undefined && String(bgp!.clusterId) !== String(exp.clusterId)) passed = false;
+        if (exp.noBgpDefaultIpv4Unicast !== undefined && bgp!.noBgpDefaultIpv4Unicast !== exp.noBgpDefaultIpv4Unicast) passed = false;
+      }
       return {
         taskId: task.id,
         passed,
         earnedPoints: passed ? task.points : 0,
         maxPoints: task.points,
         diagnostic: passed
-          ? `Proses BGP AS ${bgp?.asNumber} aktif.`
-          : `BGP belum dikonfigurasi pada ${device.hostname}.`
+          ? `BGP (AS ${bgp?.asNumber}) telah dikonfigurasi dengan benar pada ${device.hostname}.`
+          : `BGP belum dikonfigurasi atau parameter tidak sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check BGP Neighbor
+    if (prop === 'bgp_neighbor' && (device instanceof Router || device instanceof Switch)) {
+      const bgp = device.bgpConfig;
+      let passed = false;
+      const exp = expected as any;
+      if (bgp && bgp.enabled && exp && exp.neighborIp) {
+        const nIp = exp.neighborIp;
+        const globalNb = bgp.neighbors.get(nIp);
+        const af = exp.addressFamily ? bgp.addressFamilies?.get(exp.addressFamily) : undefined;
+        const afNb = af?.neighbors.get(nIp);
+
+        passed = !!(globalNb || afNb);
+
+        if (passed) {
+          if (exp.remoteAs !== undefined && globalNb && globalNb.remoteAs !== exp.remoteAs) passed = false;
+          if (exp.peerGroup !== undefined && globalNb && globalNb.peerGroup !== exp.peerGroup) passed = false;
+          if (exp.updateSource !== undefined) {
+            const us = (globalNb?.updateSource || '').toLowerCase();
+            if (!us.includes(exp.updateSource.toLowerCase())) passed = false;
+          }
+          if (exp.password !== undefined && globalNb?.password !== exp.password) passed = false;
+          if (exp.defaultOriginate !== undefined && globalNb?.defaultOriginate !== exp.defaultOriginate) passed = false;
+          if (exp.nextHopSelf !== undefined) {
+            const nhs = (afNb && afNb.nextHopSelf !== undefined) ? afNb.nextHopSelf : globalNb?.nextHopSelf;
+            if (nhs !== exp.nextHopSelf) passed = false;
+          }
+          if (exp.routeReflectorClient !== undefined) {
+            const rrc = (afNb && afNb.routeReflectorClient !== undefined) ? afNb.routeReflectorClient : globalNb?.routeReflectorClient;
+            if (rrc !== exp.routeReflectorClient) passed = false;
+          }
+          if (exp.activate !== undefined) {
+            const act = afNb && afNb.activate !== undefined ? afNb.activate : globalNb?.activate;
+            if (act !== exp.activate) passed = false;
+          }
+          if (exp.filterListOut !== undefined) {
+            const flo = afNb?.filterListOut || globalNb?.filterListOut;
+            if (flo !== exp.filterListOut) passed = false;
+          }
+          if (exp.routeMapIn !== undefined) {
+            const rmi = afNb?.routeMapIn || globalNb?.routeMapIn;
+            if (rmi !== exp.routeMapIn) passed = false;
+          }
+          if (exp.routeMapOut !== undefined) {
+            const rmo = afNb?.routeMapOut || globalNb?.routeMapOut;
+            if (rmo !== exp.routeMapOut) passed = false;
+          }
+          if (exp.prefixListIn !== undefined) {
+            const pli = afNb?.prefixListIn || globalNb?.prefixListIn;
+            if (pli !== exp.prefixListIn) passed = false;
+          }
+          if (exp.prefixListOut !== undefined) {
+            const plo = afNb?.prefixListOut || globalNb?.prefixListOut;
+            if (plo !== exp.prefixListOut) passed = false;
+          }
+          if (exp.weight !== undefined) {
+            const w = afNb?.weight !== undefined ? afNb.weight : globalNb?.weight;
+            if (w !== exp.weight) passed = false;
+          }
+        }
+      }
+
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `BGP neighbor ${exp.neighborIp} telah dikonfigurasi dengan benar pada ${device.hostname}.`
+          : `BGP neighbor ${exp?.neighborIp} belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check BGP Peer Group
+    if (prop === 'bgp_peer_group' && (device instanceof Router || device instanceof Switch)) {
+      const bgp = device.bgpConfig;
+      let passed = false;
+      const exp = expected as any;
+      if (bgp && bgp.enabled && exp && exp.name && bgp.peerGroups?.has(exp.name)) {
+        const pg = bgp.peerGroups.get(exp.name)!;
+        passed = true;
+        if (exp.remoteAs !== undefined && pg.remoteAs !== exp.remoteAs) passed = false;
+        if (exp.password !== undefined && pg.password !== exp.password) passed = false;
+        if (exp.updateSource !== undefined && !(pg.updateSource || '').toLowerCase().includes(exp.updateSource.toLowerCase())) passed = false;
+        if (exp.filterListOut !== undefined && pg.filterListOut !== exp.filterListOut) passed = false;
+        if (exp.routeMapIn !== undefined && pg.routeMapIn !== exp.routeMapIn) passed = false;
+        if (exp.routeMapOut !== undefined && pg.routeMapOut !== exp.routeMapOut) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `BGP peer-group '${exp.name}' telah dikonfigurasi pada ${device.hostname}.`
+          : `BGP peer-group '${exp?.name}' belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check BGP Network Advertisement
+    if (prop === 'bgp_network' && (device instanceof Router || device instanceof Switch)) {
+      const bgp = device.bgpConfig;
+      let passed = false;
+      const exp = expected as any;
+      if (bgp && bgp.enabled && exp && exp.network) {
+        const list = exp.addressFamily && bgp.addressFamilies?.has(exp.addressFamily)
+          ? bgp.addressFamilies.get(exp.addressFamily)!.networks
+          : bgp.networks;
+        passed = list.some(n => {
+          if (n.network.toLowerCase() !== exp.network.toLowerCase()) return false;
+          if (exp.mask && n.mask && n.mask !== exp.mask) return false;
+          return true;
+        });
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `BGP network ${exp.network} telah di-advertise pada ${device.hostname}.`
+          : `BGP network ${exp?.network} belum di-advertise pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check BGP Aggregate Address
+    if (prop === 'bgp_aggregate_address' && (device instanceof Router || device instanceof Switch)) {
+      const bgp = device.bgpConfig;
+      let passed = false;
+      const exp = expected as any;
+      if (bgp && bgp.enabled && exp && exp.prefix) {
+        const list = exp.addressFamily && bgp.addressFamilies?.has(exp.addressFamily)
+          ? (bgp.addressFamilies.get(exp.addressFamily)!.aggregateAddresses || [])
+          : (bgp.aggregateAddresses || []);
+        passed = list.some(a => {
+          if (a.prefix.toLowerCase() !== exp.prefix.toLowerCase()) return false;
+          if (exp.mask && a.mask !== exp.mask) return false;
+          if (exp.summaryOnly !== undefined && (a.summaryOnly === true) !== exp.summaryOnly) return false;
+          return true;
+        });
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `BGP aggregate-address ${exp.prefix} telah dikonfigurasi pada ${device.hostname}.`
+          : `BGP aggregate-address ${exp?.prefix} belum dikonfigurasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check AS-Path Access-List
+    if (prop === 'as_path_acl' && (device instanceof Router || device instanceof Switch)) {
+      let passed = false;
+      const exp = expected as any;
+      if (exp && exp.number !== undefined) {
+        const rules = device.asPathAccessLists.get(exp.number);
+        if (rules && rules.length > 0) {
+          passed = true;
+          if (exp.action || exp.regex) {
+            passed = rules.some(r => {
+              if (exp.action && r.action !== exp.action) return false;
+              if (exp.regex && r.regex !== exp.regex) return false;
+              return true;
+            });
+          }
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `ip as-path access-list ${exp.number} telah dikonfigurasi pada ${device.hostname}.`
+          : `ip as-path access-list ${exp?.number} belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check Route Map Clause
+    if (prop === 'route_map_clause' && (device instanceof Router || device instanceof Switch)) {
+      let passed = false;
+      const exp = expected as any;
+      if (exp && exp.name && device.routeMaps.has(exp.name)) {
+        const rm = device.routeMaps.get(exp.name)!;
+        const clauses = exp.sequence ? rm.clauses.filter(c => c.sequence === exp.sequence) : rm.clauses;
+        passed = clauses.some(c => {
+          if (exp.action && c.action !== exp.action) return false;
+          if (exp.matchAcl !== undefined && c.matchAcl !== exp.matchAcl) return false;
+          if (exp.matchPrefixList !== undefined && c.matchPrefixList !== exp.matchPrefixList) return false;
+          if (exp.matchIpv6AddressPrefixList !== undefined && c.matchIpv6AddressPrefixList !== exp.matchIpv6AddressPrefixList) return false;
+          if (exp.matchAsPath !== undefined && c.matchAsPath !== exp.matchAsPath) return false;
+          if (exp.setMetric !== undefined && c.setMetric !== exp.setMetric) return false;
+          if (exp.setWeight !== undefined && c.setWeight !== exp.setWeight) return false;
+          if (exp.setLocalPreference !== undefined && c.setLocalPreference !== exp.setLocalPreference) return false;
+          if (exp.setAsPathPrepend !== undefined && c.setAsPathPrepend !== exp.setAsPathPrepend) return false;
+          return true;
+        });
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Route-map '${exp.name}' clause telah dikonfigurasi dengan benar pada ${device.hostname}.`
+          : `Route-map '${exp?.name}' clause belum sesuai spesifikasi pada ${device.hostname}.`
       };
     }
 

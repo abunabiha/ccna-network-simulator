@@ -1,4 +1,4 @@
-import { DeviceType, DevicePosition, InterfaceConfig, ArpEntry, KeyChain } from '../../types/network';
+import { DeviceType, DevicePosition, InterfaceConfig, ArpEntry, KeyChain, AsPathAclRule } from '../../types/network';
 import { CliMode, CliContext, CliExecutionResult } from '../../types/cli';
 
 export abstract class Device {
@@ -20,6 +20,9 @@ export abstract class Device {
 
   // Key Chains for authentication
   keyChains: Map<string, KeyChain> = new Map();
+
+  // BGP AS-Path Access Lists
+  asPathAccessLists: Map<number, AsPathAclRule[]> = new Map();
 
   // Address Resolution Protocol (ARP)
   arpTable: ArpEntry[] = [];
