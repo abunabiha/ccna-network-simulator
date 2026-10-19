@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, OspfV3Config, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState, EemApplet, EemHistoryEntry, MdtSubscription, NetconfSession } from '../../types/network';
+import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, OspfV3Config, EigrpConfig, EigrpV6Config, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState, EemApplet, EemHistoryEntry, MdtSubscription, NetconfSession } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -9,6 +9,7 @@ export class Router extends Device {
   ospfv3Config?: OspfV3Config;
   ipv6UnicastRouting: boolean = false;
   eigrpConfig?: EigrpConfig;
+  eigrpV6Config?: EigrpV6Config;
   bgpConfig?: BgpConfig;
   dhcpPools: Map<string, DhcpPool> = new Map();
   dhcpExcludedAddresses: string[] = [];
@@ -396,6 +397,40 @@ export class Router extends Device {
       if (iface.natType) {
         lines.push(` ip nat ${iface.natType}`);
       }
+      if (iface.bandwidthKbps) lines.push(` bandwidth ${iface.bandwidthKbps}`);
+      if (iface.eigrpHelloInterval) {
+        for (const [as, sec] of Object.entries(iface.eigrpHelloInterval)) {
+          lines.push(` ip hello-interval eigrp ${as} ${sec}`);
+        }
+      }
+      if (iface.eigrpHoldTime) {
+        for (const [as, sec] of Object.entries(iface.eigrpHoldTime)) {
+          lines.push(` ip hold-time eigrp ${as} ${sec}`);
+        }
+      }
+      if (iface.eigrpSummaryAddresses) {
+        for (const sa of iface.eigrpSummaryAddresses) {
+          lines.push(` ip summary-address eigrp ${sa.asNumber} ${sa.network} ${sa.mask}`);
+        }
+      }
+      if (iface.eigrpAuthMode) {
+        for (const [as, mode] of Object.entries(iface.eigrpAuthMode)) {
+          lines.push(` ip authentication mode eigrp ${as} ${mode}`);
+        }
+      }
+      if (iface.eigrpAuthKeyChain) {
+        for (const [as, kc] of Object.entries(iface.eigrpAuthKeyChain)) {
+          lines.push(` ip authentication key-chain eigrp ${as} ${kc}`);
+        }
+      }
+      if (iface.eigrpIpv6As) {
+        lines.push(` ipv6 eigrp ${iface.eigrpIpv6As}`);
+      }
+      if (iface.eigrpIpv6SummaryAddresses) {
+        for (const sa of iface.eigrpIpv6SummaryAddresses) {
+          lines.push(` ipv6 summary-address eigrp ${sa.asNumber} ${sa.prefix}`);
+        }
+      }
       if (iface.duplex) lines.push(` duplex ${iface.duplex}`);
       if (iface.speed) lines.push(` speed ${iface.speed}`);
       if (iface.cdpEnabled === false) {
@@ -407,6 +442,18 @@ export class Router extends Device {
         lines.push(` no shutdown`);
       }
       lines.push('!');
+    }
+
+    // Key Chains
+    if (this.keyChains && this.keyChains.size > 0) {
+      for (const kc of this.keyChains.values()) {
+        lines.push(`key chain ${kc.name}`);
+        for (const k of kc.keys.values()) {
+          lines.push(` key ${k.keyId}`);
+          if (k.keyString) lines.push(`  key-string ${k.keyString}`);
+        }
+        lines.push('!');
+      }
     }
 
     // OSPF
@@ -463,15 +510,64 @@ export class Router extends Device {
       lines.push('!');
     }
 
-    // EIGRP
+    // EIGRP IPv4
     if (this.eigrpConfig && this.eigrpConfig.enabled) {
-      lines.push(`router eigrp ${this.eigrpConfig.asNumber}`);
-      if (this.eigrpConfig.routerId) lines.push(` eigrp router-id ${this.eigrpConfig.routerId}`);
-      for (const net of this.eigrpConfig.networks) {
-        lines.push(` network ${net.network}${net.wildcard ? ' ' + net.wildcard : ''}`);
-      }
-      for (const p of this.eigrpConfig.passiveInterfaces) {
-        lines.push(` passive-interface ${p}`);
+      if (this.eigrpConfig.name) {
+        lines.push(`router eigrp ${this.eigrpConfig.name}`);
+        lines.push(` !`);
+        lines.push(` address-family ipv4 unicast autonomous-system ${this.eigrpConfig.asNumber}`);
+        if (this.eigrpConfig.routerId) lines.push(`  eigrp router-id ${this.eigrpConfig.routerId}`);
+        for (const net of this.eigrpConfig.networks) {
+          lines.push(`  network ${net.network}${net.wildcard ? ' ' + net.wildcard : ''}`);
+        }
+        if (this.eigrpConfig.passiveInterfaceDefault) {
+          lines.push(`  passive-interface default`);
+        }
+        for (const p of this.eigrpConfig.passiveInterfaces) {
+          if (p.startsWith('no passive-interface')) {
+            lines.push(`  ${p}`);
+          } else {
+            lines.push(`  passive-interface ${p}`);
+          }
+        }
+        if (this.eigrpConfig.variance) {
+          lines.push(`  topology base`);
+          lines.push(`   variance ${this.eigrpConfig.variance}`);
+          lines.push(`  exit-af-topology`);
+        }
+        if (this.eigrpConfig.stub && this.eigrpConfig.stub.enabled) {
+          const opts = this.eigrpConfig.stub.options?.length ? ' ' + this.eigrpConfig.stub.options.join(' ') : '';
+          lines.push(`  eigrp stub${opts}`);
+        }
+        lines.push(` exit-address-family`);
+      } else {
+        lines.push(`router eigrp ${this.eigrpConfig.asNumber}`);
+        if (this.eigrpConfig.routerId) lines.push(` eigrp router-id ${this.eigrpConfig.routerId}`);
+        for (const net of this.eigrpConfig.networks) {
+          lines.push(` network ${net.network}${net.wildcard ? ' ' + net.wildcard : ''}`);
+        }
+        if (this.eigrpConfig.passiveInterfaceDefault) {
+          lines.push(` passive-interface default`);
+        }
+        for (const p of this.eigrpConfig.passiveInterfaces) {
+          if (p.startsWith('no passive-interface')) {
+            lines.push(` ${p}`);
+          } else {
+            lines.push(` passive-interface ${p}`);
+          }
+        }
+        if (this.eigrpConfig.variance) {
+          lines.push(` variance ${this.eigrpConfig.variance}`);
+        }
+        if (this.eigrpConfig.stub && this.eigrpConfig.stub.enabled) {
+          const opts = this.eigrpConfig.stub.options?.length ? ' ' + this.eigrpConfig.stub.options.join(' ') : '';
+          lines.push(` eigrp stub${opts}`);
+        }
+        if (this.eigrpConfig.distributeLists) {
+          for (const dl of this.eigrpConfig.distributeLists) {
+            lines.push(` distribute-list prefix ${dl.prefixList} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+          }
+        }
       }
       if (this.eigrpConfig.redistributions) {
         for (const r of this.eigrpConfig.redistributions) {
@@ -484,6 +580,43 @@ export class Router extends Device {
           }
           if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
           lines.push(cmd);
+        }
+      }
+      lines.push('!');
+    }
+
+    // EIGRP IPv6
+    if (this.eigrpV6Config && this.eigrpV6Config.enabled) {
+      if (this.eigrpV6Config.name) {
+        lines.push(`router eigrp ${this.eigrpV6Config.name}`);
+        lines.push(` !`);
+        lines.push(` address-family ipv6 unicast autonomous-system ${this.eigrpV6Config.asNumber}`);
+        if (this.eigrpV6Config.routerId) lines.push(`  eigrp router-id ${this.eigrpV6Config.routerId}`);
+        if (this.eigrpV6Config.stub && this.eigrpV6Config.stub.enabled) {
+          const opts = this.eigrpV6Config.stub.options?.length ? ' ' + this.eigrpV6Config.stub.options.join(' ') : '';
+          lines.push(`  eigrp stub${opts}`);
+        }
+        if (this.eigrpV6Config.variance) {
+          lines.push(`  topology base`);
+          lines.push(`   variance ${this.eigrpV6Config.variance}`);
+          lines.push(`  exit-af-topology`);
+        }
+        lines.push(` exit-address-family`);
+      } else {
+        lines.push(`ipv6 router eigrp ${this.eigrpV6Config.asNumber}`);
+        if (this.eigrpV6Config.routerId) lines.push(` eigrp router-id ${this.eigrpV6Config.routerId}`);
+        if (this.eigrpV6Config.passiveInterfaceDefault) {
+          lines.push(` passive-interface default`);
+        }
+        for (const p of this.eigrpV6Config.passiveInterfaces) {
+          if (p.startsWith('no passive-interface')) {
+            lines.push(` ${p}`);
+          } else {
+            lines.push(` passive-interface ${p}`);
+          }
+        }
+        if (this.eigrpV6Config.variance) {
+          lines.push(` variance ${this.eigrpV6Config.variance}`);
         }
       }
       lines.push('!');

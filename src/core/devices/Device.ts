@@ -1,4 +1,4 @@
-import { DeviceType, DevicePosition, InterfaceConfig, ArpEntry } from '../../types/network';
+import { DeviceType, DevicePosition, InterfaceConfig, ArpEntry, KeyChain } from '../../types/network';
 import { CliMode, CliContext, CliExecutionResult } from '../../types/cli';
 
 export abstract class Device {
@@ -17,6 +17,9 @@ export abstract class Device {
   servicePasswordEncryption: boolean = false;
   ipRouting: boolean = true;
   commandHistory: string[] = [];
+
+  // Key Chains for authentication
+  keyChains: Map<string, KeyChain> = new Map();
 
   // Address Resolution Protocol (ARP)
   arpTable: ArpEntry[] = [];
@@ -146,6 +149,16 @@ export abstract class Device {
         return `${host}(config-applet)#`;
       case 'mdt-subscription-config':
         return `${host}(config-mdt-sub)#`;
+      case 'keychain-config':
+        return `${host}(config-keychain)#`;
+      case 'keychain-key-config':
+        return `${host}(config-keychain-key)#`;
+      case 'router-af-config':
+        return `${host}(config-router-af)#`;
+      case 'router-af-interface-config':
+        return `${host}(config-router-af-interface)#`;
+      case 'router-af-topology-config':
+        return `${host}(config-router-af-topology)#`;
       default:
         return `${host}>`;
     }

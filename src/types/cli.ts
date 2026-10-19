@@ -20,7 +20,12 @@ export type CliMode =
   | 'policy-map-class-inspect' // Router(config-pmap-c)#
   | 'control-plane-config' // Router(config-cp)#
   | 'eem-applet-config'   // Router(config-applet)#
-  | 'mdt-subscription-config'; // Router(config-mdt-sub)#
+  | 'mdt-subscription-config' // Router(config-mdt-sub)#
+  | 'keychain-config'     // Router(config-keychain)#
+  | 'keychain-key-config' // Router(config-keychain-key)#
+  | 'router-af-config'    // Router(config-router-af)#
+  | 'router-af-interface-config' // Router(config-router-af-interface)#
+  | 'router-af-topology-config'; // Router(config-router-af-topology)#
 
 export interface CliContext {
   deviceId: string;
@@ -46,6 +51,11 @@ export interface CliContext {
   targetPolicyMapClass?: string;
   targetAppletName?: string;
   targetSubscriptionId?: number;
+  targetKeyChain?: string;
+  targetKeyId?: number;
+  targetAfProto?: 'ipv4' | 'ipv6';
+  targetAfInterface?: string;
+  targetEigrpName?: string;
 }
 
 export interface CommandHelpItem {

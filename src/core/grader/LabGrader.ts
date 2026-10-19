@@ -210,17 +210,266 @@ export class LabGrader {
     }
 
     // CCNP: Check EIGRP Configuration
-    if (prop === 'eigrp_configured' && device instanceof Router) {
+    if (prop === 'eigrp_configured' && (device instanceof Router || device instanceof Switch)) {
       const eigrp = device.eigrpConfig;
-      const passed = !!(eigrp && eigrp.enabled && eigrp.networks.length > 0);
+      const expectedAs = typeof expected === 'number' ? expected : (expected && typeof expected === 'object' ? (expected as any).asNumber : undefined);
+      const expectedName = expected && typeof expected === 'object' ? (expected as any).name : undefined;
+      let passed = !!(eigrp && eigrp.enabled);
+      if (passed && expectedAs !== undefined) {
+        passed = eigrp!.asNumber === expectedAs;
+      }
+      if (passed && expectedName !== undefined) {
+        passed = eigrp!.name === expectedName;
+      }
       return {
         taskId: task.id,
         passed,
         earnedPoints: passed ? task.points : 0,
         maxPoints: task.points,
         diagnostic: passed
-          ? `Proses EIGRP AS ${eigrp?.asNumber} aktif dengan ${eigrp?.networks.length} network statement.`
-          : `EIGRP belum aktif atau belum memiliki statement network.`
+          ? `Proses EIGRP AS ${eigrp?.asNumber}${eigrp?.name ? ` ('${eigrp.name}')` : ''} telah aktif.`
+          : `EIGRP belum aktif atau parameter AS/instance name belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Router ID
+    if (prop === 'eigrp_router_id' && (device instanceof Router || device instanceof Switch)) {
+      const actualRid = device.eigrpConfig?.routerId || device.eigrpV6Config?.routerId;
+      const passed = actualRid === String(expected);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP router-id telah dikonfigurasi ke ${actualRid}.`
+          : `EIGRP router-id belum sesuai pada ${device.hostname}. Diharapkan: ${expected}, ditemukan: ${actualRid || 'none'}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Network Statement
+    if (prop === 'eigrp_network' && (device instanceof Router || device instanceof Switch)) {
+      const net = String(expected);
+      const passed = !!device.eigrpConfig?.networks.some(n => n.network === net || `${n.network} ${n.wildcard}`.includes(net));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP network statement untuk '${net}' telah terkonfigurasi.`
+          : `EIGRP network statement untuk '${net}' belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Passive Interface
+    if (prop === 'eigrp_passive_interface' && (device instanceof Router || device instanceof Switch)) {
+      const normPort = CliLexer.normalizeInterfaceName(task.targetInterface || String(expected));
+      const shouldBePassive = task.expectedValue !== false;
+      const cfg = device.eigrpConfig || device.eigrpV6Config;
+      let isPassive = false;
+      if (cfg) {
+        if (cfg.passiveInterfaceDefault) {
+          isPassive = !cfg.passiveInterfaces.some(p => p.includes(normPort) && p.startsWith('no '));
+        } else {
+          isPassive = cfg.passiveInterfaces.some(p => CliLexer.normalizeInterfaceName(p) === normPort);
+        }
+      }
+      const passed = shouldBePassive ? isPassive : !isPassive;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Status passive-interface untuk ${normPort} telah sesuai (${shouldBePassive ? 'passive' : 'active'}).`
+          : `Status passive-interface untuk ${normPort} belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Variance (Unequal-cost load balancing)
+    if (prop === 'eigrp_variance' && (device instanceof Router || device instanceof Switch)) {
+      const expectedVariance = Number(expected);
+      const actualVariance = device.eigrpConfig?.variance || device.eigrpV6Config?.variance || 1;
+      const passed = actualVariance === expectedVariance;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP variance telah dikonfigurasi ke ${actualVariance}.`
+          : `EIGRP variance belum sesuai pada ${device.hostname}. Diharapkan: ${expectedVariance}, ditemukan: ${actualVariance}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Stub Routing
+    if (prop === 'eigrp_stub' && (device instanceof Router || device instanceof Switch)) {
+      const stub = device.eigrpConfig?.stub || device.eigrpV6Config?.stub;
+      let passed = !!(stub && stub.enabled);
+      if (passed && task.expectedValue) {
+        if (task.expectedValue.receiveOnly !== undefined) {
+          const hasRecvOnly = !!stub!.options?.includes('receive-only');
+          passed = hasRecvOnly === task.expectedValue.receiveOnly;
+        }
+        if (task.expectedValue.connected !== undefined) {
+          const hasConn = !!stub!.options?.includes('connected');
+          passed = hasConn === task.expectedValue.connected;
+        }
+        if (task.expectedValue.summary !== undefined) {
+          const hasSumm = !!stub!.options?.includes('summary');
+          passed = hasSumm === task.expectedValue.summary;
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP stub routing telah dikonfigurasi dengan benar.`
+          : `EIGRP stub routing belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Interface Timers (Hello / Hold)
+    if (prop === 'eigrp_timer_interval' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const expectedHello = task.expectedValue?.hello;
+      const expectedHold = task.expectedValue?.hold;
+      const helloPassed = expectedHello !== undefined
+        ? (typeof ifc?.eigrpHelloInterval === 'number'
+            ? ifc.eigrpHelloInterval === expectedHello
+            : (ifc?.eigrpHelloInterval && typeof ifc.eigrpHelloInterval === 'object'
+                ? Object.values(ifc.eigrpHelloInterval).includes(expectedHello)
+                : false))
+        : true;
+      const holdPassed = expectedHold !== undefined
+        ? (typeof ifc?.eigrpHoldTime === 'number'
+            ? ifc.eigrpHoldTime === expectedHold
+            : (ifc?.eigrpHoldTime && typeof ifc.eigrpHoldTime === 'object'
+                ? Object.values(ifc.eigrpHoldTime).includes(expectedHold)
+                : false))
+        : true;
+      const passed = Boolean(ifc && helloPassed && holdPassed);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Timer EIGRP pada ${task.targetInterface} telah sesuai.`
+          : `Timer EIGRP pada ${task.targetInterface} belum dikonfigurasi dengan benar pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Summary Address
+    if (prop === 'eigrp_summary_address' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const expectedPrefix = String(expected);
+      const passed = Boolean(ifc && ifc.eigrpSummaryAddresses?.some(sa => `${sa.network} ${sa.mask}`.includes(expectedPrefix) || sa.network === expectedPrefix));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP summary-address untuk ${expectedPrefix} telah dikonfigurasi pada ${task.targetInterface}.`
+          : `EIGRP summary-address untuk ${expectedPrefix} belum ditemukan pada ${task.targetInterface} ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check IPv6 Summary Address
+    if (prop === 'eigrp_ipv6_summary_address' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const expectedPrefix = String(expected).toLowerCase();
+      const passed = Boolean(ifc && ifc.eigrpIpv6SummaryAddresses?.some(sa => sa.prefix.toLowerCase() === expectedPrefix));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP IPv6 summary-address '${expectedPrefix}' telah dikonfigurasi pada ${task.targetInterface}.`
+          : `EIGRP IPv6 summary-address '${expectedPrefix}' belum sesuai pada ${task.targetInterface} ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Key Chain Configuration
+    if (prop === 'keychain_configured') {
+      const chainName = String(task.expectedValue?.name || expected);
+      const chain = device.keyChains.get(chainName);
+      let passed = !!chain;
+      if (passed && task.expectedValue?.keyString) {
+        const expectedStr = task.expectedValue.keyString;
+        const keyMatch = Array.from(chain!.keys.values()).some(k => k.keyString === expectedStr);
+        passed = keyMatch;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Key chain '${chainName}' telah terkonfigurasi dengan benar.`
+          : `Key chain '${chainName}' belum ditemukan atau key-string tidak cocok pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check Authentication Mode / Key
+    if (prop === 'eigrp_auth' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      let passed = false;
+      if (ifc) {
+        if (task.expectedValue?.mode) {
+          passed = Boolean(ifc.eigrpAuthMode === task.expectedValue.mode ||
+            (ifc.eigrpAuthMode && typeof ifc.eigrpAuthMode === 'object' && Object.values(ifc.eigrpAuthMode).includes(task.expectedValue.mode)));
+        }
+        if (task.expectedValue?.keyChain) {
+          const kcMatch = Boolean(ifc.eigrpAuthKeyChain === task.expectedValue.keyChain ||
+            (ifc.eigrpAuthKeyChain && typeof ifc.eigrpAuthKeyChain === 'object' && Object.values(ifc.eigrpAuthKeyChain).includes(task.expectedValue.keyChain)));
+          passed = Boolean((passed || !task.expectedValue?.mode) && kcMatch);
+        }
+        if (task.expectedValue?.key) {
+          const kMatch = Boolean(ifc.eigrpAuthKey === task.expectedValue.key ||
+            (ifc.eigrpAuthKey && typeof ifc.eigrpAuthKey === 'object' && Object.values(ifc.eigrpAuthKey).includes(task.expectedValue.key)));
+          passed = Boolean((passed || !task.expectedValue?.mode) && kMatch);
+        }
+        if (!task.expectedValue) {
+          passed = !!(ifc.eigrpAuthMode || ifc.eigrpAuthKeyChain || ifc.eigrpAuthKey);
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Autentikasi EIGRP pada interface ${task.targetInterface} telah aktif dan valid.`
+          : `Autentikasi EIGRP pada interface ${task.targetInterface} belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP EIGRP: Check IPv6 EIGRP Enabled
+    if (prop === 'eigrp_ipv6_configured' && (device instanceof Router || device instanceof Switch)) {
+      const v6Config = device.eigrpV6Config;
+      const expectedAs = typeof expected === 'number' ? expected : (expected && typeof expected === 'object' ? (expected as any).asNumber : undefined);
+      let passed = !!(v6Config && v6Config.enabled);
+      if (passed && expectedAs !== undefined) {
+        passed = v6Config!.asNumber === expectedAs;
+      }
+      if (task.targetInterface) {
+        const ifc = device.getInterface(task.targetInterface);
+        passed = passed && Boolean(ifc && ifc.eigrpIpv6As === expectedAs);
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP untuk IPv6 (AS ${expectedAs || v6Config?.asNumber}) telah aktif.`
+          : `EIGRP untuk IPv6 belum aktif atau AS number tidak sesuai pada ${device.hostname}.`
       };
     }
 

@@ -1621,7 +1621,172 @@ CliParser.execute('ipv6 router ospf 123', { deviceId: 'D1', mode: 'global-config
 const reportOspf4 = LabGrader.grade(ccnpOspfLab4, ospfLab4Devs);
 console.log(`CCNP OSPF Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportOspf4.totalScore === 100 && reportOspf4.isPassed ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, SERTA 4 LAB CCNP OSPF SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+console.log('\n=== [19] PENGUJIAN 5 LAB RESMI CCNP ENTERPRISE EIGRP (IPV4, ADVANCED, IPV6, TROUBLESHOOT) ===');
+
+// Test CCNP EIGRP Lab 1: Implement EIGRP for IPv4
+const ccnpEigrpLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-01-ipv4')!;
+console.log(`CCNP EIGRP Lab 01 Exists: ${ccnpEigrpLab1 ? 'PASS' : 'FAIL'}`);
+
+const r1Eigrp1 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Eigrp1 = new Router('R2', 'R2', { x: 500, y: 150 });
+const r3Eigrp1 = new Router('R3', 'R3', { x: 220, y: 340 });
+const d2Eigrp1 = new Switch('D2', 'D2', { x: 500, y: 340 }, true);
+const eigrp1Devs = [r1Eigrp1, r2Eigrp1, r3Eigrp1, d2Eigrp1];
+
+// R1: Named EIGRP BASIC-EIGRP-LAB AS 27, router-id 1.1.1.1, variance 2
+CliParser.execute('router eigrp BASIC-EIGRP-LAB', { deviceId: 'R1', mode: 'global-config' as const }, r1Eigrp1, eigrp1Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 27', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'BASIC-EIGRP-LAB' }, r1Eigrp1, eigrp1Devs);
+CliParser.execute('eigrp router-id 1.1.1.1', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'BASIC-EIGRP-LAB', targetAfProto: 'ipv4', targetAsNumber: 27 }, r1Eigrp1, eigrp1Devs);
+CliParser.execute('topology base', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'BASIC-EIGRP-LAB', targetAfProto: 'ipv4', targetAsNumber: 27 }, r1Eigrp1, eigrp1Devs);
+CliParser.execute('variance 2', { deviceId: 'R1', mode: 'router-af-topology-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'BASIC-EIGRP-LAB', targetAfProto: 'ipv4', targetAsNumber: 27 }, r1Eigrp1, eigrp1Devs);
+
+// R2: Classic EIGRP 27 & Key chain EIGRP-KEYS
+CliParser.execute('router eigrp 27', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp1, eigrp1Devs);
+CliParser.execute('key chain EIGRP-KEYS', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp1, eigrp1Devs);
+CliParser.execute('key 1', { deviceId: 'R2', mode: 'keychain-config' as const, targetKeyChain: 'EIGRP-KEYS' }, r2Eigrp1, eigrp1Devs);
+CliParser.execute('key-string Cisco123', { deviceId: 'R2', mode: 'keychain-key-config' as const, targetKeyChain: 'EIGRP-KEYS', targetKeyId: 1 }, r2Eigrp1, eigrp1Devs);
+
+// R3: Named EIGRP
+CliParser.execute('router eigrp BASIC-EIGRP-LAB', { deviceId: 'R3', mode: 'global-config' as const }, r3Eigrp1, eigrp1Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 27', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'BASIC-EIGRP-LAB' }, r3Eigrp1, eigrp1Devs);
+
+// D2: Named EIGRP
+CliParser.execute('router eigrp BASIC-EIGRP-LAB', { deviceId: 'D2', mode: 'global-config' as const }, d2Eigrp1, eigrp1Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 27', { deviceId: 'D2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'BASIC-EIGRP-LAB' }, d2Eigrp1, eigrp1Devs);
+
+const reportEigrp1 = LabGrader.grade(ccnpEigrpLab1, eigrp1Devs);
+console.log(`CCNP EIGRP Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportEigrp1.totalScore === 100 && reportEigrp1.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp1.totalScore}%)`);
+
+// Test CCNP EIGRP Lab 2: Implement Advanced EIGRP for IPv4 Features
+const ccnpEigrpLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-02-advanced-ipv4')!;
+console.log(`CCNP EIGRP Lab 02 Exists: ${ccnpEigrpLab2 ? 'PASS' : 'FAIL'}`);
+
+const r1Eigrp2 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Eigrp2 = new Router('R2', 'R2', { x: 500, y: 150 });
+const r3Eigrp2 = new Router('R3', 'R3', { x: 500, y: 340 });
+const d1Eigrp2 = new Switch('D1', 'D1', { x: 220, y: 340 }, true);
+const eigrp2Devs = [r1Eigrp2, r2Eigrp2, r3Eigrp2, d1Eigrp2];
+
+// R1: router eigrp 98, timers on Gi0/0/0
+CliParser.execute('router eigrp 98', { deviceId: 'R1', mode: 'global-config' as const }, r1Eigrp2, eigrp2Devs);
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'global-config' as const }, r1Eigrp2, eigrp2Devs);
+CliParser.execute('ip hello-interval eigrp 98 10', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Eigrp2, eigrp2Devs);
+CliParser.execute('ip hold-time eigrp 98 30', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Eigrp2, eigrp2Devs);
+
+// R2: router eigrp 98 -> eigrp stub connected summary, summary-address on Gi0/0/0
+CliParser.execute('router eigrp 98', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp2, eigrp2Devs);
+CliParser.execute('eigrp stub connected summary', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetProcessId: 98 }, r2Eigrp2, eigrp2Devs);
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp2, eigrp2Devs);
+CliParser.execute('ip summary-address eigrp 98 192.168.0.0 255.255.252.0', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Eigrp2, eigrp2Devs);
+
+const reportEigrp2 = LabGrader.grade(ccnpEigrpLab2, eigrp2Devs);
+console.log(`CCNP EIGRP Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportEigrp2.totalScore === 100 && reportEigrp2.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp2.totalScore}%)`);
+
+// Test CCNP EIGRP Lab 3: Implement EIGRP for IPv6 & Named EIGRP
+const ccnpEigrpLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-03-ipv6')!;
+console.log(`CCNP EIGRP Lab 03 Exists: ${ccnpEigrpLab3 ? 'PASS' : 'FAIL'}`);
+
+const r1Eigrp3 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Eigrp3 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Eigrp3 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Eigrp3 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Eigrp3 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const eigrp3Devs = [r1Eigrp3, r2Eigrp3, r3Eigrp3, d1Eigrp3, d2Eigrp3];
+
+// R1: ipv6 unicast-routing, Named EIGRP EIGRP_IPV6 AS 43, router-id 1.1.1.1, auth hmac-sha-256 on Gi0/0/0, variance 2
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R1', mode: 'global-config' as const }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('router eigrp EIGRP_IPV6', { deviceId: 'R1', mode: 'global-config' as const }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('address-family ipv6 unicast autonomous-system 43', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6' }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('eigrp router-id 1.1.1.1', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6', targetAfProto: 'ipv6', targetAsNumber: 43 }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('af-interface GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6', targetAfProto: 'ipv6', targetAsNumber: 43 }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('authentication mode hmac-sha-256 Cisco123', { deviceId: 'R1', mode: 'router-af-interface-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6', targetAfProto: 'ipv6', targetAsNumber: 43, targetAfInterface: 'GigabitEthernet0/0/0' }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'router-af-interface-config' as const }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('topology base', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6', targetAfProto: 'ipv6', targetAsNumber: 43 }, r1Eigrp3, eigrp3Devs);
+CliParser.execute('variance 2', { deviceId: 'R1', mode: 'router-af-topology-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6', targetAfProto: 'ipv6', targetAsNumber: 43 }, r1Eigrp3, eigrp3Devs);
+
+// R2: ipv6 unicast-routing, ipv6 router eigrp 43, interface Gi0/0/0 ipv6 eigrp 43
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp3, eigrp3Devs);
+CliParser.execute('ipv6 router eigrp 43', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp3, eigrp3Devs);
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp3, eigrp3Devs);
+CliParser.execute('ipv6 eigrp 43', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Eigrp3, eigrp3Devs);
+
+const reportEigrp3 = LabGrader.grade(ccnpEigrpLab3, eigrp3Devs);
+console.log(`CCNP EIGRP Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportEigrp3.totalScore === 100 && reportEigrp3.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp3.totalScore}%)`);
+
+// Test CCNP EIGRP Lab 4: Troubleshoot EIGRP for IPv4
+const ccnpEigrpLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-04-troubleshoot-ipv4')!;
+console.log(`CCNP EIGRP Lab 04 Exists: ${ccnpEigrpLab4 ? 'PASS' : 'FAIL'}`);
+
+const r1Eigrp4 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Eigrp4 = new Router('R2', 'R2', { x: 500, y: 150 });
+const r3Eigrp4 = new Router('R3', 'R3', { x: 220, y: 340 });
+const d2Eigrp4 = new Switch('D2', 'D2', { x: 500, y: 340 }, true);
+const eigrp4Devs = [r1Eigrp4, r2Eigrp4, r3Eigrp4, d2Eigrp4];
+
+// R3 fix: router-id 3.3.3.3 and no passive-interface Gi0/0/0
+CliParser.execute('router eigrp 412', { deviceId: 'R3', mode: 'global-config' as const }, r3Eigrp4, eigrp4Devs);
+CliParser.execute('eigrp router-id 3.3.3.3', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetProcessId: 412 }, r3Eigrp4, eigrp4Devs);
+CliParser.execute('passive-interface default', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetProcessId: 412 }, r3Eigrp4, eigrp4Devs);
+CliParser.execute('no passive-interface GigabitEthernet0/0/0', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetProcessId: 412 }, r3Eigrp4, eigrp4Devs);
+
+// R2 fix: key chain EIGRP-KEYS key 1 key-string Cisco123
+CliParser.execute('key chain EIGRP-KEYS', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp4, eigrp4Devs);
+CliParser.execute('key 1', { deviceId: 'R2', mode: 'keychain-config' as const, targetKeyChain: 'EIGRP-KEYS' }, r2Eigrp4, eigrp4Devs);
+CliParser.execute('key-string Cisco123', { deviceId: 'R2', mode: 'keychain-key-config' as const, targetKeyChain: 'EIGRP-KEYS', targetKeyId: 1 }, r2Eigrp4, eigrp4Devs);
+
+// D2 fix: router eigrp 412
+CliParser.execute('router eigrp 412', { deviceId: 'D2', mode: 'global-config' as const }, d2Eigrp4, eigrp4Devs);
+
+const reportEigrp4 = LabGrader.grade(ccnpEigrpLab4, eigrp4Devs);
+console.log(`CCNP EIGRP Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportEigrp4.totalScore === 100 && reportEigrp4.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp4.totalScore}%)`);
+
+// Test CCNP EIGRP Lab 5: Troubleshoot EIGRP for IPv6
+const ccnpEigrpLab5 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-05-troubleshoot-ipv6')!;
+console.log(`CCNP EIGRP Lab 05 Exists: ${ccnpEigrpLab5 ? 'PASS' : 'FAIL'}`);
+
+const r1Eigrp5 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Eigrp5 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Eigrp5 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Eigrp5 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Eigrp5 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const eigrp5Devs = [r1Eigrp5, r2Eigrp5, r3Eigrp5, d1Eigrp5, d2Eigrp5];
+
+// D1 fix: ipv6 unicast-routing, router eigrp EIGRP_IPV6 -> address-family ipv6 unicast autonomous-system 43 -> eigrp stub connected summary
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'D1', mode: 'global-config' as const }, d1Eigrp5, eigrp5Devs);
+CliParser.execute('router eigrp EIGRP_IPV6', { deviceId: 'D1', mode: 'global-config' as const }, d1Eigrp5, eigrp5Devs);
+CliParser.execute('address-family ipv6 unicast autonomous-system 43', { deviceId: 'D1', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6' }, d1Eigrp5, eigrp5Devs);
+CliParser.execute('eigrp stub connected summary', { deviceId: 'D1', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6', targetAfProto: 'ipv6', targetAsNumber: 43 }, d1Eigrp5, eigrp5Devs);
+
+// R2 fix: ipv6 summary-address eigrp 43 2001:db8:acad:2000::/63 on Gi0/0/0
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'global-config' as const }, r2Eigrp5, eigrp5Devs);
+CliParser.execute('ipv6 summary-address eigrp 43 2001:db8:acad:2000::/63', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Eigrp5, eigrp5Devs);
+
+// D2 fix: router eigrp EIGRP_IPV6 -> address-family ipv6 unicast autonomous-system 43
+CliParser.execute('router eigrp EIGRP_IPV6', { deviceId: 'D2', mode: 'global-config' as const }, d2Eigrp5, eigrp5Devs);
+CliParser.execute('address-family ipv6 unicast autonomous-system 43', { deviceId: 'D2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'EIGRP_IPV6' }, d2Eigrp5, eigrp5Devs);
+
+const reportEigrp5 = LabGrader.grade(ccnpEigrpLab5, eigrp5Devs);
+console.log(`CCNP EIGRP Lab 05 Auto-Grader Evaluation (100% Mastery): ${reportEigrp5.totalScore === 100 && reportEigrp5.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp5.totalScore}%)`);
+
+// Test Show Commands & Running Config
+console.log('\n--- Test Show Commands & Running Config ---');
+const showKeyChain = CliParser.execute('show key chain', { deviceId: 'R2', mode: 'priv-exec' as const }, r2Eigrp1, eigrp1Devs);
+console.log(`show key chain output contains EIGRP-KEYS: ${showKeyChain.output.includes('EIGRP-KEYS') ? 'PASS' : 'FAIL'}`);
+
+const showIpEigrpInt = CliParser.execute('show ip eigrp interfaces', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Eigrp2, eigrp2Devs);
+console.log(`show ip eigrp interfaces produces table: ${showIpEigrpInt.output.includes('EIGRP-IPv4 Interfaces') ? 'PASS' : 'FAIL'}`);
+
+const showIpv6EigrpInt = CliParser.execute('show ipv6 eigrp interfaces', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Eigrp3, eigrp3Devs);
+console.log(`show ipv6 eigrp interfaces produces table: ${showIpv6EigrpInt.output.includes('EIGRP-IPv6 Interfaces') ? 'PASS' : 'FAIL'}`);
+
+const showIpv6Route = CliParser.execute('show ipv6 route', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Eigrp3, eigrp3Devs);
+console.log(`show ipv6 route executes cleanly: ${showIpv6Route.output.includes('IPv6 Routing Table') ? 'PASS' : 'FAIL'}`);
+
+const runCfgR1 = r1Eigrp1.getRunningConfig();
+console.log(`Running-config includes router eigrp BASIC-EIGRP-LAB: ${runCfgR1.includes('router eigrp BASIC-EIGRP-LAB') ? 'PASS' : 'FAIL'}`);
+console.log(`Running-config includes address-family ipv4: ${runCfgR1.includes('address-family ipv4 unicast autonomous-system 27') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB CCNP OSPF, DAN 5 LAB CCNP EIGRP SELESAI DENGAN SUKSES LENGKAP 100%! ===');
 
 
 

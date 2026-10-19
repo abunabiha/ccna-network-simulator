@@ -1248,5 +1248,415 @@ export const CCNA_LABS: LabDefinition[] = [
         { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
       ]
     }
+  },
+  {
+    id: 'lab-ccnp-eigrp-01-ipv4',
+    title: 'CCNP Enterprise Lab: Implement EIGRP for IPv4',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Mengonfigurasi dan memverifikasi protokol routing EIGRP untuk IPv4 menggunakan Named EIGRP Configuration (pada R1, R3, dan D2) serta Classic EIGRP Configuration (pada R2), mengatur passive interface, HMAC-SHA-256 dan MD5 key-chain authentication, serta unequal-cost variance load balancing.',
+    objectives: [
+      'Konfigurasi Named EIGRP "BASIC-EIGRP-LAB" AS 27 pada R1, R3, dan D2',
+      'Konfigurasi Classic EIGRP AS 27 pada Router R2',
+      'Konfigurasi Router ID pada seluruh perangkat (R1: 1.1.1.1, R2: 2.2.2.2, R3: 3.3.3.3, D2: 4.4.4.4)',
+      'Konfigurasi Passive-Interface pada Loopback0 seluruh perangkat',
+      'Konfigurasi Key Chain dan autentikasi MD5 pada R2 serta HMAC-SHA-256 pada R1/R3',
+      'Konfigurasi Unequal-Cost Load Balancing dengan variance 2 pada Router R1'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-eigrp1-1',
+        description: 'Konfigurasi Named EIGRP BASIC-EIGRP-LAB AS 27 pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: { asNumber: 27, name: 'BASIC-EIGRP-LAB' },
+        hint: 'router eigrp BASIC-EIGRP-LAB -> address-family ipv4 unicast autonomous-system 27'
+      },
+      {
+        id: 'task-ccnp-eigrp1-2',
+        description: 'Konfigurasi Classic EIGRP AS 27 pada Router R2',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: 27,
+        hint: 'router eigrp 27'
+      },
+      {
+        id: 'task-ccnp-eigrp1-3',
+        description: 'Konfigurasi Named EIGRP BASIC-EIGRP-LAB AS 27 pada R3',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: { asNumber: 27, name: 'BASIC-EIGRP-LAB' },
+        hint: 'router eigrp BASIC-EIGRP-LAB -> address-family ipv4 unicast autonomous-system 27'
+      },
+      {
+        id: 'task-ccnp-eigrp1-4',
+        description: 'Konfigurasi Named EIGRP BASIC-EIGRP-LAB AS 27 pada Switch D2',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'D2',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: { asNumber: 27, name: 'BASIC-EIGRP-LAB' },
+        hint: 'router eigrp BASIC-EIGRP-LAB -> address-family ipv4 unicast autonomous-system 27'
+      },
+      {
+        id: 'task-ccnp-eigrp1-5',
+        description: 'Konfigurasi EIGRP router-id 1.1.1.1 pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'eigrp_router_id',
+        expectedValue: '1.1.1.1',
+        hint: 'address-family ipv4 unicast autonomous-system 27 -> eigrp router-id 1.1.1.1'
+      },
+      {
+        id: 'task-ccnp-eigrp1-6',
+        description: 'Konfigurasi Key Chain EIGRP-KEYS dengan key-string Cisco123 pada Router R2',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'keychain_configured',
+        expectedValue: { name: 'EIGRP-KEYS', keyString: 'Cisco123' },
+        hint: 'key chain EIGRP-KEYS -> key 1 -> key-string Cisco123'
+      },
+      {
+        id: 'task-ccnp-eigrp1-7',
+        description: 'Konfigurasi Unequal-Cost Load Balancing (variance 2) pada Router R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'eigrp_variance',
+        expectedValue: 2,
+        hint: 'address-family ipv4 unicast autonomous-system 27 -> topology base -> variance 2'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 500, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 220, y: 340 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 500, y: 340 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/2', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/3', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-eigrp-02-advanced-ipv4',
+    title: 'CCNP Enterprise Lab: Implement Advanced EIGRP for IPv4 Features',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 40,
+    difficulty: 'Advanced',
+    scenario: 'Menerapkan fitur-fitur lanjutan EIGRP untuk IPv4 termasuk tuning timer hello (10s) dan hold time (30s), konfigurasi manual route summarization pada interface boundary untuk mereduksi ukuran tabel routing, dan konfigurasi EIGRP stub routing untuk membatasi penyebaran query EIGRP.',
+    objectives: [
+      'Konfigurasi proses EIGRP AS 98 pada R1, R2, R3, dan D1',
+      'Tuning timer EIGRP hello (10s) dan hold (30s) pada interface R1 GigabitEthernet0/0/0',
+      'Konfigurasi manual route summarization 192.168.0.0/22 pada interface R2',
+      'Konfigurasi EIGRP stub routing (connected summary) pada Router R2 dan D1'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-eigrp2-1',
+        description: 'Konfigurasi EIGRP AS 98 pada Router R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: 98,
+        hint: 'router eigrp 98'
+      },
+      {
+        id: 'task-ccnp-eigrp2-2',
+        description: 'Konfigurasi timer EIGRP hello (10s) dan hold time (30s) pada interface R1 GigabitEthernet0/0/0',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'eigrp_timer_interval',
+        expectedValue: { hello: 10, hold: 30 },
+        hint: 'interface GigabitEthernet0/0/0 -> ip hello-interval eigrp 98 10 & ip hold-time eigrp 98 30'
+      },
+      {
+        id: 'task-ccnp-eigrp2-3',
+        description: 'Konfigurasi manual route summarization 192.168.0.0 255.255.252.0 pada interface R2 GigabitEthernet0/0/0',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'eigrp_summary_address',
+        expectedValue: '192.168.0.0 255.255.252.0',
+        hint: 'interface GigabitEthernet0/0/0 -> ip summary-address eigrp 98 192.168.0.0 255.255.252.0'
+      },
+      {
+        id: 'task-ccnp-eigrp2-4',
+        description: 'Konfigurasi EIGRP stub routing pada Router R2',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'eigrp_stub',
+        expectedValue: { connected: true, summary: true },
+        hint: 'router eigrp 98 -> eigrp stub connected summary'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 500, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 500, y: 340 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 340 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/1', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-eigrp-03-ipv6',
+    title: 'CCNP Enterprise Lab: Implement EIGRP for IPv6 & Named EIGRP',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Menerapkan EIGRP untuk IPv6 pada arsitektur hybrid yang menggabungkan Classic EIGRP for IPv6 (pada R2) dengan Named EIGRP IPv6 Address-Family (pada R1, R3, D1, dan D2), mengamankan pertukaran rute dengan autentikasi HMAC-SHA-256, dan menerapkan unequal-cost variance routing.',
+    objectives: [
+      'Aktifkan ipv6 unicast-routing secara global pada seluruh router dan switch L3',
+      'Konfigurasi Classic EIGRP IPv6 AS 43 pada Router R2 dan interface-nya',
+      'Konfigurasi Named EIGRP "EIGRP_IPV6" AS 43 pada R1, R3, D1, dan D2',
+      'Konfigurasi EIGRP IPv6 router-id pada seluruh perangkat',
+      'Konfigurasi autentikasi HMAC-SHA-256 Cisco123 pada interface R1 GigabitEthernet0/0/0',
+      'Konfigurasi variance 2 pada R1 di bawah topology base IPv6'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-eigrp3-1',
+        description: 'Aktifkan IPv6 unicast-routing secara global pada Router R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_unicast_routing_enabled',
+        expectedValue: true,
+        hint: 'ipv6 unicast-routing'
+      },
+      {
+        id: 'task-ccnp-eigrp3-2',
+        description: 'Konfigurasi Classic EIGRP IPv6 AS 43 pada interface R2 GigabitEthernet0/0/0',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'eigrp_ipv6_configured',
+        expectedValue: 43,
+        hint: 'interface GigabitEthernet0/0/0 -> ipv6 eigrp 43'
+      },
+      {
+        id: 'task-ccnp-eigrp3-3',
+        description: 'Konfigurasi Named EIGRP IPv6 AS 43 pada Router R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'eigrp_ipv6_configured',
+        expectedValue: 43,
+        hint: 'router eigrp EIGRP_IPV6 -> address-family ipv6 unicast autonomous-system 43'
+      },
+      {
+        id: 'task-ccnp-eigrp3-4',
+        description: 'Konfigurasi EIGRP router-id 1.1.1.1 pada Router R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'eigrp_router_id',
+        expectedValue: '1.1.1.1',
+        hint: 'address-family ipv6 unicast autonomous-system 43 -> eigrp router-id 1.1.1.1'
+      },
+      {
+        id: 'task-ccnp-eigrp3-5',
+        description: 'Konfigurasi autentikasi HMAC-SHA-256 pada interface R1 GigabitEthernet0/0/0',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'eigrp_auth',
+        expectedValue: { mode: 'hmac-sha-256' },
+        hint: 'af-interface GigabitEthernet0/0/0 -> authentication mode hmac-sha-256 Cisco123'
+      },
+      {
+        id: 'task-ccnp-eigrp3-6',
+        description: 'Konfigurasi variance 2 pada Router R1 untuk EIGRP IPv6',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'eigrp_variance',
+        expectedValue: 2,
+        hint: 'address-family ipv6 unicast autonomous-system 43 -> topology base -> variance 2'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-eigrp-04-troubleshoot-ipv4',
+    title: 'CCNP Enterprise Lab: Troubleshoot EIGRP for IPv4',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 40,
+    difficulty: 'Advanced',
+    scenario: 'Melakukan identifikasi dan perbaikan (troubleshooting) masalah relasi ketetanggaan dan pertukaran rute EIGRP untuk IPv4: duplicate router-id antara R1 dan R3, pemblokiran hello akibat passive-interface default tanpa negasi pada interface uplink, ketidakcocokan key-string autentikasi MD5, dan kesalahan nomor AS pada Switch D2.',
+    objectives: [
+      'Perbaiki duplikasi router-id pada R3 menjadi 3.3.3.3 (Ticket 4.1.1.1)',
+      'Perbaiki penekanan hello dengan mengaktifkan interface R3 GigabitEthernet0/0/0 (no passive-interface) (Ticket 4.1.1.1)',
+      'Perbaiki key-string autentikasi pada R2 agar cocok dengan key-chain peers (Ticket 4.1.1.2)',
+      'Perbaiki kesalahan konfigurasi AS number pada Switch D2 dari AS 421 ke AS 412 (Ticket 4.1.1.3)'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-eigrp4-1',
+        description: 'Perbaiki duplikasi EIGRP router-id pada Router R3 menjadi 3.3.3.3',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'eigrp_router_id',
+        expectedValue: '3.3.3.3',
+        hint: 'router eigrp 412 -> eigrp router-id 3.3.3.3'
+      },
+      {
+        id: 'task-ccnp-eigrp4-2',
+        description: 'Aktifkan transmisi paket hello EIGRP pada interface R3 GigabitEthernet0/0/0 (no passive-interface)',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'eigrp_passive_interface',
+        expectedValue: false,
+        hint: 'router eigrp 412 -> no passive-interface GigabitEthernet0/0/0'
+      },
+      {
+        id: 'task-ccnp-eigrp4-3',
+        description: 'Perbaiki key-string pada Key Chain EIGRP-KEYS Router R2 menjadi Cisco123',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'keychain_configured',
+        expectedValue: { name: 'EIGRP-KEYS', keyString: 'Cisco123' },
+        hint: 'key chain EIGRP-KEYS -> key 1 -> key-string Cisco123'
+      },
+      {
+        id: 'task-ccnp-eigrp4-4',
+        description: 'Koreksi AS number EIGRP pada Switch D2 menjadi AS 412',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D2',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: 412,
+        hint: 'no router eigrp 421 -> router eigrp 412'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 500, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 220, y: 340 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 500, y: 340 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/2', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/3', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-eigrp-05-troubleshoot-ipv6',
+    title: 'CCNP Enterprise Lab: Troubleshoot EIGRP for IPv6',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 40,
+    difficulty: 'Advanced',
+    scenario: 'Melakukan pemecahan masalah (troubleshooting) penyebaran rute IPv6 pada EIGRP AS 43: memperbaiki konfigurasi stub receive-only pada D1 yang menghalangi perambatan rute ringkas, membetulkan prefix summary-address yang salah (::/0 diganti menjadi 2001:db8:acad:2000::/63) pada R2, dan memastikan aktivasi EIGRP IPv6 berjalan normal di seluruh segmen.',
+    objectives: [
+      'Perbaiki konfigurasi EIGRP stub pada D1 dengan menghilangkan receive-only agar rute ringkas dapat diiklankan (Ticket 4.1.2.1)',
+      'Koreksi IPv6 summary-address pada interface R2 GigabitEthernet0/0/0 menjadi 2001:db8:acad:2000::/63 (Ticket 4.1.2.1)',
+      'Pastikan proses IPv6 EIGRP AS 43 aktif pada Switch D2',
+      'Pastikan ipv6 unicast-routing telah aktif secara menyeluruh'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-eigrp5-1',
+        description: 'Perbaiki konfigurasi EIGRP stub pada Switch D1 agar tidak memblokir perambatan rute (disable receive-only)',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D1',
+        expectedProperty: 'eigrp_stub',
+        expectedValue: { receiveOnly: false },
+        hint: 'router eigrp EIGRP_IPV6 -> address-family ipv6 unicast autonomous-system 43 -> eigrp stub connected summary'
+      },
+      {
+        id: 'task-ccnp-eigrp5-2',
+        description: 'Koreksi summary-address IPv6 pada interface R2 GigabitEthernet0/0/0 menjadi 2001:db8:acad:2000::/63',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'eigrp_ipv6_summary_address',
+        expectedValue: '2001:db8:acad:2000::/63',
+        hint: 'interface GigabitEthernet0/0/0 -> ipv6 summary-address eigrp 43 2001:db8:acad:2000::/63'
+      },
+      {
+        id: 'task-ccnp-eigrp5-3',
+        description: 'Pastikan proses IPv6 EIGRP AS 43 aktif pada Switch D2',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D2',
+        expectedProperty: 'eigrp_ipv6_configured',
+        expectedValue: 43,
+        hint: 'router eigrp EIGRP_IPV6 -> address-family ipv6 unicast autonomous-system 43'
+      },
+      {
+        id: 'task-ccnp-eigrp5-4',
+        description: 'Pastikan ipv6 unicast-routing telah diaktifkan pada Switch D1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D1',
+        expectedProperty: 'ipv6_unicast_routing_enabled',
+        expectedValue: true,
+        hint: 'ipv6 unicast-routing'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
   }
 ];

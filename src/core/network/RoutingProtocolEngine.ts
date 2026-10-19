@@ -741,8 +741,18 @@ export class RoutingProtocolEngine {
 
       for (const locIf of node.interfaces.values()) {
         if (!locIf.ipAddress || !locIf.subnetMask || locIf.isShutdown) continue;
+        const isLocPassive = config.passiveInterfaces?.includes(locIf.name) ||
+                             config.passiveInterfaces?.includes(locIf.shortName) ||
+                             (config.passiveInterfaceDefault && !config.passiveInterfaces?.some((p: string) => p === locIf.name || p === locIf.shortName));
+        if (isLocPassive) continue;
+
         for (const remIf of neighbor.interfaces.values()) {
           if (!remIf.ipAddress || !remIf.subnetMask || remIf.isShutdown) continue;
+          const isRemPassive = nConfig.passiveInterfaces?.includes(remIf.name) ||
+                               nConfig.passiveInterfaces?.includes(remIf.shortName) ||
+                               (nConfig.passiveInterfaceDefault && !nConfig.passiveInterfaces?.some((p: string) => p === remIf.name || p === remIf.shortName));
+          if (isRemPassive) continue;
+
           if (SubnetUtils.isSameSubnet(locIf.ipAddress, remIf.ipAddress, locIf.subnetMask)) {
             const hCol = count.toString().padEnd(3);
             const addrCol = remIf.ipAddress.padEnd(23);
@@ -757,6 +767,26 @@ export class RoutingProtocolEngine {
     if (count === 0) {
       lines.push('No EIGRP neighbors found.');
     }
+    return lines.join('\n');
+  }
+
+  static renderShowIpEigrpInterfaces(node: Device, _allDevices: Device[] = []): string {
+    const config = (node as any).eigrpConfig;
+    if (!config || !config.enabled) return '% EIGRP not enabled on this device';
+
+    const lines: string[] = [
+      `EIGRP-IPv4 Interfaces for AS(${config.asNumber})`,
+      `                              Xmit Queue   PeerQ        Mean   Pacing Time   Multicast    Pending`,
+      `Interface              Peers  Un/Reliable  Un/Reliable  SRTT   Un/Reliable   Flow Timer   Routes`,
+      `------------------------------------------------------------------------------------------------`
+    ];
+
+    for (const iface of node.interfaces.values()) {
+      if (!iface.ipAddress || iface.isShutdown) continue;
+      const ifCol = (iface.shortName || iface.name).padEnd(22);
+      lines.push(`${ifCol} 1        0/0          0/0          12        0/1           50           0`);
+    }
+
     return lines.join('\n');
   }
 
@@ -777,6 +807,88 @@ export class RoutingProtocolEngine {
     for (const r of routes) {
       lines.push(`P ${r.network}/${r.cidr}, 1 successors, FD is ${r.metric || 307200}`);
       lines.push(`        via ${r.nextHop || 'Connected'} (${r.metric || 307200}/${Math.round((r.metric || 307200) / 2)}), ${r.exitInterface}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  static renderShowIpv6EigrpNeighbors(node: Device, allDevices: Device[]): string {
+    const config = (node as any).eigrpV6Config;
+    if (!config || !config.enabled) return '% EIGRP-IPv6 not enabled on this device';
+
+    const lines: string[] = [
+      `EIGRP-IPv6 Neighbors for AS(${config.asNumber})`,
+      `H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq`,
+      `                                                   (sec)         (ms)       Cnt Num`,
+      `-----------------------------------------------------------------------------------`
+    ];
+
+    let count = 0;
+    const l3Nodes = allDevices.filter(d => (d as any).eigrpV6Config && (d as any).eigrpV6Config.enabled && d.id !== node.id);
+    for (const neighbor of l3Nodes) {
+      const nConfig = (neighbor as any).eigrpV6Config;
+      if (nConfig.asNumber !== config.asNumber) continue;
+
+      for (const locIf of node.interfaces.values()) {
+        if (!locIf.ipv6Address || locIf.isShutdown) continue;
+        for (const remIf of neighbor.interfaces.values()) {
+          if (!remIf.ipv6Address || remIf.isShutdown) continue;
+          const locSub = locIf.ipv6Address.split('/')[0].split(':').slice(0, 4).join(':');
+          const remSub = remIf.ipv6Address.split('/')[0].split(':').slice(0, 4).join(':');
+          if (locSub === remSub) {
+            const hCol = count.toString().padEnd(3);
+            const addrCol = (remIf.ipv6Address.split('/')[0]).padEnd(23);
+            const ifCol = (locIf.shortName || locIf.name).padEnd(22);
+            lines.push(`${hCol} ${addrCol} ${ifCol} 14   00:45:12   15   200  0  ${count + 1}`);
+            count++;
+          }
+        }
+      }
+    }
+
+    if (count === 0) {
+      lines.push('No EIGRP-IPv6 neighbors found.');
+    }
+    return lines.join('\n');
+  }
+
+  static renderShowIpv6EigrpInterfaces(node: Device, _allDevices: Device[] = []): string {
+    const config = (node as any).eigrpV6Config;
+    if (!config || !config.enabled) return '% EIGRP-IPv6 not enabled on this device';
+
+    const lines: string[] = [
+      `EIGRP-IPv6 Interfaces for AS(${config.asNumber})`,
+      `                              Xmit Queue   PeerQ        Mean   Pacing Time   Multicast    Pending`,
+      `Interface              Peers  Un/Reliable  Un/Reliable  SRTT   Un/Reliable   Flow Timer   Routes`,
+      `------------------------------------------------------------------------------------------------`
+    ];
+
+    for (const iface of node.interfaces.values()) {
+      if (!iface.ipv6Address || iface.isShutdown) continue;
+      const ifCol = (iface.shortName || iface.name).padEnd(22);
+      lines.push(`${ifCol} 1        0/0          0/0          12        0/1           50           0`);
+    }
+
+    return lines.join('\n');
+  }
+
+  static renderShowIpv6EigrpTopology(node: Device, _allDevices: Device[] = []): string {
+    const config = (node as any).eigrpV6Config;
+    if (!config || !config.enabled) return '% EIGRP-IPv6 not enabled on this device';
+
+    const rid = config.routerId || '1.1.1.1';
+    const lines: string[] = [
+      `EIGRP-IPv6 Topology Table for AS(${config.asNumber})/ID(${rid})`,
+      'Codes: P - Passive, A - Active, U - Update, Q - Query, R - Reply,',
+      '       r - reply Status, s - sia Status',
+      ''
+    ];
+
+    for (const iface of node.interfaces.values()) {
+      if (!iface.ipv6Address || iface.isShutdown) continue;
+      const prefix = iface.ipv6Address;
+      lines.push(`P ${prefix}, 1 successors, FD is 1310720`);
+      lines.push(`        via Connected, ${iface.shortName || iface.name}`);
     }
 
     return lines.join('\n');

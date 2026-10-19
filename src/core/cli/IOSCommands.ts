@@ -472,6 +472,21 @@ export class IOSCommands {
       case 'mdt-subscription-config':
         result = this.execMdtSubscriptionConfigMode(tokens, raw, context, device);
         break;
+      case 'keychain-config':
+        result = this.execKeyChainConfigMode(tokens, raw, context, device);
+        break;
+      case 'keychain-key-config':
+        result = this.execKeyChainKeyConfigMode(tokens, raw, context, device);
+        break;
+      case 'router-af-config':
+        result = this.execRouterAfConfigMode(tokens, raw, context, device);
+        break;
+      case 'router-af-interface-config':
+        result = this.execRouterAfInterfaceConfigMode(tokens, raw, context, device);
+        break;
+      case 'router-af-topology-config':
+        result = this.execRouterAfTopologyConfigMode(tokens, raw, context, device);
+        break;
       default:
         result = { output: `% Invalid input detected at '^' marker.` };
     }
@@ -723,6 +738,9 @@ export class IOSCommands {
           if (tokens.length >= 4 && 'neighbors'.startsWith(tokens[3].toLowerCase())) {
             return { output: RoutingProtocolEngine.renderShowIpEigrpNeighbors(device, allDevices) };
           }
+          if (tokens.length >= 4 && 'interfaces'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpEigrpInterfaces(device, allDevices) };
+          }
           if (tokens.length >= 4 && 'topology'.startsWith(tokens[3].toLowerCase())) {
             return { output: RoutingProtocolEngine.renderShowIpEigrpTopology(device, allDevices) };
           }
@@ -946,6 +964,45 @@ export class IOSCommands {
         }
         return { output: TelemetryAutomationEngine.renderShowMdtSubscriptions(device) };
       }
+
+      // show key chain
+      if ('key'.startsWith(cmd1) && tokens.length >= 3 && 'chain'.startsWith(tokens[2].toLowerCase())) {
+        const lines: string[] = [];
+        if (device.keyChains && device.keyChains.size > 0) {
+          for (const kc of device.keyChains.values()) {
+            lines.push(`Key-chain ${kc.name}:`);
+            for (const k of kc.keys.values()) {
+              lines.push(`    key ${k.keyId} -- text "${k.keyString || ''}"`);
+              lines.push(`        accept lifetime (always valid) - (always valid) [valid now]`);
+              lines.push(`        send lifetime (always valid) - (always valid) [valid now]`);
+            }
+          }
+        } else {
+          lines.push('% No key chains configured');
+        }
+        return { output: lines.join('\n') };
+      }
+
+      // show ipv6 ...
+      if ('ipv6'.startsWith(cmd1) && tokens.length >= 3) {
+        const cmd2 = tokens[2].toLowerCase();
+        if ('eigrp'.startsWith(cmd2)) {
+          RoutingProtocolEngine.convergeRoutingProtocols(allDevices);
+          if (tokens.length >= 4 && 'neighbors'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpv6EigrpNeighbors(device, allDevices) };
+          }
+          if (tokens.length >= 4 && 'interfaces'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpv6EigrpInterfaces(device, allDevices) };
+          }
+          if (tokens.length >= 4 && 'topology'.startsWith(tokens[3].toLowerCase())) {
+            return { output: RoutingProtocolEngine.renderShowIpv6EigrpTopology(device, allDevices) };
+          }
+          return { output: RoutingProtocolEngine.renderShowIpv6EigrpNeighbors(device, allDevices) };
+        }
+        if ('route'.startsWith(cmd2)) {
+          return { output: this.renderIpv6Route(device) };
+        }
+      }
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -1163,34 +1220,93 @@ export class IOSCommands {
       }
     }
 
-    // router eigrp <as>
+    // router eigrp <as | name>
     if ('router'.startsWith(cmd0) && tokens.length >= 3 && 'eigrp'.startsWith(tokens[1].toLowerCase())) {
       if (device instanceof Router || (device instanceof Switch && device.isLayer3)) {
         const as = parseInt(tokens[2], 10);
+        const target = device as Router | Switch;
+
+        if (!isNaN(as)) {
+          if (as < 1 || as > 65535) return { output: `% Invalid AS number.` };
+          if (!target.eigrpConfig) {
+            target.eigrpConfig = {
+              enabled: true,
+              asNumber: as,
+              networks: [],
+              passiveInterfaces: []
+            };
+          } else {
+            target.eigrpConfig.enabled = true;
+            target.eigrpConfig.asNumber = as;
+          }
+          return {
+            output: '',
+            newMode: 'router-config',
+            contextUpdates: {
+              targetRoutingProcess: `eigrp-${as}`,
+              targetRoutingProtocol: 'eigrp',
+              targetAsNumber: as
+            }
+          };
+        } else {
+          // Named EIGRP: router eigrp <NAME>
+          const name = tokens[2];
+          return {
+            output: '',
+            newMode: 'router-config',
+            contextUpdates: {
+              targetRoutingProcess: `eigrp-${name}`,
+              targetRoutingProtocol: 'eigrp',
+              targetEigrpName: name
+            }
+          };
+        }
+      }
+    }
+
+    // ipv6 router eigrp <as>
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'router'.startsWith(tokens[1].toLowerCase()) && 'eigrp'.startsWith(tokens[2].toLowerCase())) {
+      if (device instanceof Router || (device instanceof Switch && device.isLayer3)) {
+        const as = parseInt(tokens[3], 10);
         if (isNaN(as) || as < 1 || as > 65535) return { output: `% Invalid AS number.` };
 
         const target = device as Router | Switch;
-        if (!target.eigrpConfig) {
-          target.eigrpConfig = {
+        if (!target.eigrpV6Config) {
+          target.eigrpV6Config = {
             enabled: true,
             asNumber: as,
-            networks: [],
             passiveInterfaces: []
           };
         } else {
-          target.eigrpConfig.enabled = true;
-          target.eigrpConfig.asNumber = as;
+          target.eigrpV6Config.enabled = true;
+          target.eigrpV6Config.asNumber = as;
         }
         return {
           output: '',
           newMode: 'router-config',
           contextUpdates: {
-            targetRoutingProcess: `eigrp-${as}`,
+            targetRoutingProcess: `eigrp-v6-${as}`,
             targetRoutingProtocol: 'eigrp',
-            targetAsNumber: as
+            targetAsNumber: as,
+            targetAfProto: 'ipv6'
           }
         };
       }
+    }
+
+    // key chain <name>
+    if (cmd0 === 'key' && tokens.length >= 3 && 'chain'.startsWith(tokens[1].toLowerCase())) {
+      const name = tokens[2];
+      if (!device.keyChains.has(name)) {
+        device.keyChains.set(name, { name, keys: new Map() });
+      }
+      return {
+        output: '',
+        newMode: 'keychain-config',
+        contextUpdates: {
+          targetKeyChain: name
+        }
+      };
     }
 
     // router bgp <as>
@@ -2710,6 +2826,111 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // bandwidth <kbps>
+    if ('bandwidth'.startsWith(cmd0) && tokens.length >= 2) {
+      const bw = parseInt(tokens[1], 10);
+      if (!isNaN(bw)) {
+        iface.bandwidthKbps = bw;
+        return { output: '' };
+      }
+    }
+
+    // ip hello-interval eigrp <as> <sec>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'hello-interval'.startsWith(tokens[1].toLowerCase()) && 'eigrp'.startsWith(tokens[2].toLowerCase())) {
+      const as = parseInt(tokens[3], 10);
+      const sec = parseInt(tokens[4], 10);
+      if (!isNaN(as) && !isNaN(sec)) {
+        if (!iface.eigrpHelloInterval) iface.eigrpHelloInterval = {};
+        iface.eigrpHelloInterval[as] = sec;
+        return { output: '' };
+      }
+    }
+
+    // ip hold-time eigrp <as> <sec>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'hold-time'.startsWith(tokens[1].toLowerCase()) && 'eigrp'.startsWith(tokens[2].toLowerCase())) {
+      const as = parseInt(tokens[3], 10);
+      const sec = parseInt(tokens[4], 10);
+      if (!isNaN(as) && !isNaN(sec)) {
+        if (!iface.eigrpHoldTime) iface.eigrpHoldTime = {};
+        iface.eigrpHoldTime[as] = sec;
+        return { output: '' };
+      }
+    }
+
+    // ip summary-address eigrp <as> <net> <mask>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 6 && 'summary-address'.startsWith(tokens[1].toLowerCase()) && 'eigrp'.startsWith(tokens[2].toLowerCase())) {
+      const as = parseInt(tokens[3], 10);
+      const net = tokens[4];
+      const mask = tokens[5];
+      if (!iface.eigrpSummaryAddresses) iface.eigrpSummaryAddresses = [];
+      iface.eigrpSummaryAddresses = iface.eigrpSummaryAddresses.filter(sa => !(sa.asNumber === as && sa.network === net));
+      iface.eigrpSummaryAddresses.push({ asNumber: as, network: net, mask });
+      return { output: '' };
+    }
+
+    // no ip summary-address eigrp <as> <net> [mask]
+    if (cmd0 === 'no' && tokens.length >= 6 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'summary-address'.startsWith(tokens[2].toLowerCase()) && 'eigrp'.startsWith(tokens[3].toLowerCase())) {
+      const as = parseInt(tokens[4], 10);
+      const net = tokens[5];
+      if (iface.eigrpSummaryAddresses) {
+        iface.eigrpSummaryAddresses = iface.eigrpSummaryAddresses.filter(sa => !(sa.asNumber === as && sa.network === net));
+      }
+      return { output: '' };
+    }
+
+    // ip authentication mode eigrp <as> <md5|hmac-sha-256>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 6 && 'authentication'.startsWith(tokens[1].toLowerCase()) && 'mode'.startsWith(tokens[2].toLowerCase()) && 'eigrp'.startsWith(tokens[3].toLowerCase())) {
+      const as = parseInt(tokens[4], 10);
+      const mode = tokens[5].toLowerCase();
+      if (!iface.eigrpAuthMode) iface.eigrpAuthMode = {};
+      iface.eigrpAuthMode[as] = mode;
+      return { output: '' };
+    }
+
+    // ip authentication key-chain eigrp <as> <keychain>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 6 && 'authentication'.startsWith(tokens[1].toLowerCase()) && 'key-chain'.startsWith(tokens[2].toLowerCase()) && 'eigrp'.startsWith(tokens[3].toLowerCase())) {
+      const as = parseInt(tokens[4], 10);
+      const kc = tokens[5];
+      if (!iface.eigrpAuthKeyChain) iface.eigrpAuthKeyChain = {};
+      iface.eigrpAuthKeyChain[as] = kc;
+      return { output: '' };
+    }
+
+    // ipv6 eigrp <as>
+    if ('ipv6'.startsWith(cmd0) && tokens.length >= 3 && 'eigrp'.startsWith(tokens[1].toLowerCase())) {
+      const as = parseInt(tokens[2], 10);
+      if (!isNaN(as)) {
+        iface.eigrpIpv6As = as;
+        return { output: '' };
+      }
+    }
+
+    // no ipv6 eigrp <as>
+    if (cmd0 === 'no' && tokens.length >= 3 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'eigrp'.startsWith(tokens[2].toLowerCase())) {
+      iface.eigrpIpv6As = undefined;
+      return { output: '' };
+    }
+
+    // ipv6 summary-address eigrp <as> <prefix>
+    if ('ipv6'.startsWith(cmd0) && tokens.length >= 5 && 'summary-address'.startsWith(tokens[1].toLowerCase()) && 'eigrp'.startsWith(tokens[2].toLowerCase())) {
+      const as = parseInt(tokens[3], 10);
+      const prefix = tokens[4];
+      if (!iface.eigrpIpv6SummaryAddresses) iface.eigrpIpv6SummaryAddresses = [];
+      iface.eigrpIpv6SummaryAddresses = iface.eigrpIpv6SummaryAddresses.filter(sa => !(sa.asNumber === as && sa.prefix === prefix));
+      iface.eigrpIpv6SummaryAddresses.push({ asNumber: as, prefix });
+      return { output: '' };
+    }
+
+    // no ipv6 summary-address eigrp <as> <prefix>
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'summary-address'.startsWith(tokens[2].toLowerCase()) && 'eigrp'.startsWith(tokens[3].toLowerCase())) {
+      const as = parseInt(tokens[4], 10);
+      const prefix = tokens[5];
+      if (iface.eigrpIpv6SummaryAddresses) {
+        iface.eigrpIpv6SummaryAddresses = iface.eigrpIpv6SummaryAddresses.filter(sa => !(sa.asNumber === as && sa.prefix === prefix));
+      }
+      return { output: '' };
+    }
+
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
@@ -2746,6 +2967,110 @@ export class IOSCommands {
       if (_context.targetRoutingProcess.startsWith('ospf')) proto = 'ospf';
       else if (_context.targetRoutingProcess.startsWith('eigrp')) proto = 'eigrp';
       else if (_context.targetRoutingProcess.startsWith('bgp')) proto = 'bgp';
+    }
+
+    // address-family <ipv4|ipv6> unicast autonomous-system <as>
+    if ('address-family'.startsWith(cmd0) && tokens.length >= 5) {
+      const afProto = tokens[1].toLowerCase() as 'ipv4' | 'ipv6';
+      const as = parseInt(tokens[4], 10);
+      if (isNaN(as)) return { output: '% Invalid autonomous-system number.' };
+
+      if (afProto === 'ipv4') {
+        if (!target.eigrpConfig) {
+          target.eigrpConfig = {
+            enabled: true,
+            asNumber: as,
+            name: _context.targetEigrpName,
+            networks: [],
+            passiveInterfaces: []
+          };
+        } else {
+          target.eigrpConfig.enabled = true;
+          target.eigrpConfig.asNumber = as;
+          if (_context.targetEigrpName) target.eigrpConfig.name = _context.targetEigrpName;
+        }
+      } else if (afProto === 'ipv6') {
+        if (!target.eigrpV6Config) {
+          target.eigrpV6Config = {
+            enabled: true,
+            asNumber: as,
+            name: _context.targetEigrpName,
+            passiveInterfaces: []
+          };
+        } else {
+          target.eigrpV6Config.enabled = true;
+          target.eigrpV6Config.asNumber = as;
+          if (_context.targetEigrpName) target.eigrpV6Config.name = _context.targetEigrpName;
+        }
+      }
+
+      return {
+        output: '',
+        newMode: 'router-af-config',
+        contextUpdates: {
+          targetAfProto: afProto,
+          targetAsNumber: as
+        }
+      };
+    }
+
+    // eigrp stub [receive-only | connected | summary | static | leak-map]*
+    if ('eigrp'.startsWith(cmd0) && tokens.length >= 2 && 'stub'.startsWith(tokens[1].toLowerCase())) {
+      const opts = tokens.slice(2).map(o => o.toLowerCase());
+      const stubCfg = { enabled: true, options: opts };
+      if (_context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.stub = stubCfg;
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.stub = stubCfg;
+      }
+      return { output: '' };
+    }
+
+    // no eigrp stub ...
+    if (cmd0 === 'no' && tokens.length >= 3 && 'eigrp'.startsWith(tokens[1].toLowerCase()) && 'stub'.startsWith(tokens[2].toLowerCase())) {
+      const cfg = _context.targetAfProto === 'ipv6' ? target.eigrpV6Config : target.eigrpConfig;
+      if (cfg && cfg.stub) {
+        if (tokens.length >= 4 && tokens[3].toLowerCase() === 'receive-only') {
+          cfg.stub.options = cfg.stub.options?.filter(o => o !== 'receive-only');
+        } else {
+          cfg.stub = undefined;
+        }
+      }
+      return { output: '' };
+    }
+
+    // variance <num>
+    if ('variance'.startsWith(cmd0) && tokens.length >= 2) {
+      const v = parseInt(tokens[1], 10);
+      if (!isNaN(v)) {
+        if (_context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+          target.eigrpV6Config.variance = v;
+        } else if (target.eigrpConfig) {
+          target.eigrpConfig.variance = v;
+        }
+        return { output: '' };
+      }
+    }
+
+    // distribute-list prefix <name> out [iface]
+    if ('distribute-list'.startsWith(cmd0) && tokens.length >= 4 && 'prefix'.startsWith(tokens[1].toLowerCase())) {
+      const prefixName = tokens[2];
+      const direction = tokens[3].toLowerCase() as 'in' | 'out';
+      const ifaceNorm = tokens.length >= 5 ? CliLexer.normalizeInterfaceName(tokens[4]) : undefined;
+      if (target.eigrpConfig) {
+        if (!target.eigrpConfig.distributeLists) target.eigrpConfig.distributeLists = [];
+        target.eigrpConfig.distributeLists.push({ prefixList: prefixName, direction, interfaceName: ifaceNorm });
+      }
+      return { output: '' };
+    }
+
+    // no distribute-list prefix <name> [out] [iface]
+    if (cmd0 === 'no' && tokens.length >= 4 && 'distribute-list'.startsWith(tokens[1].toLowerCase()) && 'prefix'.startsWith(tokens[2].toLowerCase())) {
+      const prefixName = tokens[3];
+      if (target.eigrpConfig && target.eigrpConfig.distributeLists) {
+        target.eigrpConfig.distributeLists = target.eigrpConfig.distributeLists.filter(dl => dl.prefixList !== prefixName);
+      }
+      return { output: '' };
     }
 
     // OSPF area stub: area <area> stub [no-summary]
@@ -2946,10 +3271,37 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // passive-interface default
+    if ('passive-interface'.startsWith(cmd0) && tokens.length > 1 && tokens[1].toLowerCase() === 'default') {
+      if (_context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.passiveInterfaceDefault = true;
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.passiveInterfaceDefault = true;
+      }
+      return { output: '' };
+    }
+
+    // no passive-interface <interface>
+    if (cmd0 === 'no' && tokens.length >= 3 && 'passive-interface'.startsWith(tokens[1].toLowerCase())) {
+      const norm = CliLexer.normalizeInterfaceName(tokens[2]);
+      const cfg = _context.targetAfProto === 'ipv6' ? target.eigrpV6Config : target.eigrpConfig;
+      if (cfg) {
+        cfg.passiveInterfaces = cfg.passiveInterfaces.filter(p => p !== norm && p !== `no passive-interface ${norm}`);
+        if (cfg.passiveInterfaceDefault) {
+          cfg.passiveInterfaces.push(`no passive-interface ${norm}`);
+        }
+      } else if (target.ospfConfig) {
+        target.ospfConfig.passiveInterfaces = target.ospfConfig.passiveInterfaces.filter(p => p !== norm);
+      }
+      return { output: '' };
+    }
+
     // passive-interface <interface>
     if ('passive-interface'.startsWith(cmd0) && tokens.length > 1) {
       const norm = CliLexer.normalizeInterfaceName(tokens[1]);
-      if (proto === 'eigrp' && target.eigrpConfig) {
+      if (_context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.passiveInterfaces.push(norm);
+      } else if (proto === 'eigrp' && target.eigrpConfig) {
         target.eigrpConfig.passiveInterfaces.push(norm);
       } else if (target.ospfConfig) {
         target.ospfConfig.passiveInterfaces.push(norm);
@@ -3887,6 +4239,324 @@ export class IOSCommands {
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
+  // ===================== KEY CHAIN CONFIG MODE =====================
+  private static execKeyChainConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // key <keyId>
+    if (cmd0 === 'key' && tokens.length >= 2) {
+      const keyId = parseInt(tokens[1], 10);
+      if (isNaN(keyId)) return { output: '% Invalid key id.' };
+
+      if (context.targetKeyChain) {
+        let kc = device.keyChains.get(context.targetKeyChain);
+        if (!kc) {
+          kc = { name: context.targetKeyChain, keys: new Map() };
+          device.keyChains.set(context.targetKeyChain, kc);
+        }
+        if (!kc.keys.has(keyId)) {
+          kc.keys.set(keyId, { keyId });
+        }
+      }
+
+      return {
+        output: '',
+        newMode: 'keychain-key-config',
+        contextUpdates: {
+          targetKeyId: keyId
+        }
+      };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== KEY CHAIN KEY CONFIG MODE =====================
+  private static execKeyChainKeyConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'keychain-config' };
+    }
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // key-string <string>
+    if ('key-string'.startsWith(cmd0) && tokens.length >= 2) {
+      const keyString = tokens.slice(1).join(' ');
+      if (context.targetKeyChain && context.targetKeyId !== undefined) {
+        const kc = device.keyChains.get(context.targetKeyChain);
+        if (kc) {
+          let k = kc.keys.get(context.targetKeyId);
+          if (!k) {
+            k = { keyId: context.targetKeyId };
+            kc.keys.set(context.targetKeyId, k);
+          }
+          k.keyString = keyString;
+        }
+      }
+      return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== ROUTER ADDRESS-FAMILY CONFIG MODE =====================
+  private static execRouterAfConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+
+    if (cmd0 === 'exit' || 'exit-address-family'.startsWith(cmd0)) {
+      return { output: '', newMode: 'router-config' };
+    }
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // network <ip> [wildcard] (IPv4)
+    if ('network'.startsWith(cmd0) && tokens.length >= 2) {
+      const net = tokens[1];
+      const wc = tokens.length > 2 ? tokens[2] : undefined;
+      if (context.targetAfProto !== 'ipv6' && target.eigrpConfig) {
+        target.eigrpConfig.networks.push({ network: net, wildcard: wc });
+      }
+      return { output: '' };
+    }
+
+    // eigrp router-id <id>
+    if ('eigrp'.startsWith(cmd0) && tokens.length >= 3 && 'router-id'.startsWith(tokens[1].toLowerCase())) {
+      if (context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.routerId = tokens[2];
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.routerId = tokens[2];
+      }
+      return { output: '' };
+    }
+
+    // router-id <id>
+    if ('router-id'.startsWith(cmd0) && tokens.length >= 2) {
+      if (context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.routerId = tokens[1];
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.routerId = tokens[1];
+      }
+      return { output: '' };
+    }
+
+    // eigrp stub [receive-only | connected | summary | static | leak-map]*
+    if ('eigrp'.startsWith(cmd0) && tokens.length >= 2 && 'stub'.startsWith(tokens[1].toLowerCase())) {
+      const opts = tokens.slice(2).map(o => o.toLowerCase());
+      const stubCfg = { enabled: true, options: opts };
+      if (context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.stub = stubCfg;
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.stub = stubCfg;
+      }
+      return { output: '' };
+    }
+
+    // no eigrp stub ...
+    if (cmd0 === 'no' && tokens.length >= 3 && 'eigrp'.startsWith(tokens[1].toLowerCase()) && 'stub'.startsWith(tokens[2].toLowerCase())) {
+      const cfg = context.targetAfProto === 'ipv6' ? target.eigrpV6Config : target.eigrpConfig;
+      if (cfg && cfg.stub) {
+        if (tokens.length >= 4 && tokens[3].toLowerCase() === 'receive-only') {
+          cfg.stub.options = cfg.stub.options?.filter(o => o !== 'receive-only');
+        } else {
+          cfg.stub = undefined;
+        }
+      }
+      return { output: '' };
+    }
+
+    // passive-interface default
+    if ('passive-interface'.startsWith(cmd0) && tokens.length > 1 && tokens[1].toLowerCase() === 'default') {
+      if (context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.passiveInterfaceDefault = true;
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.passiveInterfaceDefault = true;
+      }
+      return { output: '' };
+    }
+
+    // no passive-interface <interface>
+    if (cmd0 === 'no' && tokens.length >= 3 && 'passive-interface'.startsWith(tokens[1].toLowerCase())) {
+      const norm = CliLexer.normalizeInterfaceName(tokens[2]);
+      const cfg = context.targetAfProto === 'ipv6' ? target.eigrpV6Config : target.eigrpConfig;
+      if (cfg) {
+        cfg.passiveInterfaces = cfg.passiveInterfaces.filter(p => p !== norm && p !== `no passive-interface ${norm}`);
+        if (cfg.passiveInterfaceDefault) {
+          cfg.passiveInterfaces.push(`no passive-interface ${norm}`);
+        }
+      }
+      return { output: '' };
+    }
+
+    // passive-interface <interface>
+    if ('passive-interface'.startsWith(cmd0) && tokens.length > 1) {
+      const norm = CliLexer.normalizeInterfaceName(tokens[1]);
+      if (context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.passiveInterfaces.push(norm);
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.passiveInterfaces.push(norm);
+      }
+      return { output: '' };
+    }
+
+    // topology base
+    if ('topology'.startsWith(cmd0) && tokens.length >= 2 && 'base'.startsWith(tokens[1].toLowerCase())) {
+      return {
+        output: '',
+        newMode: 'router-af-topology-config'
+      };
+    }
+
+    // af-interface <interface>
+    if ('af-interface'.startsWith(cmd0) && tokens.length >= 2) {
+      const ifaceNorm = CliLexer.normalizeInterfaceName(tokens[1]);
+      return {
+        output: '',
+        newMode: 'router-af-interface-config',
+        contextUpdates: {
+          targetAfInterface: ifaceNorm
+        }
+      };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== ROUTER AF-TOPOLOGY CONFIG MODE =====================
+  private static execRouterAfTopologyConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+
+    if (cmd0 === 'exit' || 'exit-af-topology'.startsWith(cmd0)) {
+      return { output: '', newMode: 'router-af-config' };
+    }
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // variance <num>
+    if ('variance'.startsWith(cmd0) && tokens.length >= 2) {
+      const v = parseInt(tokens[1], 10);
+      if (!isNaN(v)) {
+        if (context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+          target.eigrpV6Config.variance = v;
+        } else if (target.eigrpConfig) {
+          target.eigrpConfig.variance = v;
+        }
+        return { output: '' };
+      }
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== ROUTER AF-INTERFACE CONFIG MODE =====================
+  private static execRouterAfInterfaceConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+    const ifaceName = context.targetAfInterface;
+    const iface = ifaceName ? target.getInterface(ifaceName) : undefined;
+    const as = context.targetAsNumber || 1;
+
+    if (cmd0 === 'exit' || 'exit-af-interface'.startsWith(cmd0)) {
+      return { output: '', newMode: 'router-af-config' };
+    }
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // authentication mode hmac-sha-256 <key>
+    if ('authentication'.startsWith(cmd0) && tokens.length >= 4 && 'mode'.startsWith(tokens[1].toLowerCase()) && 'hmac-sha-256'.startsWith(tokens[2].toLowerCase())) {
+      const key = tokens[3];
+      if (iface) {
+        if (!iface.eigrpAuthMode) iface.eigrpAuthMode = {};
+        iface.eigrpAuthMode[as] = 'hmac-sha-256';
+        if (!iface.eigrpAuthKey) iface.eigrpAuthKey = {};
+        iface.eigrpAuthKey[as] = key;
+      }
+      return { output: '' };
+    }
+
+    // authentication mode md5
+    if ('authentication'.startsWith(cmd0) && tokens.length >= 3 && 'mode'.startsWith(tokens[1].toLowerCase()) && 'md5'.startsWith(tokens[2].toLowerCase())) {
+      if (iface) {
+        if (!iface.eigrpAuthMode) iface.eigrpAuthMode = {};
+        iface.eigrpAuthMode[as] = 'md5';
+      }
+      return { output: '' };
+    }
+
+    // hello-interval <sec>
+    if ('hello-interval'.startsWith(cmd0) && tokens.length >= 2) {
+      const sec = parseInt(tokens[1], 10);
+      if (iface && !isNaN(sec)) {
+        if (!iface.eigrpHelloInterval) iface.eigrpHelloInterval = {};
+        iface.eigrpHelloInterval[as] = sec;
+      }
+      return { output: '' };
+    }
+
+    // hold-time <sec>
+    if ('hold-time'.startsWith(cmd0) && tokens.length >= 2) {
+      const sec = parseInt(tokens[1], 10);
+      if (iface && !isNaN(sec)) {
+        if (!iface.eigrpHoldTime) iface.eigrpHoldTime = {};
+        iface.eigrpHoldTime[as] = sec;
+      }
+      return { output: '' };
+    }
+
+    // shutdown
+    if ('shutdown'.startsWith(cmd0)) {
+      if (iface) iface.eigrpAfShutdown = true;
+      return { output: '' };
+    }
+
+    // no shutdown
+    if (cmd0 === 'no' && tokens.length >= 2 && 'shutdown'.startsWith(tokens[1].toLowerCase())) {
+      if (iface) iface.eigrpAfShutdown = false;
+      return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
   // ===================== DHCP LEASE HELPERS =====================
   private static acquireDhcpLease(
     device: Device,
@@ -4286,6 +4956,62 @@ export class IOSCommands {
     }
 
     return header.join('\n');
+  }
+
+  private static renderIpv6Route(device: Device): string {
+    const isL3 = (device instanceof Router) || (device instanceof Switch && (device as Switch).isLayer3);
+    const unicastEnabled = (device as any).ipv6UnicastRouting === true;
+    if (!isL3 || !unicastEnabled) {
+      return `% IPv6 routing not enabled`;
+    }
+
+    const header = [
+      'IPv6 Routing Table - default',
+      'Codes: C - Connected, L - Local, S - Static, U - User',
+      '       B - BGP, R - RIP, I1 - ISIS L1, I2 - ISIS L2',
+      '       IA - ISIS interarea, IS - ISIS summary, D - EIGRP, EX - EIGRP external',
+      '       ND - ND Default, NDp - ND Prefix, DCE - Destination, NDr - Redirect',
+      '       O - OSPF Intra, OI - OSPF Inter, OE1 - OSPF ext 1, OE2 - OSPF ext 2',
+      '       ON1 - OSPF NSSA ext 1, ON2 - OSPF NSSA ext 2',
+      ''
+    ];
+
+    const routes: string[] = [];
+    for (const iface of device.interfaces.values()) {
+      if (!iface.isShutdown && iface.status === 'up' && iface.ipv6Address) {
+        const parts = iface.ipv6Address.split('/');
+        const ip = parts[0];
+        const prefixLen = parts[1] || '64';
+
+        let netPrefix = ip;
+        if (ip.includes('::')) {
+          const segments = ip.split('::');
+          netPrefix = `${segments[0]}::/${prefixLen}`;
+        } else {
+          netPrefix = `${ip}/${prefixLen}`;
+        }
+
+        routes.push(`C   ${netPrefix} [0/0]\n     via ${iface.name}, directly connected`);
+        routes.push(`L   ${ip}/128 [0/0]\n     via ${iface.name}, receive`);
+      }
+    }
+
+    const eigrpV6 = (device as any).eigrpV6Config;
+    if (eigrpV6 && eigrpV6.enabled) {
+      for (const iface of device.interfaces.values()) {
+        if (iface.eigrpIpv6SummaryAddresses) {
+          for (const sa of iface.eigrpIpv6SummaryAddresses) {
+            routes.push(`D   ${sa.prefix} [90/30720]\n     via Null0, directly connected`);
+          }
+        }
+      }
+    }
+
+    if (routes.length === 0) {
+      return header.join('\n') + '\n% No IPv6 routes found';
+    }
+
+    return header.join('\n') + routes.join('\n');
   }
 
   private static renderVlanBrief(device: Device): string {

@@ -134,6 +134,18 @@ export interface InterfaceConfig {
   ospfMessageDigestKey?: { keyId: number; key: string };
   ospfv3Area?: number;
   ospfv3ProcessId?: number;
+
+  // EIGRP & EIGRPv6 per interface properties
+  eigrpHelloInterval?: Record<number, number>;
+  eigrpHoldTime?: Record<number, number>;
+  eigrpSummaryAddresses?: Array<{ asNumber: number; network: string; mask: string }>;
+  eigrpIpv6SummaryAddresses?: Array<{ asNumber: number; prefix: string }>;
+  eigrpAuthMode?: Record<number, string>;
+  eigrpAuthKeyChain?: Record<number, string>;
+  eigrpAuthKey?: Record<number, string>;
+  eigrpIpv6As?: number;
+  bandwidthKbps?: number;
+  eigrpAfShutdown?: boolean;
 }
 
 // ==================== TAHAP 6: SECURITY & VPN SERVICES ====================
@@ -469,16 +481,48 @@ export interface RedistributionConfig {
   routeMap?: string;
 }
 
+export interface KeyChainKey {
+  keyId: number;
+  keyString?: string;
+}
+
+export interface KeyChain {
+  name: string;
+  keys: Map<number, KeyChainKey>;
+}
+
+export interface EigrpStubConfig {
+  enabled: boolean;
+  options?: string[]; // e.g. ['connected', 'summary'], ['receive-only']
+}
+
 export interface EigrpConfig {
   enabled: boolean;
   asNumber: number;
+  name?: string; // Named EIGRP (e.g. 'BASIC-EIGRP-LAB')
   routerId?: string;
   networks: Array<{
     network: string;
     wildcard?: string;
   }>;
   passiveInterfaces: string[];
+  passiveInterfaceDefault?: boolean;
   autoSummary?: boolean;
+  variance?: number;
+  stub?: EigrpStubConfig;
+  distributeLists?: Array<{ prefixList: string; direction: 'in' | 'out'; interfaceName?: string }>;
+  redistributions?: RedistributionConfig[];
+}
+
+export interface EigrpV6Config {
+  enabled: boolean;
+  asNumber: number;
+  name?: string; // Named EIGRP (e.g. 'EIGRP_IPV6', 'LAB513')
+  routerId?: string;
+  stub?: EigrpStubConfig;
+  passiveInterfaces: string[];
+  passiveInterfaceDefault?: boolean;
+  variance?: number;
   redistributions?: RedistributionConfig[];
 }
 
