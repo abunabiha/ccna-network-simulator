@@ -666,5 +666,285 @@ export const CCNA_LABS: LabDefinition[] = [
         { id: 'l3', sourceDeviceId: 'SW1', sourcePort: 'FastEthernet0/2', targetDeviceId: 'PC2', targetPort: 'FastEthernet0', cableType: 'straight' }
       ]
     }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB 01: Multi-Area OSPF & Mutual EIGRP Redistribution
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-01-ospf-redistribution',
+    title: 'CCNP Lab 01: Multi-Area OSPF & Mutual EIGRP Redistribution',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Skenario enterprise yang menghubungkan jaringan OSPF Backbone Area 0 pada Core HQ ke jaringan EIGRP AS 100 pada Kantor Cabang melalui Router ASBR Aggregation (R2). Konfigurasikan OSPF, EIGRP, dan Mutual Redistribution dengan Route-Map filtering.',
+    objectives: [
+      'Konfigurasi Multi-Area OSPF pada R1 dan R2 (Area 0)',
+      'Konfigurasi EIGRP AS 100 pada R2 dan R3',
+      'Konfigurasi Route-Map RM-EIGRP-TO-OSPF untuk filtering dan tagging',
+      'Konfigurasi Mutual Redistribution antara OSPF dan EIGRP pada ASBR R2'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp1-1',
+        description: 'Konfigurasi proses OSPF pada R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ospf_configured',
+        expectedValue: true,
+        hint: 'router ospf 1 -> network 10.0.12.0 0.0.0.255 area 0'
+      },
+      {
+        id: 'task-ccnp1-2',
+        description: 'Konfigurasi proses EIGRP AS 100 pada R3',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: true,
+        hint: 'router eigrp 100 -> network 10.0.23.0 0.0.0.255'
+      },
+      {
+        id: 'task-ccnp1-3',
+        description: 'Konfigurasi Route-Map RM-EIGRP-TO-OSPF pada R2',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'route_map_exists',
+        expectedValue: 'RM-EIGRP-TO-OSPF',
+        hint: 'route-map RM-EIGRP-TO-OSPF permit 10 -> set metric 20'
+      },
+      {
+        id: 'task-ccnp1-4',
+        description: 'Aktifkan OSPF pada ASBR R2',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'ospf_configured',
+        expectedValue: true,
+        hint: 'router ospf 1 -> network 10.0.12.0 0.0.0.255 area 0'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'HQ-Core-R1', type: 'router', x: 200, y: 220 },
+        { id: 'R2', hostname: 'ASBR-Agg-R2', type: 'router', x: 440, y: 220 },
+        { id: 'R3', hostname: 'Branch-R3', type: 'router', x: 680, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB 02: Multi-Tenant Virtualization with VRF-Lite & MPLS
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-02-vrf-mpls',
+    title: 'CCNP Lab 02: Multi-Tenant VRF-Lite & MPLS LDP Backbone',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Implementasi isolasi lalu lintas pelanggan multi-tenant (Customer RED dan Customer BLUE) menggunakan VRF-Lite pada Provider Edge (PE1) dan Label Distribution Protocol (LDP) over MPLS forwarding pada backbone.',
+    objectives: [
+      'Konfigurasi VRF instance RED (RD 65000:10) pada PE1',
+      'Konfigurasi VRF instance BLUE (RD 65000:20) pada PE1',
+      'Aktifkan MPLS dan LDP secara global pada PE1',
+      'Aktifkan MPLS dan LDP pada router core P1'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp2-1',
+        description: 'Konfigurasi VRF instance RED pada PE1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'PE1',
+        expectedProperty: 'vrf_exists',
+        expectedValue: 'RED',
+        hint: 'ip vrf RED -> rd 65000:10'
+      },
+      {
+        id: 'task-ccnp2-2',
+        description: 'Konfigurasi VRF instance BLUE pada PE1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'PE1',
+        expectedProperty: 'vrf_exists',
+        expectedValue: 'BLUE',
+        hint: 'ip vrf BLUE -> rd 65000:20'
+      },
+      {
+        id: 'task-ccnp2-3',
+        description: 'Aktifkan MPLS forwarding secara global pada PE1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'PE1',
+        expectedProperty: 'mpls_enabled',
+        expectedValue: true,
+        hint: 'mpls ip'
+      },
+      {
+        id: 'task-ccnp2-4',
+        description: 'Aktifkan MPLS forwarding pada router core P1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'P1',
+        expectedProperty: 'mpls_enabled',
+        expectedValue: true,
+        hint: 'mpls ip'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'PE1', hostname: 'PE-Router1', type: 'router', x: 220, y: 220 },
+        { id: 'P1', hostname: 'P-Core1', type: 'router', x: 440, y: 220 },
+        { id: 'PE2', hostname: 'PE-Router2', type: 'router', x: 660, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'PE1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'P1', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'P1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'PE2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB 03: Zero-Trust Branch Security (DMVPN mGRE & ZBFW)
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-03-dmvpn-zbfw',
+    title: 'CCNP Lab 03: Zero-Trust Branch Security (DMVPN mGRE & ZBFW)',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    estimatedMinutes: 50,
+    difficulty: 'Advanced',
+    scenario: 'Membangun konektivitas aman WAN edge kantor cabang menggunakan Dynamic Multipoint VPN (DMVPN Phase 2/3 mGRE + IPsec) serta mengamankan gateway menggunakan Zone-Based Policy Firewall (ZBFW).',
+    objectives: [
+      'Konfigurasi ISAKMP Policy 10 (AES, SHA, Pre-share) pada HUB',
+      'Konfigurasi IPsec Profile IPSEC-PROF pada HUB',
+      'Konfigurasi Security Zone INSIDE pada HUB',
+      'Konfigurasi Zone-Pair Security ZP-IN-OUT pada HUB'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp3-1',
+        description: 'Konfigurasi ISAKMP policy priority 10 pada HUB',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'HUB',
+        expectedProperty: 'crypto_policy_exists',
+        expectedValue: 10,
+        hint: 'crypto isakmp policy 10 -> encr aes -> hash sha -> authentication pre-share'
+      },
+      {
+        id: 'task-ccnp3-2',
+        description: 'Konfigurasi IPsec Profile IPSEC-PROF pada HUB',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'HUB',
+        expectedProperty: 'crypto_profile_exists',
+        expectedValue: 'IPSEC-PROF',
+        hint: 'crypto ipsec profile IPSEC-PROF -> set transform-set TS-VPN'
+      },
+      {
+        id: 'task-ccnp3-3',
+        description: 'Konfigurasi Security Zone INSIDE pada HUB',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'HUB',
+        expectedProperty: 'zone_exists',
+        expectedValue: 'INSIDE',
+        hint: 'zone security INSIDE'
+      },
+      {
+        id: 'task-ccnp3-4',
+        description: 'Konfigurasi Zone-Pair ZP-IN-OUT pada HUB',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'HUB',
+        expectedProperty: 'zone_pair_exists',
+        expectedValue: 'ZP-IN-OUT',
+        hint: 'zone-pair security ZP-IN-OUT source INSIDE destination OUTSIDE'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'HUB', hostname: 'HQ-DMVPN-HUB', type: 'router', x: 260, y: 220 },
+        { id: 'SPOKE1', hostname: 'Branch-Spoke1', type: 'router', x: 580, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'HUB', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'SPOKE1', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB 04: Programmability, On-Box EEM & Model-Driven Telemetry
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-04-automation-telemetry',
+    title: 'CCNP Lab 04: Programmability, On-Box EEM & Model-Driven Telemetry',
+    domain: 'CCNP Enterprise: Automation & Programmability',
+    estimatedMinutes: 40,
+    difficulty: 'Advanced',
+    scenario: 'Mengaktifkan API terprogram RESTCONF (RFC 8040) & NETCONF (RFC 6241), membuat applet otomatisasi Cisco EEM on-box untuk mengaudit perintah CLI administratif, dan mengonfigurasi langganan Model-Driven Telemetry (MDT) streaming ke server collector eksternal.',
+    objectives: [
+      'Aktifkan RESTCONF pada router gateway R_GW',
+      'Aktifkan NETCONF-YANG pada router gateway R_GW',
+      'Konfigurasi EEM Applet AUDIT-RUN pada R_GW',
+      'Konfigurasi Telemetry Subscription 101 pada R_GW'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp4-1',
+        description: 'Aktifkan RESTCONF agent pada R_GW',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R_GW',
+        expectedProperty: 'restconf_enabled',
+        expectedValue: true,
+        hint: 'restconf'
+      },
+      {
+        id: 'task-ccnp4-2',
+        description: 'Aktifkan NETCONF-YANG agent pada R_GW',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R_GW',
+        expectedProperty: 'netconf_enabled',
+        expectedValue: true,
+        hint: 'netconf-yang'
+      },
+      {
+        id: 'task-ccnp4-3',
+        description: 'Konfigurasi EEM Applet AUDIT-RUN pada R_GW',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R_GW',
+        expectedProperty: 'eem_applet_exists',
+        expectedValue: 'AUDIT-RUN',
+        hint: 'event manager applet AUDIT-RUN -> event cli pattern "show run" sync no -> action 1.0 syslog msg "AUDIT: show run executed"'
+      },
+      {
+        id: 'task-ccnp4-4',
+        description: 'Konfigurasi Telemetry IETF Subscription 101 pada R_GW',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R_GW',
+        expectedProperty: 'mdt_subscription_exists',
+        expectedValue: 101,
+        hint: 'telemetry ietf subscription 101 -> encoding encode-kvgpb -> filter xpath /ietf-interfaces:interfaces-state'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R_GW', hostname: 'Edge-Gateway-R1', type: 'router', x: 340, y: 220 },
+        { id: 'COLLECTOR', hostname: 'Telemetry-Collector', type: 'server', x: 600, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R_GW', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'COLLECTOR', targetPort: 'FastEthernet0', cableType: 'straight' }
+      ]
+    }
   }
 ];

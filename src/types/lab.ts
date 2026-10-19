@@ -6,6 +6,13 @@ export type CcnaDomain =
   | '5. Security Fundamentals'
   | '6. Automation & Programmability';
 
+export type CcnpDomain =
+  | 'CCNP Enterprise: Advanced Routing & Services'
+  | 'CCNP Enterprise: Infrastructure Security & Virtualization'
+  | 'CCNP Enterprise: Automation & Programmability';
+
+export type LabDomain = CcnaDomain | CcnpDomain;
+
 export interface LabTaskCriterion {
   id: string;
   description: string;
@@ -24,7 +31,7 @@ export interface LabTaskCriterion {
 export interface LabDefinition {
   id: string;
   title: string;
-  domain: CcnaDomain;
+  domain: LabDomain;
   estimatedMinutes: number;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   scenario: string;

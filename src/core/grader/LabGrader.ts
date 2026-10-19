@@ -209,6 +209,221 @@ export class LabGrader {
       };
     }
 
+    // CCNP: Check EIGRP Configuration
+    if (prop === 'eigrp_configured' && device instanceof Router) {
+      const eigrp = device.eigrpConfig;
+      const passed = !!(eigrp && eigrp.enabled && eigrp.networks.length > 0);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Proses EIGRP AS ${eigrp?.asNumber} aktif dengan ${eigrp?.networks.length} network statement.`
+          : `EIGRP belum aktif atau belum memiliki statement network.`
+      };
+    }
+
+    // CCNP: Check BGP Configuration
+    if (prop === 'bgp_configured' && device instanceof Router) {
+      const bgp = device.bgpConfig;
+      const passed = !!(bgp && bgp.enabled);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Proses BGP AS ${bgp?.asNumber} aktif.`
+          : `BGP belum dikonfigurasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check VRF Existence
+    if (prop === 'vrf_exists' && (device instanceof Router || device instanceof Switch)) {
+      const passed = !!(device.vrfInstances && device.vrfInstances.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `VRF instance '${expected}' telah dikonfigurasi.`
+          : `VRF instance '${expected}' belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check MPLS Enabled
+    if (prop === 'mpls_enabled' && device instanceof Router) {
+      const passed = device.mplsEnabled === true;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `MPLS dan LDP telah diaktifkan secara global.`
+          : `MPLS belum diaktifkan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check Route Map Existence
+    if (prop === 'route_map_exists' && (device instanceof Router || device instanceof Switch)) {
+      const passed = !!(device.routeMaps && device.routeMaps.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Route-map '${expected}' telah dikonfigurasi.`
+          : `Route-map '${expected}' belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check IP Prefix List Existence
+    if (prop === 'prefix_list_exists' && (device instanceof Router || device instanceof Switch)) {
+      const passed = !!(device.prefixLists && device.prefixLists.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `IP Prefix-List '${expected}' telah dikonfigurasi.`
+          : `IP Prefix-List '${expected}' belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check IP SLA Configuration
+    if (prop === 'ip_sla_configured' && (device instanceof Router || device instanceof Switch)) {
+      const slaId = parseInt(String(expected), 10);
+      const passed = !!(device.ipSlas && device.ipSlas.has(slaId));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `IP SLA ${slaId} telah dikonfigurasi.`
+          : `IP SLA ${slaId} belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check Crypto ISAKMP Policy
+    if (prop === 'crypto_policy_exists' && device instanceof Router) {
+      const prio = parseInt(String(expected), 10);
+      const passed = !!(device.cryptoPolicies && device.cryptoPolicies.has(prio));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Crypto ISAKMP policy priority ${prio} telah dikonfigurasi.`
+          : `Crypto ISAKMP policy priority ${prio} belum ditemukan.`
+      };
+    }
+
+    // CCNP: Check Crypto IPsec Profile
+    if (prop === 'crypto_profile_exists' && device instanceof Router) {
+      const passed = !!(device.cryptoProfiles && device.cryptoProfiles.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Crypto IPsec profile '${expected}' telah dikonfigurasi.`
+          : `Crypto IPsec profile '${expected}' belum ditemukan.`
+      };
+    }
+
+    // CCNP: Check Security Zone
+    if (prop === 'zone_exists' && device instanceof Router) {
+      const passed = !!(device.securityZones && device.securityZones.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Security zone '${expected}' telah dikonfigurasi.`
+          : `Security zone '${expected}' belum ditemukan.`
+      };
+    }
+
+    // CCNP: Check Security Zone Pair
+    if (prop === 'zone_pair_exists' && device instanceof Router) {
+      const passed = !!(device.zonePairs && device.zonePairs.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Zone-pair security '${expected}' telah dikonfigurasi.`
+          : `Zone-pair security '${expected}' belum ditemukan.`
+      };
+    }
+
+    // CCNP: Check RESTCONF Enabled
+    if (prop === 'restconf_enabled' && device instanceof Router) {
+      const passed = device.restconfEnabled === true;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `RESTCONF protocol agent telah aktif.`
+          : `RESTCONF belum diaktifkan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check NETCONF Enabled
+    if (prop === 'netconf_enabled' && device instanceof Router) {
+      const passed = device.netconfEnabled === true;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `NETCONF-YANG agent telah aktif.`
+          : `NETCONF-YANG belum diaktifkan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check EEM Applet Existence
+    if (prop === 'eem_applet_exists' && device instanceof Router) {
+      const passed = !!(device.eemApplets && device.eemApplets.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EEM applet '${expected}' telah terdaftar.`
+          : `EEM applet '${expected}' belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check MDT Subscription Existence
+    if (prop === 'mdt_subscription_exists' && device instanceof Router) {
+      const subId = parseInt(String(expected), 10);
+      const passed = !!(device.mdtSubscriptions && device.mdtSubscriptions.has(subId));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Telemetry IETF subscription ${subId} telah aktif.`
+          : `Telemetry subscription ${subId} belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
     return {
       taskId: task.id,
       passed: true,

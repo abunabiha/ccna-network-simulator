@@ -1431,7 +1431,86 @@ console.log(`Running-config serializes RESTCONF, NETCONF-YANG, EEM, and MDT: ${
     : 'FAIL'
 }`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, 4, 5, 6, & 7 SELESAI DENGAN SUKSES! ===');
+console.log('\n=== [17] PENGUJIAN CCNP TAHAP 8: CAPSTONE LABS & ADVANCED AUTO-GRADER INTEGRATION ===');
+
+// Test Lab 1: CCNP Lab 01 (OSPF & EIGRP Mutual Redistribution)
+const ccnpLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-01-ospf-redistribution')!;
+console.log(`CCNP Lab 01 Exists: ${ccnpLab1 ? 'PASS' : 'FAIL'}`);
+
+const lab1R1 = new Router('R1', 'HQ-Core-R1', { x: 200, y: 220 });
+const lab1R2 = new Router('R2', 'ASBR-Agg-R2', { x: 440, y: 220 });
+const lab1R3 = new Router('R3', 'Branch-R3', { x: 680, y: 220 });
+const lab1Devs = [lab1R1, lab1R2, lab1R3];
+
+// Initial grading should fail (0%)
+const initialReport1 = LabGrader.grade(ccnpLab1, lab1Devs);
+console.log(`CCNP Lab 01 Initial Score (0%): ${initialReport1.totalScore === 0 && !initialReport1.isPassed ? 'PASS' : 'FAIL'}`);
+
+// Configure R1 OSPF
+CliParser.execute('router ospf 1', { deviceId: 'R1', mode: 'global-config' as const }, lab1R1, lab1Devs);
+CliParser.execute('network 10.0.12.0 0.0.0.255 area 0', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, lab1R1, lab1Devs);
+
+// Configure R3 EIGRP
+CliParser.execute('router eigrp 100', { deviceId: 'R3', mode: 'global-config' as const }, lab1R3, lab1Devs);
+CliParser.execute('network 10.0.23.0 0.0.0.255', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAsNumber: 100 }, lab1R3, lab1Devs);
+
+// Configure R2 Route-Map & OSPF
+CliParser.execute('route-map RM-EIGRP-TO-OSPF permit 10', { deviceId: 'R2', mode: 'global-config' as const }, lab1R2, lab1Devs);
+CliParser.execute('set metric 20', { deviceId: 'R2', mode: 'route-map-config' as const, targetRouteMapName: 'RM-EIGRP-TO-OSPF', targetRouteMapSeq: 10 }, lab1R2, lab1Devs);
+CliParser.execute('router ospf 1', { deviceId: 'R2', mode: 'global-config' as const }, lab1R2, lab1Devs);
+CliParser.execute('network 10.0.12.0 0.0.0.255 area 0', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, lab1R2, lab1Devs);
+
+// Grade again (should be 100%)
+const passedReport1 = LabGrader.grade(ccnpLab1, lab1Devs);
+console.log(`CCNP Lab 01 Auto-Grader Evaluation (100% Mastery): ${passedReport1.totalScore === 100 && passedReport1.isPassed ? 'PASS' : 'FAIL'}`);
+
+// Test Lab 2: CCNP Lab 02 (VRF-Lite & MPLS)
+const ccnpLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-02-vrf-mpls')!;
+console.log(`CCNP Lab 02 Exists: ${ccnpLab2 ? 'PASS' : 'FAIL'}`);
+
+const lab2PE1 = new Router('PE1', 'PE-Router1', { x: 220, y: 220 });
+const lab2P1 = new Router('P1', 'P-Core1', { x: 440, y: 220 });
+const lab2Devs = [lab2PE1, lab2P1];
+
+CliParser.execute('ip vrf RED', { deviceId: 'PE1', mode: 'global-config' as const }, lab2PE1, lab2Devs);
+CliParser.execute('ip vrf BLUE', { deviceId: 'PE1', mode: 'global-config' as const }, lab2PE1, lab2Devs);
+CliParser.execute('mpls ip', { deviceId: 'PE1', mode: 'global-config' as const }, lab2PE1, lab2Devs);
+CliParser.execute('mpls ip', { deviceId: 'P1', mode: 'global-config' as const }, lab2P1, lab2Devs);
+
+const passedReport2 = LabGrader.grade(ccnpLab2, lab2Devs);
+console.log(`CCNP Lab 02 Auto-Grader Evaluation (100% Mastery): ${passedReport2.totalScore === 100 && passedReport2.isPassed ? 'PASS' : 'FAIL'}`);
+
+// Test Lab 3: CCNP Lab 03 (Zero-Trust Branch Security: DMVPN & ZBFW)
+const ccnpLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-03-dmvpn-zbfw')!;
+console.log(`CCNP Lab 03 Exists: ${ccnpLab3 ? 'PASS' : 'FAIL'}`);
+
+const lab3Hub = new Router('HUB', 'DMVPN-Hub-R1', { x: 260, y: 220 });
+const lab3Devs = [lab3Hub];
+
+CliParser.execute('crypto isakmp policy 10', { deviceId: 'HUB', mode: 'global-config' as const }, lab3Hub, lab3Devs);
+CliParser.execute('crypto ipsec profile IPSEC-PROF', { deviceId: 'HUB', mode: 'global-config' as const }, lab3Hub, lab3Devs);
+CliParser.execute('zone security INSIDE', { deviceId: 'HUB', mode: 'global-config' as const }, lab3Hub, lab3Devs);
+CliParser.execute('zone-pair security ZP-IN-OUT source INSIDE destination OUTSIDE', { deviceId: 'HUB', mode: 'global-config' as const }, lab3Hub, lab3Devs);
+
+const passedReport3 = LabGrader.grade(ccnpLab3, lab3Devs);
+console.log(`CCNP Lab 03 Auto-Grader Evaluation (100% Mastery): ${passedReport3.totalScore === 100 && passedReport3.isPassed ? 'PASS' : 'FAIL'}`);
+
+// Test Lab 4: CCNP Lab 04 (Programmability, EEM & MDT)
+const ccnpLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-04-automation-telemetry')!;
+console.log(`CCNP Lab 04 Exists: ${ccnpLab4 ? 'PASS' : 'FAIL'}`);
+
+const lab4Rgw = new Router('R_GW', 'Edge-Gateway-R1', { x: 340, y: 220 });
+const lab4Devs = [lab4Rgw];
+
+CliParser.execute('restconf', { deviceId: 'R_GW', mode: 'global-config' as const }, lab4Rgw, lab4Devs);
+CliParser.execute('netconf-yang', { deviceId: 'R_GW', mode: 'global-config' as const }, lab4Rgw, lab4Devs);
+CliParser.execute('event manager applet AUDIT-RUN', { deviceId: 'R_GW', mode: 'global-config' as const }, lab4Rgw, lab4Devs);
+CliParser.execute('telemetry ietf subscription 101', { deviceId: 'R_GW', mode: 'global-config' as const }, lab4Rgw, lab4Devs);
+
+const passedReport4 = LabGrader.grade(ccnpLab4, lab4Devs);
+console.log(`CCNP Lab 04 Auto-Grader Evaluation (100% Mastery): ${passedReport4.totalScore === 100 && passedReport4.isPassed ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1 SAMPAI 8 SELESAI DENGAN SUKSES LENGKAP 100%! ===');
 
 
 

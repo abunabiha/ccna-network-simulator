@@ -1416,6 +1416,18 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // mpls ip (global)
+    if (cmd0 === 'mpls' && tokens.length >= 2 && 'ip'.startsWith(tokens[1].toLowerCase())) {
+      (device as Router | Switch).mplsEnabled = true;
+      return { output: '' };
+    }
+
+    // no mpls ip (global)
+    if (cmd0 === 'no' && tokens.length >= 3 && 'mpls'.startsWith(tokens[1].toLowerCase()) && 'ip'.startsWith(tokens[2].toLowerCase())) {
+      (device as Router | Switch).mplsEnabled = false;
+      return { output: '' };
+    }
+
     // mpls ldp router-id <interface> [force]
     if (cmd0 === 'mpls' && tokens.length >= 4 && 'ldp'.startsWith(tokens[1].toLowerCase()) && 'router-id'.startsWith(tokens[2].toLowerCase())) {
       (device as Router | Switch).mplsLdpRouterId = tokens[3];
