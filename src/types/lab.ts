@@ -28,9 +28,13 @@ export interface LabTaskCriterion {
   failureExplanation?: string;
 }
 
+export type LabTrack = 'CCNA' | 'CCNP';
+
 export interface LabDefinition {
   id: string;
   title: string;
+  track?: LabTrack;
+  category?: string;
   domain: LabDomain;
   estimatedMinutes: number;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';

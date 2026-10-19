@@ -33,8 +33,14 @@ export const GradeModal: React.FC = () => {
         <div className="flex items-start justify-between relative z-10">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/40">
-                CCNA Certification Exam Benchmark
+              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
+                currentLab.track === 'CCNP' || currentLab.id.includes('ccnp')
+                  ? 'bg-purple-950 text-purple-300 border-purple-800/40'
+                  : 'bg-cyan-950 text-cyan-400 border-cyan-800/40'
+              }`}>
+                {currentLab.track === 'CCNP' || currentLab.id.includes('ccnp')
+                  ? 'CCNP Enterprise Exam Benchmark'
+                  : 'CCNA Certification Exam Benchmark'}
               </span>
               <span className="text-xs text-slate-500">Graded at {gradeReport.gradedAt}</span>
             </div>

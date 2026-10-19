@@ -5,8 +5,8 @@ import { Switch } from '../core/devices/Switch';
 import { Host } from '../core/devices/Host';
 import { PhysicalLink, DeviceType, CableType, SimulationEvent } from '../types/network';
 import { CliContext } from '../types/cli';
-import { LabDefinition, LabGradeReport } from '../types/lab';
-import { CCNA_LABS } from '../data/ccnaLabs';
+import { LabDefinition, LabGradeReport, LabTrack } from '../types/lab';
+import { CCNA_LABS, CCNP_LABS, ALL_LABS } from '../data';
 import { CliParser } from '../core/cli/Parser';
 import { LabGrader } from '../core/grader/LabGrader';
 
@@ -19,6 +19,7 @@ interface NetworkState {
   cliContexts: Record<string, CliContext>;
   terminalOutputs: Record<string, string[]>;
   currentLab: LabDefinition | null;
+  selectedTrack: LabTrack;
   gradeReport: LabGradeReport | null;
   isGradeModalOpen: boolean;
   simulationMode: 'realtime' | 'simulation';
@@ -35,6 +36,7 @@ interface NetworkState {
   isUserModalOpen: boolean;
 
   // Actions
+  setSelectedTrack: (track: LabTrack) => void;
   setUserName: (name: string) => void;
   openUserModal: () => void;
   closeUserModal: () => void;
@@ -159,6 +161,8 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
     cliContexts: initialData.contexts,
     terminalOutputs: initialData.outputs,
     currentLab: initialLab,
+    selectedTrack: 'CCNA',
+    setSelectedTrack: (track: LabTrack) => set({ selectedTrack: track }),
     gradeReport: null,
     isGradeModalOpen: false,
     simulationMode: 'realtime',
@@ -448,12 +452,14 @@ export const useNetworkStore = create<NetworkState>((set, get) => {
     },
 
     loadLab: (labId: string) => {
-      const lab = CCNA_LABS.find(l => l.id === labId);
+      const lab = ALL_LABS.find(l => l.id === labId);
       if (!lab) return;
 
+      const track: LabTrack = lab.track || (lab.id.includes('ccnp') ? 'CCNP' : 'CCNA');
       const initialized = initializeLabDevices(lab);
       set({
         currentLab: lab,
+        selectedTrack: track,
         devices: initialized.devices,
         links: initialized.links,
         cliContexts: initialized.contexts,

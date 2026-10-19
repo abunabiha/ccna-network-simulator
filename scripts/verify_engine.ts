@@ -9,7 +9,7 @@ import { Switch } from '../src/core/devices/Switch';
 import { Host } from '../src/core/devices/Host';
 import { CliParser } from '../src/core/cli/Parser';
 import { LabGrader } from '../src/core/grader/LabGrader';
-import { CCNA_LABS } from '../src/data/ccnaLabs';
+import { CCNA_LABS, CCNP_LABS, ALL_LABS } from '../src/data';
 import { RoutingProtocolEngine } from '../src/core/network/RoutingProtocolEngine';
 import { PolicyEngine } from '../src/core/network/PolicyEngine';
 import { SecurityVpnEngine } from '../src/core/network/SecurityVpnEngine';
@@ -1434,7 +1434,7 @@ console.log(`Running-config serializes RESTCONF, NETCONF-YANG, EEM, and MDT: ${
 console.log('\n=== [17] PENGUJIAN CCNP TAHAP 8: CAPSTONE LABS & ADVANCED AUTO-GRADER INTEGRATION ===');
 
 // Test Lab 1: CCNP Lab 01 (OSPF & EIGRP Mutual Redistribution)
-const ccnpLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-01-ospf-redistribution')!;
+const ccnpLab1 = CCNP_LABS.find(l => l.id === 'lab-ccnp-01-ospf-redistribution')!;
 console.log(`CCNP Lab 01 Exists: ${ccnpLab1 ? 'PASS' : 'FAIL'}`);
 
 const lab1R1 = new Router('R1', 'HQ-Core-R1', { x: 200, y: 220 });
@@ -1465,7 +1465,7 @@ const passedReport1 = LabGrader.grade(ccnpLab1, lab1Devs);
 console.log(`CCNP Lab 01 Auto-Grader Evaluation (100% Mastery): ${passedReport1.totalScore === 100 && passedReport1.isPassed ? 'PASS' : 'FAIL'}`);
 
 // Test Lab 2: CCNP Lab 02 (VRF-Lite & MPLS)
-const ccnpLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-02-vrf-mpls')!;
+const ccnpLab2 = CCNP_LABS.find(l => l.id === 'lab-ccnp-02-vrf-mpls')!;
 console.log(`CCNP Lab 02 Exists: ${ccnpLab2 ? 'PASS' : 'FAIL'}`);
 
 const lab2PE1 = new Router('PE1', 'PE-Router1', { x: 220, y: 220 });
@@ -1481,7 +1481,7 @@ const passedReport2 = LabGrader.grade(ccnpLab2, lab2Devs);
 console.log(`CCNP Lab 02 Auto-Grader Evaluation (100% Mastery): ${passedReport2.totalScore === 100 && passedReport2.isPassed ? 'PASS' : 'FAIL'}`);
 
 // Test Lab 3: CCNP Lab 03 (Zero-Trust Branch Security: DMVPN & ZBFW)
-const ccnpLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-03-dmvpn-zbfw')!;
+const ccnpLab3 = CCNP_LABS.find(l => l.id === 'lab-ccnp-03-dmvpn-zbfw')!;
 console.log(`CCNP Lab 03 Exists: ${ccnpLab3 ? 'PASS' : 'FAIL'}`);
 
 const lab3Hub = new Router('HUB', 'DMVPN-Hub-R1', { x: 260, y: 220 });
@@ -1496,7 +1496,7 @@ const passedReport3 = LabGrader.grade(ccnpLab3, lab3Devs);
 console.log(`CCNP Lab 03 Auto-Grader Evaluation (100% Mastery): ${passedReport3.totalScore === 100 && passedReport3.isPassed ? 'PASS' : 'FAIL'}`);
 
 // Test Lab 4: CCNP Lab 04 (Programmability, EEM & MDT)
-const ccnpLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-04-automation-telemetry')!;
+const ccnpLab4 = CCNP_LABS.find(l => l.id === 'lab-ccnp-04-automation-telemetry')!;
 console.log(`CCNP Lab 04 Exists: ${ccnpLab4 ? 'PASS' : 'FAIL'}`);
 
 const lab4Rgw = new Router('R_GW', 'Edge-Gateway-R1', { x: 340, y: 220 });
@@ -1516,7 +1516,7 @@ console.log(`CCNP Lab 04 Auto-Grader Evaluation (100% Mastery): ${passedReport4.
 console.log('\n=== [18] PENGUJIAN 4 LAB CCNP ENTERPRISE OSPF & AUTO-GRADER ===');
 
 // Test CCNP OSPF Lab 1: Authentication
-const ccnpOspfLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-01-authentication')!;
+const ccnpOspfLab1 = CCNP_LABS.find(l => l.id === 'lab-ccnp-ospf-01-authentication')!;
 console.log(`CCNP OSPF Lab 01 Exists: ${ccnpOspfLab1 ? 'PASS' : 'FAIL'}`);
 
 const r1Lab1 = new Router('R1', 'R1', { x: 200, y: 220 });
@@ -1540,7 +1540,7 @@ const reportOspf1 = LabGrader.grade(ccnpOspfLab1, ospfLab1Devs);
 console.log(`CCNP OSPF Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportOspf1.totalScore === 100 && reportOspf1.isPassed ? 'PASS' : 'FAIL'}`);
 
 // Test CCNP OSPF Lab 2: Stub & Summarization
-const ccnpOspfLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-02-stub-summarization')!;
+const ccnpOspfLab2 = CCNP_LABS.find(l => l.id === 'lab-ccnp-ospf-02-stub-summarization')!;
 console.log(`CCNP OSPF Lab 02 Exists: ${ccnpOspfLab2 ? 'PASS' : 'FAIL'}`);
 
 const r1Lab2 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1567,7 +1567,7 @@ const reportOspf2 = LabGrader.grade(ccnpOspfLab2, ospfLab2Devs);
 console.log(`CCNP OSPF Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportOspf2.totalScore === 100 && reportOspf2.isPassed ? 'PASS' : 'FAIL'}`);
 
 // Test CCNP OSPF Lab 3: Multiarea OSPFv3 with Address Families
-const ccnpOspfLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-03-multiarea-ospfv3')!;
+const ccnpOspfLab3 = CCNP_LABS.find(l => l.id === 'lab-ccnp-ospf-03-multiarea-ospfv3')!;
 console.log(`CCNP OSPF Lab 03 Exists: ${ccnpOspfLab3 ? 'PASS' : 'FAIL'}`);
 
 const r1Lab3 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1593,7 +1593,7 @@ const reportOspf3 = LabGrader.grade(ccnpOspfLab3, ospfLab3Devs);
 console.log(`CCNP OSPF Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportOspf3.totalScore === 100 && reportOspf3.isPassed ? 'PASS' : 'FAIL'}`);
 
 // Test CCNP OSPF Lab 4: Troubleshoot OSPFv3
-const ccnpOspfLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-04-troubleshoot-ospfv3')!;
+const ccnpOspfLab4 = CCNP_LABS.find(l => l.id === 'lab-ccnp-ospf-04-troubleshoot-ospfv3')!;
 console.log(`CCNP OSPF Lab 04 Exists: ${ccnpOspfLab4 ? 'PASS' : 'FAIL'}`);
 
 const r1Lab4 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1624,7 +1624,7 @@ console.log(`CCNP OSPF Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportOsp
 console.log('\n=== [19] PENGUJIAN 5 LAB RESMI CCNP ENTERPRISE EIGRP (IPV4, ADVANCED, IPV6, TROUBLESHOOT) ===');
 
 // Test CCNP EIGRP Lab 1: Implement EIGRP for IPv4
-const ccnpEigrpLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-01-ipv4')!;
+const ccnpEigrpLab1 = CCNP_LABS.find(l => l.id === 'lab-ccnp-eigrp-01-ipv4')!;
 console.log(`CCNP EIGRP Lab 01 Exists: ${ccnpEigrpLab1 ? 'PASS' : 'FAIL'}`);
 
 const r1Eigrp1 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1658,7 +1658,7 @@ const reportEigrp1 = LabGrader.grade(ccnpEigrpLab1, eigrp1Devs);
 console.log(`CCNP EIGRP Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportEigrp1.totalScore === 100 && reportEigrp1.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp1.totalScore}%)`);
 
 // Test CCNP EIGRP Lab 2: Implement Advanced EIGRP for IPv4 Features
-const ccnpEigrpLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-02-advanced-ipv4')!;
+const ccnpEigrpLab2 = CCNP_LABS.find(l => l.id === 'lab-ccnp-eigrp-02-advanced-ipv4')!;
 console.log(`CCNP EIGRP Lab 02 Exists: ${ccnpEigrpLab2 ? 'PASS' : 'FAIL'}`);
 
 const r1Eigrp2 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1683,7 +1683,7 @@ const reportEigrp2 = LabGrader.grade(ccnpEigrpLab2, eigrp2Devs);
 console.log(`CCNP EIGRP Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportEigrp2.totalScore === 100 && reportEigrp2.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp2.totalScore}%)`);
 
 // Test CCNP EIGRP Lab 3: Implement EIGRP for IPv6 & Named EIGRP
-const ccnpEigrpLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-03-ipv6')!;
+const ccnpEigrpLab3 = CCNP_LABS.find(l => l.id === 'lab-ccnp-eigrp-03-ipv6')!;
 console.log(`CCNP EIGRP Lab 03 Exists: ${ccnpEigrpLab3 ? 'PASS' : 'FAIL'}`);
 
 const r1Eigrp3 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1714,7 +1714,7 @@ const reportEigrp3 = LabGrader.grade(ccnpEigrpLab3, eigrp3Devs);
 console.log(`CCNP EIGRP Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportEigrp3.totalScore === 100 && reportEigrp3.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp3.totalScore}%)`);
 
 // Test CCNP EIGRP Lab 4: Troubleshoot EIGRP for IPv4
-const ccnpEigrpLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-04-troubleshoot-ipv4')!;
+const ccnpEigrpLab4 = CCNP_LABS.find(l => l.id === 'lab-ccnp-eigrp-04-troubleshoot-ipv4')!;
 console.log(`CCNP EIGRP Lab 04 Exists: ${ccnpEigrpLab4 ? 'PASS' : 'FAIL'}`);
 
 const r1Eigrp4 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1741,7 +1741,7 @@ const reportEigrp4 = LabGrader.grade(ccnpEigrpLab4, eigrp4Devs);
 console.log(`CCNP EIGRP Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportEigrp4.totalScore === 100 && reportEigrp4.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportEigrp4.totalScore}%)`);
 
 // Test CCNP EIGRP Lab 5: Troubleshoot EIGRP for IPv6
-const ccnpEigrpLab5 = CCNA_LABS.find(l => l.id === 'lab-ccnp-eigrp-05-troubleshoot-ipv6')!;
+const ccnpEigrpLab5 = CCNP_LABS.find(l => l.id === 'lab-ccnp-eigrp-05-troubleshoot-ipv6')!;
 console.log(`CCNP EIGRP Lab 05 Exists: ${ccnpEigrpLab5 ? 'PASS' : 'FAIL'}`);
 
 const r1Eigrp5 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1789,7 +1789,7 @@ console.log(`Running-config includes address-family ipv4: ${runCfgR1.includes('a
 console.log('\n=== [20] PENGUJIAN 6 LAB RESMI CCNP ENTERPRISE BGP & AUTO-GRADER ===');
 
 // Test CCNP BGP Lab 1: Implement eBGP and iBGP
-const ccnpBgpLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-01-ebgp-ibgp')!;
+const ccnpBgpLab1 = CCNP_LABS.find(l => l.id === 'lab-ccnp-bgp-01-ebgp-ibgp')!;
 console.log(`CCNP BGP Lab 01 Exists: ${ccnpBgpLab1 ? 'PASS' : 'FAIL'}`);
 
 const r1Bgp1 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1827,7 +1827,7 @@ const reportBgp1 = LabGrader.grade(ccnpBgpLab1, bgp1Devs);
 console.log(`CCNP BGP Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportBgp1.totalScore === 100 && reportBgp1.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp1.totalScore}%)`);
 
 // Test CCNP BGP Lab 2: Configure BGP Advanced Features
-const ccnpBgpLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-02-advanced-features')!;
+const ccnpBgpLab2 = CCNP_LABS.find(l => l.id === 'lab-ccnp-bgp-02-advanced-features')!;
 console.log(`CCNP BGP Lab 02 Exists: ${ccnpBgpLab2 ? 'PASS' : 'FAIL'}`);
 
 const gw1Bgp2 = new Router('GW1', 'GW1', { x: 220, y: 150 });
@@ -1859,7 +1859,7 @@ const reportBgp2 = LabGrader.grade(ccnpBgpLab2, bgp2Devs);
 console.log(`CCNP BGP Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportBgp2.totalScore === 100 && reportBgp2.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp2.totalScore}%)`);
 
 // Test CCNP BGP Lab 3: Configure BGP Route Reflector
-const ccnpBgpLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-03-route-reflector')!;
+const ccnpBgpLab3 = CCNP_LABS.find(l => l.id === 'lab-ccnp-bgp-03-route-reflector')!;
 console.log(`CCNP BGP Lab 03 Exists: ${ccnpBgpLab3 ? 'PASS' : 'FAIL'}`);
 
 const r1Bgp3 = new Router('R1', 'R1', { x: 220, y: 150 });
@@ -1884,7 +1884,7 @@ const reportBgp3 = LabGrader.grade(ccnpBgpLab3, bgp3Devs);
 console.log(`CCNP BGP Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportBgp3.totalScore === 100 && reportBgp3.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp3.totalScore}%)`);
 
 // Test CCNP BGP Lab 4: Implement BGP Path Manipulation
-const ccnpBgpLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-04-path-manipulation')!;
+const ccnpBgpLab4 = CCNP_LABS.find(l => l.id === 'lab-ccnp-bgp-04-path-manipulation')!;
 console.log(`CCNP BGP Lab 04 Exists: ${ccnpBgpLab4 ? 'PASS' : 'FAIL'}`);
 
 const r1Bgp4 = new Router('R1', 'R1', { x: 250, y: 220 });
@@ -1913,7 +1913,7 @@ const reportBgp4 = LabGrader.grade(ccnpBgpLab4, bgp4Devs);
 console.log(`CCNP BGP Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportBgp4.totalScore === 100 && reportBgp4.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp4.totalScore}%)`);
 
 // Test CCNP BGP Lab 5: Implement MP-BGP
-const ccnpBgpLab5 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-05-mp-bgp')!;
+const ccnpBgpLab5 = CCNP_LABS.find(l => l.id === 'lab-ccnp-bgp-05-mp-bgp')!;
 console.log(`CCNP BGP Lab 05 Exists: ${ccnpBgpLab5 ? 'PASS' : 'FAIL'}`);
 
 const r1Bgp5 = new Router('R1', 'R1', { x: 250, y: 220 });
@@ -1936,7 +1936,7 @@ const reportBgp5 = LabGrader.grade(ccnpBgpLab5, bgp5Devs);
 console.log(`CCNP BGP Lab 05 Auto-Grader Evaluation (100% Mastery): ${reportBgp5.totalScore === 100 && reportBgp5.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportBgp5.totalScore}%)`);
 
 // Test CCNP BGP Lab 6: Troubleshooting BGP
-const ccnpBgpLab6 = CCNA_LABS.find(l => l.id === 'lab-ccnp-bgp-06-troubleshoot-bgp')!;
+const ccnpBgpLab6 = CCNP_LABS.find(l => l.id === 'lab-ccnp-bgp-06-troubleshoot-bgp')!;
 console.log(`CCNP BGP Lab 06 Exists: ${ccnpBgpLab6 ? 'PASS' : 'FAIL'}`);
 
 const r1Bgp6 = new Router('R1', 'R1', { x: 220, y: 150 });

@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useNetworkStore } from '../../store/useNetworkStore';
-import { CCNA_LABS } from '../../data/ccnaLabs';
+import { CCNA_LABS, CCNP_LABS } from '../../data';
+import { LabTrack } from '../../types/lab';
 import { 
   Network, 
   Award, 
@@ -11,11 +12,15 @@ import {
   BookOpenCheck,
   Radio,
   User,
-  Check
+  Check,
+  Layers,
+  GraduationCap
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const currentLab = useNetworkStore((state) => state.currentLab);
+  const selectedTrack = useNetworkStore((state) => state.selectedTrack);
+  const setSelectedTrack = useNetworkStore((state) => state.setSelectedTrack);
   const loadLab = useNetworkStore((state) => state.loadLab);
   const gradeCurrentLab = useNetworkStore((state) => state.gradeCurrentLab);
   const gradeReport = useNetworkStore((state) => state.gradeReport);
@@ -70,6 +75,15 @@ export const Header: React.FC = () => {
     e.target.value = '';
   };
 
+  // Group displayed labs by category based on selected curriculum track
+  const displayedLabs = selectedTrack === 'CCNA' ? CCNA_LABS : CCNP_LABS;
+  const groupedLabs = displayedLabs.reduce((acc, lab) => {
+    const cat = lab.category || (lab.track === 'CCNP' ? 'CCNP Enterprise' : 'CCNA Practice');
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(lab);
+    return acc;
+  }, {} as Record<string, typeof displayedLabs>);
+
   return (
     <header className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between select-none z-30 shadow-md">
       {/* Brand & Identity */}
@@ -80,31 +94,85 @@ export const Header: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-base tracking-tight text-white">
-              CCNA <span className="text-cyan-400">NetSim Pro</span>
+              Cisco <span className="text-cyan-400">NetSim Pro</span>
             </span>
-            <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
-              Exam 200-301 v1.1
-            </span>
+            {selectedTrack === 'CCNA' ? (
+              <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
+                CCNA 200-301 v1.1
+              </span>
+            ) : (
+              <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800/60">
+                CCNP Enterprise (ENCOR & ENARSI)
+              </span>
+            )}
           </div>
           <p className="text-[11px] text-slate-400 leading-none">
-            Cisco IOS Simulator & Automated Lab Grading
+            Cisco IOS-XE Simulator & Multi-Track Automated Lab Grading
           </p>
         </div>
       </div>
 
-      {/* Center: Lab Selector */}
-      <div className="flex items-center gap-3">
+      {/* Center: Curriculum Track Switcher & Lab Selector */}
+      <div className="flex items-center gap-2.5">
+        {/* Track Switcher (CCNA vs CCNP) */}
+        <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
+          <button
+            onClick={() => {
+              setSelectedTrack('CCNA');
+              if (currentLab?.track === 'CCNP') {
+                loadLab(CCNA_LABS[0].id);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-bold transition-all ${
+              selectedTrack === 'CCNA'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>CCNA</span>
+            <span className="text-[10px] px-1 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">
+              {CCNA_LABS.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedTrack('CCNP');
+              if (currentLab?.track !== 'CCNP') {
+                loadLab(CCNP_LABS[0].id);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-bold transition-all ${
+              selectedTrack === 'CCNP'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>CCNP Enterprise</span>
+            <span className="text-[10px] px-1 py-0.2 rounded bg-purple-950/80 text-purple-300 border border-purple-800/50">
+              {CCNP_LABS.length}
+            </span>
+          </button>
+        </div>
+
+        {/* Lab Selector with Categorized optgroup */}
         <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1">
-          <Cpu className="w-4 h-4 text-cyan-400 shrink-0" />
+          <Cpu className={`w-4 h-4 shrink-0 ${selectedTrack === 'CCNP' ? 'text-purple-400' : 'text-cyan-400'}`} />
           <select
             value={currentLab?.id || ''}
             onChange={(e) => loadLab(e.target.value)}
-            className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer pr-4 font-medium"
+            className="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer pr-4 font-medium max-w-[270px] truncate"
           >
-            {CCNA_LABS.map((lab) => (
-              <option key={lab.id} value={lab.id} className="bg-slate-900 text-slate-200">
-                [{lab.difficulty}] {lab.title}
-              </option>
+            {Object.entries(groupedLabs).map(([category, labs]) => (
+              <optgroup key={category} label={`── ${category.toUpperCase()} ──`} className="bg-slate-900 text-slate-400 font-bold">
+                {labs.map((lab) => (
+                  <option key={lab.id} value={lab.id} className="bg-slate-900 text-slate-200 font-normal">
+                    [{lab.difficulty}] {lab.title}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>

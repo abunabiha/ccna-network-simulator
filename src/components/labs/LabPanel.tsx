@@ -49,9 +49,18 @@ export const LabPanel: React.FC = () => {
           {/* Lab Header Card */}
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/40">
-                {currentLab.domain}
-              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
+                  currentLab.track === 'CCNP' || currentLab.id.includes('ccnp')
+                    ? 'bg-purple-950 text-purple-300 border-purple-800/60'
+                    : 'bg-cyan-950 text-cyan-300 border-cyan-800/60'
+                }`}>
+                  {currentLab.track || (currentLab.id.includes('ccnp') ? 'CCNP' : 'CCNA')}
+                </span>
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                  {currentLab.domain}
+                </span>
+              </div>
               <div className="flex items-center gap-1 text-[11px] text-slate-400">
                 <Clock className="w-3 h-3 text-slate-500" />
                 <span>{currentLab.estimatedMinutes}m</span>
