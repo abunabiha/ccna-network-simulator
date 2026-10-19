@@ -1,11 +1,13 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState, EemApplet, EemHistoryEntry, MdtSubscription, NetconfSession } from '../../types/network';
+import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, OspfV3Config, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState, EemApplet, EemHistoryEntry, MdtSubscription, NetconfSession } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
 export class Router extends Device {
   routingTable: RouteEntry[] = [];
   ospfConfig?: OspfConfig;
+  ospfv3Config?: OspfV3Config;
+  ipv6UnicastRouting: boolean = false;
   eigrpConfig?: EigrpConfig;
   bgpConfig?: BgpConfig;
   dhcpPools: Map<string, DhcpPool> = new Map();
@@ -419,6 +421,24 @@ export class Router extends Device {
           lines.push(` area ${ar.area} range ${ar.network} ${ar.mask}`);
         }
       }
+      if (this.ospfConfig.summaryAddresses) {
+        for (const sa of this.ospfConfig.summaryAddresses) {
+          lines.push(` summary-address ${sa.network} ${sa.mask}`);
+        }
+      }
+      if (this.ospfConfig.areaTypes) {
+        for (const [area, type] of Object.entries(this.ospfConfig.areaTypes)) {
+          if (type === 'stub') lines.push(` area ${area} stub`);
+          else if (type === 'totally-stubby') lines.push(` area ${area} stub no-summary`);
+          else if (type === 'nssa') lines.push(` area ${area} nssa`);
+          else if (type === 'totally-nssa') lines.push(` area ${area} nssa no-summary`);
+        }
+      }
+      if (this.ospfConfig.areaAuth) {
+        for (const [area, auth] of Object.entries(this.ospfConfig.areaAuth)) {
+          lines.push(` area ${area} authentication ${auth}`);
+        }
+      }
       for (const p of this.ospfConfig.passiveInterfaces) {
         lines.push(` passive-interface ${p}`);
       }
@@ -433,6 +453,13 @@ export class Router extends Device {
           lines.push(cmd);
         }
       }
+      lines.push('!');
+    }
+
+    // OSPFv3
+    if (this.ospfv3Config && this.ospfv3Config.enabled) {
+      lines.push(`router ospfv3 ${this.ospfv3Config.processId}`);
+      if (this.ospfv3Config.routerId) lines.push(` router-id ${this.ospfv3Config.routerId}`);
       lines.push('!');
     }
 

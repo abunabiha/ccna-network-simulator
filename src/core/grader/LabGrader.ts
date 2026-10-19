@@ -424,6 +424,131 @@ export class LabGrader {
       };
     }
 
+    // CCNP OSPF: Check Area Authentication
+    if (prop === 'ospf_auth_area' && (device instanceof Router || device instanceof Switch)) {
+      const area = parseInt(String(expected), 10);
+      const passed = device.ospfConfig?.areaAuth?.[area] === 'message-digest' || device.ospfConfig?.areaAuth?.[area] === 'simple';
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `OSPF Area ${area} authentication telah dikonfigurasi.`
+          : `OSPF Area ${area} authentication belum aktif pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP OSPF: Check Interface Authentication & Key
+    if (prop === 'ospf_auth_interface' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const passed = Boolean(ifc && (ifc.ospfAuthType === 'message-digest' || ifc.ospfMessageDigestKey?.key === String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Interface ${task.targetInterface} OSPF authentication key telah valid.`
+          : `Interface ${task.targetInterface} OSPF authentication belum dikonfigurasi dengan benar pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP OSPF: Check Area Type (stub / totally-stubby / nssa / totally-nssa)
+    if (prop === 'ospf_area_type' && (device instanceof Router || device instanceof Switch)) {
+      const area = task.expectedValue?.area !== undefined ? task.expectedValue.area : 1;
+      const expectedType = task.expectedValue?.type || String(expected);
+      const actualType = device.ospfConfig?.areaTypes?.[area] || device.ospfv3Config?.areaTypes?.[area];
+      const passed = actualType === expectedType;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `OSPF Area ${area} telah dikonfigurasi sebagai ${expectedType}.`
+          : `OSPF Area ${area} tipe '${expectedType}' belum aktif pada ${device.hostname} (saat ini: ${actualType || 'normal'}).`
+      };
+    }
+
+    // CCNP OSPF: Check Area Range (ABR Summarization)
+    if (prop === 'ospf_area_range' && (device instanceof Router || device instanceof Switch)) {
+      const expectedNet = String(expected);
+      const passed = !!device.ospfConfig?.areaRanges?.some(ar => ar.network === expectedNet);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `ABR OSPF area range summarization untuk '${expectedNet}' telah aktif.`
+          : `ABR OSPF area range untuk '${expectedNet}' belum ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP OSPF: Check OSPFv3 Enabled
+    if (prop === 'ospfv3_enabled' && (device instanceof Router || device instanceof Switch)) {
+      const passed = !!(device.ospfv3Config && device.ospfv3Config.enabled);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Proses OSPFv3 telah aktif pada ${device.hostname}.`
+          : `Proses OSPFv3 belum diaktifkan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP OSPF: Check Interface OSPFv3 Area
+    if (prop === 'ospfv3_interface_area' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const expectedArea = parseInt(String(expected), 10);
+      const passed = !!ifc && ifc.ospfv3Area === expectedArea;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Interface ${task.targetInterface} terasosiasi dengan OSPFv3 Area ${expectedArea}.`
+          : `Interface ${task.targetInterface} belum terhubung ke OSPFv3 Area ${expectedArea} pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP OSPF: Check IPv6 Unicast Routing
+    if (prop === 'ipv6_unicast_routing_enabled' && (device instanceof Router || device instanceof Switch)) {
+      const passed = device.ipv6UnicastRouting === true;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `ipv6 unicast-routing telah diaktifkan secara global.`
+          : `ipv6 unicast-routing belum aktif pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP OSPF: Check Interface OSPF Hello / Dead Interval
+    if (prop === 'ospf_timer_interval' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const expectedHello = task.expectedValue?.hello;
+      const expectedDead = task.expectedValue?.dead;
+      const helloPassed = expectedHello ? ifc?.ospfHelloInterval === expectedHello : true;
+      const deadPassed = expectedDead ? ifc?.ospfDeadInterval === expectedDead : true;
+      const passed = Boolean(ifc && helloPassed && deadPassed);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Timer OSPF interface ${task.targetInterface} telah sesuai.`
+          : `Timer OSPF interface ${task.targetInterface} belum dikonfigurasi dengan benar pada ${device.hostname}.`
+      };
+    }
+
     return {
       taskId: task.id,
       passed: true,

@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, VlanInfo, MacTableEntry, RouteEntry, DhcpPool, OspfConfig, EigrpConfig, BgpConfig, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry } from '../../types/network';
+import { DevicePosition, VlanInfo, MacTableEntry, RouteEntry, DhcpPool, OspfConfig, OspfV3Config, EigrpConfig, BgpConfig, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -9,6 +9,8 @@ export class Switch extends Device {
   isLayer3: boolean = false;
   routingTable: RouteEntry[] = [];
   ospfConfig?: OspfConfig;
+  ospfv3Config?: OspfV3Config;
+  ipv6UnicastRouting: boolean = false;
   eigrpConfig?: EigrpConfig;
   bgpConfig?: BgpConfig;
   spanningTreeMode: 'pvst' | 'rapid-pvst' | 'mst' = 'pvst';
@@ -88,6 +90,33 @@ export class Switch extends Device {
       });
     }
 
+    // For L3 switches (Catalyst 9300L), provide GigabitEthernet1/0/1 through GigabitEthernet1/0/24
+    if (isLayer3) {
+      for (let i = 1; i <= 24; i++) {
+        const pName = `GigabitEthernet1/0/${i}`;
+        const short = `Gi1/0/${i}`;
+        this.addInterface({
+          name: pName,
+          shortName: short,
+          macAddress: `0002.ba${(i < 10 ? '0' + i : i)}.${Math.floor(Math.random() * 8999 + 1000)}`,
+          status: 'up',
+          isShutdown: false,
+          switchportMode: 'access',
+          accessVlan: 1,
+          trunkAllowedVlans: Array.from({ length: 4094 }, (_, idx) => idx + 1),
+          nativeVlan: 1,
+          speed: '1000Mb/s',
+          duplex: 'auto',
+          portSecurity: {
+            enabled: false,
+            maxMacs: 1,
+            violation: 'shutdown',
+            stickyMacs: []
+          }
+        });
+      }
+    }
+
     // Management Interface Vlan1
     this.addInterface({
       name: 'Vlan1',
@@ -96,6 +125,28 @@ export class Switch extends Device {
       status: 'down',
       isShutdown: true
     });
+  }
+
+  override getInterface(name: string) {
+    if (!name) return undefined;
+    const direct = super.getInterface(name);
+    if (direct) return direct;
+
+    // Resolve Gi1/0/X -> Fa0/X or Gi0/X
+    const m = name.match(/^(?:GigabitEthernet|Gi)1\/0\/(\d+)$/i);
+    if (m) {
+      const portNum = parseInt(m[1], 10);
+      return this.interfaces.get(`GigabitEthernet1/0/${portNum}`) ||
+             this.interfaces.get(`FastEthernet0/${portNum}`) ||
+             this.interfaces.get(`GigabitEthernet0/${portNum}`);
+    }
+    const mFa = name.match(/^(?:FastEthernet|Fa)0\/(\d+)$/i);
+    if (mFa) {
+      const portNum = parseInt(mFa[1], 10);
+      return this.interfaces.get(`FastEthernet0/${portNum}`) ||
+             this.interfaces.get(`GigabitEthernet1/0/${portNum}`);
+    }
+    return undefined;
   }
 
   learnMac(vlan: number, macAddress: string, port: string): void {
@@ -427,6 +478,24 @@ export class Switch extends Device {
           lines.push(` area ${ar.area} range ${ar.network} ${ar.mask}`);
         }
       }
+      if (this.ospfConfig.summaryAddresses) {
+        for (const sa of this.ospfConfig.summaryAddresses) {
+          lines.push(` summary-address ${sa.network} ${sa.mask}`);
+        }
+      }
+      if (this.ospfConfig.areaTypes) {
+        for (const [area, type] of Object.entries(this.ospfConfig.areaTypes)) {
+          if (type === 'stub') lines.push(` area ${area} stub`);
+          else if (type === 'totally-stubby') lines.push(` area ${area} stub no-summary`);
+          else if (type === 'nssa') lines.push(` area ${area} nssa`);
+          else if (type === 'totally-nssa') lines.push(` area ${area} nssa no-summary`);
+        }
+      }
+      if (this.ospfConfig.areaAuth) {
+        for (const [area, auth] of Object.entries(this.ospfConfig.areaAuth)) {
+          lines.push(` area ${area} authentication ${auth}`);
+        }
+      }
       for (const pIf of this.ospfConfig.passiveInterfaces) {
         lines.push(` passive-interface ${pIf}`);
       }
@@ -441,6 +510,13 @@ export class Switch extends Device {
           lines.push(cmd);
         }
       }
+      lines.push('!');
+    }
+
+    // OSPFv3
+    if (this.ospfv3Config && this.ospfv3Config.enabled) {
+      lines.push(`router ospfv3 ${this.ospfv3Config.processId}`);
+      if (this.ospfv3Config.routerId) lines.push(` router-id ${this.ospfv3Config.routerId}`);
       lines.push('!');
     }
 

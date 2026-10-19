@@ -1510,7 +1510,118 @@ CliParser.execute('telemetry ietf subscription 101', { deviceId: 'R_GW', mode: '
 const passedReport4 = LabGrader.grade(ccnpLab4, lab4Devs);
 console.log(`CCNP Lab 04 Auto-Grader Evaluation (100% Mastery): ${passedReport4.totalScore === 100 && passedReport4.isPassed ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1 SAMPAI 8 SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+// =============================================================
+// [18] PENGUJIAN 4 LAB CCNP ENTERPRISE OSPF (AUTHENTICATION, STUB, OSPFv3, TROUBLESHOOT)
+// =============================================================
+console.log('\n=== [18] PENGUJIAN 4 LAB CCNP ENTERPRISE OSPF & AUTO-GRADER ===');
+
+// Test CCNP OSPF Lab 1: Authentication
+const ccnpOspfLab1 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-01-authentication')!;
+console.log(`CCNP OSPF Lab 01 Exists: ${ccnpOspfLab1 ? 'PASS' : 'FAIL'}`);
+
+const r1Lab1 = new Router('R1', 'R1', { x: 200, y: 220 });
+const d1Lab1 = new Switch('D1', 'D1', { x: 440, y: 220 }, true);
+const d2Lab1 = new Switch('D2', 'D2', { x: 680, y: 220 }, true);
+const ospfLab1Devs = [r1Lab1, d1Lab1, d2Lab1];
+
+// R1 config
+CliParser.execute('router ospf 1', { deviceId: 'R1', mode: 'global-config' as const }, r1Lab1, ospfLab1Devs);
+CliParser.execute('area 1 authentication message-digest', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, r1Lab1, ospfLab1Devs);
+CliParser.execute('interface GigabitEthernet0/0/1', { deviceId: 'R1', mode: 'global-config' as const }, r1Lab1, ospfLab1Devs);
+CliParser.execute('ip ospf message-digest-key 1 md5 cisco123', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Lab1, ospfLab1Devs);
+
+// D1 config
+CliParser.execute('router ospf 1', { deviceId: 'D1', mode: 'global-config' as const }, d1Lab1, ospfLab1Devs);
+CliParser.execute('area 1 authentication message-digest', { deviceId: 'D1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, d1Lab1, ospfLab1Devs);
+CliParser.execute('interface GigabitEthernet1/0/11', { deviceId: 'D1', mode: 'global-config' as const }, d1Lab1, ospfLab1Devs);
+CliParser.execute('ip ospf message-digest-key 1 md5 cisco123', { deviceId: 'D1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet1/0/11' }, d1Lab1, ospfLab1Devs);
+
+const reportOspf1 = LabGrader.grade(ccnpOspfLab1, ospfLab1Devs);
+console.log(`CCNP OSPF Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportOspf1.totalScore === 100 && reportOspf1.isPassed ? 'PASS' : 'FAIL'}`);
+
+// Test CCNP OSPF Lab 2: Stub & Summarization
+const ccnpOspfLab2 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-02-stub-summarization')!;
+console.log(`CCNP OSPF Lab 02 Exists: ${ccnpOspfLab2 ? 'PASS' : 'FAIL'}`);
+
+const r1Lab2 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Lab2 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Lab2 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Lab2 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Lab2 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const ospfLab2Devs = [r1Lab2, r2Lab2, r3Lab2, d1Lab2, d2Lab2];
+
+// R1: area 1 nssa no-summary, area 1 range 10.10.0.0 255.255.252.0
+CliParser.execute('router ospf 1', { deviceId: 'R1', mode: 'global-config' as const }, r1Lab2, ospfLab2Devs);
+CliParser.execute('area 1 nssa no-summary', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, r1Lab2, ospfLab2Devs);
+CliParser.execute('area 1 range 10.10.0.0 255.255.252.0', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, r1Lab2, ospfLab2Devs);
+
+// D1: area 1 nssa
+CliParser.execute('router ospf 1', { deviceId: 'D1', mode: 'global-config' as const }, d1Lab2, ospfLab2Devs);
+CliParser.execute('area 1 nssa', { deviceId: 'D1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, d1Lab2, ospfLab2Devs);
+
+// R3: area 2 stub no-summary
+CliParser.execute('router ospf 1', { deviceId: 'R3', mode: 'global-config' as const }, r3Lab2, ospfLab2Devs);
+CliParser.execute('area 2 stub no-summary', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 1 }, r3Lab2, ospfLab2Devs);
+
+const reportOspf2 = LabGrader.grade(ccnpOspfLab2, ospfLab2Devs);
+console.log(`CCNP OSPF Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportOspf2.totalScore === 100 && reportOspf2.isPassed ? 'PASS' : 'FAIL'}`);
+
+// Test CCNP OSPF Lab 3: Multiarea OSPFv3 with Address Families
+const ccnpOspfLab3 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-03-multiarea-ospfv3')!;
+console.log(`CCNP OSPF Lab 03 Exists: ${ccnpOspfLab3 ? 'PASS' : 'FAIL'}`);
+
+const r1Lab3 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Lab3 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Lab3 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Lab3 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Lab3 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const ospfLab3Devs = [r1Lab3, r2Lab3, r3Lab3, d1Lab3, d2Lab3];
+
+// R1: ipv6 unicast-routing, ospfv3 123 ipv6 area 0 on Gi0/0/0
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R1', mode: 'global-config' as const }, r1Lab3, ospfLab3Devs);
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'global-config' as const }, r1Lab3, ospfLab3Devs);
+CliParser.execute('ospfv3 123 ipv6 area 0', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Lab3, ospfLab3Devs);
+
+// R2: router ospfv3 123
+CliParser.execute('router ospfv3 123', { deviceId: 'R2', mode: 'global-config' as const }, r2Lab3, ospfLab3Devs);
+
+// D1: interface Gi1/0/11 -> ipv6 ospf 123 area 1
+CliParser.execute('interface GigabitEthernet1/0/11', { deviceId: 'D1', mode: 'global-config' as const }, d1Lab3, ospfLab3Devs);
+CliParser.execute('ipv6 ospf 123 area 1', { deviceId: 'D1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet1/0/11' }, d1Lab3, ospfLab3Devs);
+
+const reportOspf3 = LabGrader.grade(ccnpOspfLab3, ospfLab3Devs);
+console.log(`CCNP OSPF Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportOspf3.totalScore === 100 && reportOspf3.isPassed ? 'PASS' : 'FAIL'}`);
+
+// Test CCNP OSPF Lab 4: Troubleshoot OSPFv3
+const ccnpOspfLab4 = CCNA_LABS.find(l => l.id === 'lab-ccnp-ospf-04-troubleshoot-ospfv3')!;
+console.log(`CCNP OSPF Lab 04 Exists: ${ccnpOspfLab4 ? 'PASS' : 'FAIL'}`);
+
+const r1Lab4 = new Router('R1', 'R1', { x: 220, y: 150 });
+const r2Lab4 = new Router('R2', 'R2', { x: 440, y: 150 });
+const r3Lab4 = new Router('R3', 'R3', { x: 660, y: 150 });
+const d1Lab4 = new Switch('D1', 'D1', { x: 220, y: 320 }, true);
+const d2Lab4 = new Switch('D2', 'D2', { x: 660, y: 320 }, true);
+const ospfLab4Devs = [r1Lab4, r2Lab4, r3Lab4, d1Lab4, d2Lab4];
+
+// R3: ipv6 unicast-routing
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R3', mode: 'global-config' as const }, r3Lab4, ospfLab4Devs);
+
+// R1: Gi0/0/0 timer fix
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'global-config' as const }, r1Lab4, ospfLab4Devs);
+CliParser.execute('ipv6 ospf hello-interval 10', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Lab4, ospfLab4Devs);
+CliParser.execute('ipv6 ospf dead-interval 40', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Lab4, ospfLab4Devs);
+
+// R2: Gi0/0/0 area fix
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'global-config' as const }, r2Lab4, ospfLab4Devs);
+CliParser.execute('ospfv3 123 ipv6 area 0', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Lab4, ospfLab4Devs);
+
+// D1: ipv6 router ospf 123
+CliParser.execute('ipv6 router ospf 123', { deviceId: 'D1', mode: 'global-config' as const }, d1Lab4, ospfLab4Devs);
+
+const reportOspf4 = LabGrader.grade(ccnpOspfLab4, ospfLab4Devs);
+console.log(`CCNP OSPF Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportOspf4.totalScore === 100 && reportOspf4.isPassed ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, SERTA 4 LAB CCNP OSPF SELESAI DENGAN SUKSES LENGKAP 100%! ===');
 
 
 

@@ -124,6 +124,16 @@ export interface InterfaceConfig {
 
   // Zone-Based Policy Firewall (ZBFW) per interface
   zoneMemberSecurity?: string;
+
+  // OSPF & OSPFv3 per interface properties
+  ospfCost?: number;
+  ospfHelloInterval?: number;
+  ospfDeadInterval?: number;
+  ospfNetworkType?: 'point-to-point' | 'broadcast' | 'non-broadcast';
+  ospfAuthType?: 'message-digest' | 'null' | 'simple';
+  ospfMessageDigestKey?: { keyId: number; key: string };
+  ospfv3Area?: number;
+  ospfv3ProcessId?: number;
 }
 
 // ==================== TAHAP 6: SECURITY & VPN SERVICES ====================
@@ -427,8 +437,22 @@ export interface OspfConfig {
     network: string;
     mask: string;
   }>;
+  summaryAddresses?: Array<{
+    network: string;
+    mask: string;
+  }>;
+  areaTypes?: Record<number, 'stub' | 'totally-stubby' | 'nssa' | 'totally-nssa'>;
+  areaAuth?: Record<number, 'message-digest' | 'simple'>;
   passiveInterfaces: string[];
   redistributions?: RedistributionConfig[];
+}
+
+export interface OspfV3Config {
+  enabled: boolean;
+  processId: number;
+  routerId?: string;
+  areaTypes?: Record<number, 'stub' | 'totally-stubby' | 'nssa' | 'totally-nssa'>;
+  passiveInterfaces: string[];
 }
 
 export interface RedistributionConfig {

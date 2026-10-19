@@ -946,5 +946,307 @@ export const CCNA_LABS: LabDefinition[] = [
         { id: 'l1', sourceDeviceId: 'R_GW', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'COLLECTOR', targetPort: 'FastEthernet0', cableType: 'straight' }
       ]
     }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB OSPF 01: Configure OSPF Authentication
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-ospf-01-authentication',
+    title: 'CCNP Enterprise Lab: Configure OSPF Authentication',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 30,
+    difficulty: 'Advanced',
+    scenario: 'Mengonfigurasi autentikasi OSPFv2 (MD5 cryptographic authentication) baik pada level area maupun level interface antara router R1 dan L3 switch D1/D2 untuk mengamankan pertukaran paket OSPF dari serangan sniffing dan spoofing.',
+    objectives: [
+      'Konfigurasi autentikasi OSPF Area 1 MD5 pada Router R1',
+      'Konfigurasi MD5 authentication key pada interface R1 GigabitEthernet0/0/1',
+      'Konfigurasi autentikasi OSPF Area 1 MD5 pada Switch D1',
+      'Konfigurasi MD5 authentication key pada interface D1 GigabitEthernet1/0/11'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-ospf1-1',
+        description: 'Konfigurasi OSPF Area 1 MD5 authentication pada R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ospf_auth_area',
+        expectedValue: 1,
+        hint: 'router ospf 1 -> area 1 authentication message-digest'
+      },
+      {
+        id: 'task-ccnp-ospf1-2',
+        description: 'Konfigurasi MD5 authentication key cisco123 pada interface R1 GigabitEthernet0/0/1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'ospf_auth_interface',
+        expectedValue: 'cisco123',
+        hint: 'interface GigabitEthernet0/0/1 -> ip ospf message-digest-key 1 md5 cisco123'
+      },
+      {
+        id: 'task-ccnp-ospf1-3',
+        description: 'Konfigurasi OSPF Area 1 MD5 authentication pada D1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D1',
+        expectedProperty: 'ospf_auth_area',
+        expectedValue: 1,
+        hint: 'router ospf 1 -> area 1 authentication message-digest'
+      },
+      {
+        id: 'task-ccnp-ospf1-4',
+        description: 'Konfigurasi MD5 authentication key cisco123 pada interface D1 GigabitEthernet1/0/11',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D1',
+        targetInterface: 'GigabitEthernet1/0/11',
+        expectedProperty: 'ospf_auth_interface',
+        expectedValue: 'cisco123',
+        hint: 'interface GigabitEthernet1/0/11 -> ip ospf message-digest-key 1 md5 cisco123'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 200, y: 220 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 440, y: 220 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 680, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'D1', sourcePort: 'GigabitEthernet1/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/1', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB OSPF 02: Configure OSPF Stub Areas and Summarization
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-ospf-02-stub-summarization',
+    title: 'CCNP Enterprise Lab: Configure OSPF Stub Areas and Summarization',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Mengoptimalkan Link-State Database (LSDB) dan tabel routing OSPF multiarea dengan menerapkan OSPF Stub Area, Totally Stubby Area, Not-So-Stubby Area (NSSA), serta merangkum rute inter-area (ABR Route Summarization) menggunakan perintah area range.',
+    objectives: [
+      'Konfigurasi Area 1 sebagai NSSA Totally Stubby pada ABR R1 (area 1 nssa no-summary)',
+      'Konfigurasi Area 1 sebagai NSSA pada Switch D1 (area 1 nssa)',
+      'Konfigurasi Area 2 sebagai Totally Stubby Area pada ABR R3 (area 2 stub no-summary)',
+      'Konfigurasi OSPF ABR Route Summarization untuk prefix Area 1 pada R1 (area 1 range 10.10.0.0 255.255.252.0)'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-ospf2-1',
+        description: 'Konfigurasi OSPF Area 1 sebagai Totally NSSA pada ABR R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ospf_area_type',
+        expectedValue: { area: 1, type: 'totally-nssa' },
+        hint: 'router ospf 1 -> area 1 nssa no-summary'
+      },
+      {
+        id: 'task-ccnp-ospf2-2',
+        description: 'Konfigurasi OSPF Area 1 sebagai NSSA pada Switch D1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D1',
+        expectedProperty: 'ospf_area_type',
+        expectedValue: { area: 1, type: 'nssa' },
+        hint: 'router ospf 1 -> area 1 nssa'
+      },
+      {
+        id: 'task-ccnp-ospf2-3',
+        description: 'Konfigurasi OSPF Area 2 sebagai Totally Stubby Area pada ABR R3',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'ospf_area_type',
+        expectedValue: { area: 2, type: 'totally-stubby' },
+        hint: 'router ospf 1 -> area 2 stub no-summary'
+      },
+      {
+        id: 'task-ccnp-ospf2-4',
+        description: 'Konfigurasi ABR Route Summarization prefix 10.10.0.0 pada R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ospf_area_range',
+        expectedValue: '10.10.0.0',
+        hint: 'router ospf 1 -> area 1 range 10.10.0.0 255.255.252.0'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB OSPF 03: Implement Multiarea OSPFv3
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-ospf-03-multiarea-ospfv3',
+    title: 'CCNP Enterprise Lab: Implement Multiarea OSPFv3 with Address Families',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Mengimplementasikan protokol routing OSPFv3 modern yang mendukung Address Families (AF IPv4 dan AF IPv6) serta OSPFv3 tradisional untuk IPv6 murni di seluruh jaringan multi-area Cisco Enterprise.',
+    objectives: [
+      'Aktifkan routing IPv6 global pada router R1',
+      'Aktifkan proses OSPFv3 process 123 pada router backbone R2',
+      'Konfigurasi OSPFv3 interface Area 0 pada link R1 GigabitEthernet0/0/0',
+      'Konfigurasi OSPFv3 interface Area 1 pada switch D1 GigabitEthernet1/0/11'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-ospf3-1',
+        description: 'Aktifkan routing IPv6 unicast global pada router R1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_unicast_routing_enabled',
+        expectedValue: true,
+        hint: 'ipv6 unicast-routing'
+      },
+      {
+        id: 'task-ccnp-ospf3-2',
+        description: 'Aktifkan proses OSPFv3 123 pada router backbone R2',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'ospfv3_enabled',
+        expectedValue: true,
+        hint: 'router ospfv3 123'
+      },
+      {
+        id: 'task-ccnp-ospf3-3',
+        description: 'Konfigurasi interface R1 GigabitEthernet0/0/0 ke dalam OSPFv3 Area 0',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'ospfv3_interface_area',
+        expectedValue: 0,
+        hint: 'interface GigabitEthernet0/0/0 -> ospfv3 123 ipv6 area 0'
+      },
+      {
+        id: 'task-ccnp-ospf3-4',
+        description: 'Konfigurasi interface D1 GigabitEthernet1/0/11 ke dalam OSPFv3 Area 1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D1',
+        targetInterface: 'GigabitEthernet1/0/11',
+        expectedProperty: 'ospfv3_interface_area',
+        expectedValue: 1,
+        hint: 'interface GigabitEthernet1/0/11 -> ipv6 ospf 123 area 1'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB OSPF 04: Troubleshoot OSPFv3
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-ospf-04-troubleshoot-ospfv3',
+    title: 'CCNP Enterprise Lab: Troubleshoot OSPFv3 Adjacencies',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 40,
+    difficulty: 'Advanced',
+    scenario: 'Melakukan pemecahan masalah (troubleshooting) relasi tetangga OSPFv3 yang gagal terbentuk (neighbor adjacency failure) akibat ketidakcocokan area ID, mismatch timer hello/dead, dan belum diaktifkannya unicast-routing IPv6.',
+    objectives: [
+      'Perbaiki aktivasi IPv6 unicast-routing yang terlupa pada Router R3',
+      'Perbaiki ketidakcocokan Timer Hello (10s) dan Dead (40s) pada interface R1 GigabitEthernet0/0/0',
+      'Perbaiki ketidakcocokan Area ID OSPFv3 pada interface R2 GigabitEthernet0/0/0 agar sesuai Area 0',
+      'Verifikasi proses OSPFv3 aktif dan beroperasi normal pada D1'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-ospf4-1',
+        description: 'Aktifkan IPv6 unicast-routing yang non-aktif pada Router R3',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'ipv6_unicast_routing_enabled',
+        expectedValue: true,
+        hint: 'ipv6 unicast-routing'
+      },
+      {
+        id: 'task-ccnp-ospf4-2',
+        description: 'Perbaiki timer hello (10) dan dead (40) pada interface R1 GigabitEthernet0/0/0',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'ospf_timer_interval',
+        expectedValue: { hello: 10, dead: 40 },
+        hint: 'interface GigabitEthernet0/0/0 -> ipv6 ospf hello-interval 10 & ipv6 ospf dead-interval 40'
+      },
+      {
+        id: 'task-ccnp-ospf4-3',
+        description: 'Perbaiki penetapan Area ID OSPFv3 pada interface R2 GigabitEthernet0/0/0 ke Area 0',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'ospfv3_interface_area',
+        expectedValue: 0,
+        hint: 'interface GigabitEthernet0/0/0 -> ospfv3 123 ipv6 area 0'
+      },
+      {
+        id: 'task-ccnp-ospf4-4',
+        description: 'Pastikan proses OSPFv3 diaktifkan pada Switch D1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'D1',
+        expectedProperty: 'ospfv3_enabled',
+        expectedValue: true,
+        hint: 'ipv6 router ospf 123'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 220, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 440, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 660, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 220, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 660, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
   }
 ];

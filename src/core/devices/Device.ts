@@ -53,9 +53,9 @@ export abstract class Device {
   }
 
   setInterface(name: string, config: Partial<InterfaceConfig>): void {
-    const existing = this.interfaces.get(name);
+    const existing = this.getInterface(name);
     if (existing) {
-      this.interfaces.set(name, { ...existing, ...config });
+      this.interfaces.set(existing.name, { ...existing, ...config });
     }
   }
 

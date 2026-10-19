@@ -1001,6 +1001,44 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // ipv6 unicast-routing
+    if (cmd0 === 'ipv6' && tokens.length >= 2 && 'unicast-routing'.startsWith(tokens[1].toLowerCase())) {
+      (device as Router | Switch).ipv6UnicastRouting = true;
+      return { output: '' };
+    }
+
+    // no ipv6 unicast-routing
+    if (cmd0 === 'no' && tokens.length >= 3 && tokens[1].toLowerCase() === 'ipv6' && 'unicast-routing'.startsWith(tokens[2].toLowerCase())) {
+      (device as Router | Switch).ipv6UnicastRouting = false;
+      return { output: '' };
+    }
+
+    // router ospfv3 <pid> OR ipv6 router ospf <pid>
+    if (
+      ('router'.startsWith(cmd0) && tokens.length >= 3 && tokens[1].toLowerCase().startsWith('ospfv3')) ||
+      ('ipv6'.startsWith(cmd0) && tokens.length >= 4 && 'router'.startsWith(tokens[1].toLowerCase()) && 'ospf'.startsWith(tokens[2].toLowerCase()))
+    ) {
+      const pidStr = tokens[0].toLowerCase().startsWith('router') ? tokens[2] : tokens[3];
+      const pid = parseInt(pidStr, 10);
+      if (isNaN(pid) || pid < 1) return { output: `% Invalid process ID.` };
+      const target = device as Router | Switch;
+      if (!target.ospfv3Config) {
+        target.ospfv3Config = { enabled: true, processId: pid, passiveInterfaces: [] };
+      } else {
+        target.ospfv3Config.enabled = true;
+        target.ospfv3Config.processId = pid;
+      }
+      return {
+        output: '',
+        newMode: 'router-config',
+        contextUpdates: {
+          targetRoutingProcess: `ospfv3-${pid}`,
+          targetRoutingProtocol: 'ospfv3',
+          targetProcessId: pid
+        }
+      };
+    }
+
     // interface <name> / int <name>
     if ('interface'.startsWith(cmd0) || cmd0 === 'int') {
       if (tokens.length < 2) return { output: `% Incomplete command.` };
@@ -2501,6 +2539,69 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // ip ospf authentication [message-digest | null]
+    if (cmd0 === 'ip' && tokens.length >= 3 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'authentication'.startsWith(tokens[2].toLowerCase())) {
+      const auth = tokens.length >= 4 ? tokens[3].toLowerCase() : 'simple';
+      iface.ospfAuthType = auth as any;
+      return { output: '' };
+    }
+
+    // ip ospf message-digest-key <id> md5 <key>
+    if (cmd0 === 'ip' && tokens.length >= 6 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'message-digest-key'.startsWith(tokens[2].toLowerCase())) {
+      const keyId = parseInt(tokens[3], 10);
+      const key = tokens[5];
+      iface.ospfMessageDigestKey = { keyId: isNaN(keyId) ? 1 : keyId, key };
+      return { output: '' };
+    }
+
+    // ip ospf hello-interval <sec>
+    if (cmd0 === 'ip' && tokens.length >= 4 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'hello-interval'.startsWith(tokens[2].toLowerCase())) {
+      iface.ospfHelloInterval = parseInt(tokens[3], 10);
+      return { output: '' };
+    }
+
+    // ip ospf dead-interval <sec>
+    if (cmd0 === 'ip' && tokens.length >= 4 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'dead-interval'.startsWith(tokens[2].toLowerCase())) {
+      iface.ospfDeadInterval = parseInt(tokens[3], 10);
+      return { output: '' };
+    }
+
+    // ip ospf cost <cost>
+    if (cmd0 === 'ip' && tokens.length >= 4 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'cost'.startsWith(tokens[2].toLowerCase())) {
+      iface.ospfCost = parseInt(tokens[3], 10);
+      return { output: '' };
+    }
+
+    // ip ospf network <point-to-point|broadcast>
+    if (cmd0 === 'ip' && tokens.length >= 4 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'network'.startsWith(tokens[2].toLowerCase())) {
+      iface.ospfNetworkType = tokens[3].toLowerCase() as any;
+      return { output: '' };
+    }
+
+    // ospfv3 <pid> ipv6 area <area-id>
+    if (cmd0 === 'ospfv3' && tokens.length >= 5 && 'ipv6'.startsWith(tokens[2].toLowerCase()) && 'area'.startsWith(tokens[3].toLowerCase())) {
+      iface.ospfv3ProcessId = parseInt(tokens[1], 10);
+      iface.ospfv3Area = parseInt(tokens[4], 10);
+      return { output: '' };
+    }
+
+    // ipv6 ospf <pid> area <area-id>
+    if (cmd0 === 'ipv6' && tokens.length >= 5 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'area'.startsWith(tokens[3].toLowerCase())) {
+      iface.ospfv3ProcessId = parseInt(tokens[2], 10);
+      iface.ospfv3Area = parseInt(tokens[4], 10);
+      return { output: '' };
+    }
+
+    // ipv6 ospf hello-interval <sec> / dead-interval <sec>
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'hello-interval'.startsWith(tokens[2].toLowerCase())) {
+      iface.ospfHelloInterval = parseInt(tokens[3], 10);
+      return { output: '' };
+    }
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'ospf'.startsWith(tokens[1].toLowerCase()) && 'dead-interval'.startsWith(tokens[2].toLowerCase())) {
+      iface.ospfDeadInterval = parseInt(tokens[3], 10);
+      return { output: '' };
+    }
+
     // tunnel source <ip | ifaceName>
     if ('tunnel'.startsWith(cmd0) && tokens.length >= 3 && 'source'.startsWith(tokens[1].toLowerCase())) {
       iface.tunnelSource = tokens[2];
@@ -2645,6 +2746,60 @@ export class IOSCommands {
       if (_context.targetRoutingProcess.startsWith('ospf')) proto = 'ospf';
       else if (_context.targetRoutingProcess.startsWith('eigrp')) proto = 'eigrp';
       else if (_context.targetRoutingProcess.startsWith('bgp')) proto = 'bgp';
+    }
+
+    // OSPF area stub: area <area> stub [no-summary]
+    if ('area'.startsWith(cmd0) && tokens.length >= 3 && 'stub'.startsWith(tokens[2].toLowerCase())) {
+      const area = parseInt(tokens[1], 10);
+      const isNoSummary = tokens.length >= 4 && 'no-summary'.startsWith(tokens[3].toLowerCase());
+      const areaType = isNoSummary ? 'totally-stubby' : 'stub';
+      if (target.ospfConfig) {
+        if (!target.ospfConfig.areaTypes) target.ospfConfig.areaTypes = {};
+        target.ospfConfig.areaTypes[area] = areaType;
+      }
+      if (target.ospfv3Config) {
+        if (!target.ospfv3Config.areaTypes) target.ospfv3Config.areaTypes = {};
+        target.ospfv3Config.areaTypes[area] = areaType;
+      }
+      return { output: '' };
+    }
+
+    // OSPF area nssa: area <area> nssa [no-summary]
+    if ('area'.startsWith(cmd0) && tokens.length >= 3 && 'nssa'.startsWith(tokens[2].toLowerCase())) {
+      const area = parseInt(tokens[1], 10);
+      const isNoSummary = tokens.length >= 4 && 'no-summary'.startsWith(tokens[3].toLowerCase());
+      const areaType = isNoSummary ? 'totally-nssa' : 'nssa';
+      if (target.ospfConfig) {
+        if (!target.ospfConfig.areaTypes) target.ospfConfig.areaTypes = {};
+        target.ospfConfig.areaTypes[area] = areaType;
+      }
+      if (target.ospfv3Config) {
+        if (!target.ospfv3Config.areaTypes) target.ospfv3Config.areaTypes = {};
+        target.ospfv3Config.areaTypes[area] = areaType;
+      }
+      return { output: '' };
+    }
+
+    // OSPF area authentication: area <area> authentication [message-digest]
+    if ('area'.startsWith(cmd0) && tokens.length >= 3 && 'authentication'.startsWith(tokens[2].toLowerCase())) {
+      const area = parseInt(tokens[1], 10);
+      const authType = tokens.length >= 4 && 'message-digest'.startsWith(tokens[3].toLowerCase()) ? 'message-digest' : 'simple';
+      if (target.ospfConfig) {
+        if (!target.ospfConfig.areaAuth) target.ospfConfig.areaAuth = {};
+        target.ospfConfig.areaAuth[area] = authType;
+        return { output: '' };
+      }
+    }
+
+    // OSPF summary-address: summary-address <network> <mask|cidr>
+    if ('summary-address'.startsWith(cmd0) && tokens.length >= 3) {
+      const net = tokens[1];
+      const mask = tokens[2];
+      if (target.ospfConfig) {
+        if (!target.ospfConfig.summaryAddresses) target.ospfConfig.summaryAddresses = [];
+        target.ospfConfig.summaryAddresses.push({ network: net, mask });
+        return { output: '' };
+      }
     }
 
     // OSPF area range: area <area> range <network> <mask>
