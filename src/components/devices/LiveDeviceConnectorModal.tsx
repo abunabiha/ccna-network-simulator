@@ -35,7 +35,7 @@ export const LiveDeviceConnectorModal: React.FC<LiveDeviceConnectorModalProps> =
   const [activeTab, setActiveTab] = useState<'bridge' | 'direct_device' | 'ping_probe'>('bridge');
 
   // Real Host Network info (retrieved/estimated via browser networking APIs)
-  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [hostGatewayIp, setHostGatewayIp] = useState<string>('192.168.1.1');
   const [hostLocalIp, setHostLocalIp] = useState<string>('192.168.1.100');
   const [selectedNic, setSelectedNic] = useState<string>('en0 (Wi-Fi 802.11ax)');
@@ -143,7 +143,7 @@ export const LiveDeviceConnectorModal: React.FC<LiveDeviceConnectorModalProps> =
       let status: 'reply' | 'timeout' | 'error' = 'reply';
 
       try {
-        if (!navigator.onLine) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
           status = 'timeout';
         } else {
           // Probe live network latency using public DoH or timing check
@@ -153,7 +153,7 @@ export const LiveDeviceConnectorModal: React.FC<LiveDeviceConnectorModalProps> =
           latency = Math.max(3, Math.round(endTime - startTime));
         }
       } catch {
-        if (!navigator.onLine) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
           status = 'timeout';
         } else {
           latency = Math.floor(Math.random() * 8 + 12);

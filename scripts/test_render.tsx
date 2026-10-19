@@ -1,3 +1,11 @@
+if (typeof (globalThis as any).navigator === 'undefined') {
+  (globalThis as any).navigator = {
+    onLine: true,
+    userAgent: 'Node.js',
+    clipboard: { writeText: async () => {} }
+  };
+}
+
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import App from '../src/App';
