@@ -12,6 +12,7 @@ import { RoutingProtocolEngine } from '../network/RoutingProtocolEngine';
 import { FhrpEngine } from '../network/FhrpEngine';
 import { PolicyEngine } from '../network/PolicyEngine';
 import { VrfEngine } from '../network/VrfEngine';
+import { SecurityVpnEngine } from '../network/SecurityVpnEngine';
 import { TopologyTraversal } from '../network/TopologyTraversal';
 
 export class IOSCommands {
@@ -241,6 +242,69 @@ export class IOSCommands {
           { command: 'end', description: 'Exit to privileged EXEC mode' }
         );
         break;
+
+      case 'crypto-isakmp-policy':
+        list.push(
+          { command: 'encryption', description: 'Set type of encryption algorithm' },
+          { command: 'hash', description: 'Set type of hash algorithm' },
+          { command: 'authentication', description: 'Set type of authentication' },
+          { command: 'group', description: 'Set Diffie-Hellman group' },
+          { command: 'lifetime', description: 'Set lifetime for ISAKMP SA' },
+          { command: 'exit', description: 'Exit from ISAKMP policy configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'crypto-ipsec-profile':
+        list.push(
+          { command: 'set transform-set', description: 'Specify transform-set for profile' },
+          { command: 'exit', description: 'Exit from IPsec profile configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'zone-pair-config':
+        list.push(
+          { command: 'service-policy type inspect', description: 'Attach inspection service policy' },
+          { command: 'exit', description: 'Exit from zone-pair configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'class-map-inspect':
+        list.push(
+          { command: 'match protocol', description: 'Match protocol name' },
+          { command: 'match access-group', description: 'Match access-list number' },
+          { command: 'exit', description: 'Exit from class-map configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'policy-map-inspect':
+        list.push(
+          { command: 'class type inspect', description: 'Specify inspection class' },
+          { command: 'exit', description: 'Exit from policy-map configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'policy-map-class-inspect':
+        list.push(
+          { command: 'inspect', description: 'Stateful packet inspection' },
+          { command: 'pass', description: 'Pass packet without state tracking' },
+          { command: 'drop', description: 'Drop packet' },
+          { command: 'exit', description: 'Exit from policy-map class configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
+
+      case 'control-plane-config':
+        list.push(
+          { command: 'service-policy input', description: 'Attach policing policy map to control plane' },
+          { command: 'exit', description: 'Exit from control-plane configuration mode' },
+          { command: 'end', description: 'Exit to privileged EXEC mode' }
+        );
+        break;
     }
 
     return list;
@@ -325,6 +389,20 @@ export class IOSCommands {
         return this.execVrfConfigMode(tokens, raw, context, device);
       case 'vrf-af-config':
         return this.execVrfAfConfigMode(tokens, raw, context, device);
+      case 'crypto-isakmp-policy':
+        return this.execCryptoIsakmpPolicyMode(tokens, raw, context, device);
+      case 'crypto-ipsec-profile':
+        return this.execCryptoIpsecProfileMode(tokens, raw, context, device);
+      case 'zone-pair-config':
+        return this.execZonePairConfigMode(tokens, raw, context, device);
+      case 'class-map-inspect':
+        return this.execClassMapInspectMode(tokens, raw, context, device);
+      case 'policy-map-inspect':
+        return this.execPolicyMapInspectMode(tokens, raw, context, device);
+      case 'policy-map-class-inspect':
+        return this.execPolicyMapClassInspectMode(tokens, raw, context, device);
+      case 'control-plane-config':
+        return this.execControlPlaneConfigMode(tokens, raw, context, device);
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -514,6 +592,11 @@ export class IOSCommands {
         // show ip arp
         if ('arp'.startsWith(cmd2)) {
           return this.handleShowIpArp(tokens.slice(3), device);
+        }
+
+        // show ip nhrp
+        if ('nhrp'.startsWith(cmd2) && device instanceof Router) {
+          return { output: SecurityVpnEngine.renderShowIpNhrp(device) };
         }
 
         // show ip interface brief
@@ -719,6 +802,41 @@ export class IOSCommands {
         }
         return { output: VrfEngine.renderShowMplsInterfaces(device as Router | Switch) };
       }
+
+      // show crypto ...
+      if ('crypto'.startsWith(cmd1) && device instanceof Router) {
+        if (tokens.length >= 4 && 'isakmp'.startsWith(tokens[2].toLowerCase()) && 'sa'.startsWith(tokens[3].toLowerCase())) {
+          return { output: SecurityVpnEngine.renderShowCryptoIsakmpSa(device) };
+        }
+        if (tokens.length >= 4 && 'ipsec'.startsWith(tokens[2].toLowerCase()) && 'sa'.startsWith(tokens[3].toLowerCase())) {
+          return { output: SecurityVpnEngine.renderShowCryptoIpsecSa(device) };
+        }
+        if (tokens.length >= 3 && 'session'.startsWith(tokens[2].toLowerCase())) {
+          return { output: SecurityVpnEngine.renderShowCryptoSession(device) };
+        }
+        return { output: SecurityVpnEngine.renderShowCryptoSession(device) };
+      }
+
+      // show zone security
+      if ('zone'.startsWith(cmd1) && device instanceof Router) {
+        return { output: SecurityVpnEngine.renderShowZoneSecurity(device) };
+      }
+
+      // show zone-pair security
+      if ('zone-pair'.startsWith(cmd1) && device instanceof Router) {
+        return { output: SecurityVpnEngine.renderShowZonePairSecurity(device) };
+      }
+
+      // show policy-map ...
+      if ('policy-map'.startsWith(cmd1) && device instanceof Router) {
+        if (tokens.length >= 3 && 'control-plane'.startsWith(tokens[2].toLowerCase())) {
+          return { output: SecurityVpnEngine.renderShowPolicyMapControlPlane(device) };
+        }
+        if (tokens.length >= 3 && tokens[2].toLowerCase() === 'type' && tokens[3]?.toLowerCase() === 'inspect') {
+          const zpName = tokens.length >= 6 ? tokens[5] : (tokens.length >= 5 && !'zone-pair'.startsWith(tokens[4].toLowerCase()) ? tokens[4] : undefined);
+          return { output: SecurityVpnEngine.renderShowPolicyMapInspect(device, zpName) };
+        }
+      }
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -836,6 +954,10 @@ export class IOSCommands {
           device.addInterface(poIface);
           iface = poIface;
         }
+      }
+
+      if (!iface && normalized.startsWith('Tunnel') && device instanceof Router) {
+        iface = device.getOrCreateTunnel(normalized);
       }
 
       if (iface) {
@@ -1529,6 +1651,125 @@ export class IOSCommands {
       }
     }
 
+    // crypto isakmp policy <priority>
+    if ('crypto'.startsWith(cmd0) && tokens.length >= 4 && 'isakmp'.startsWith(tokens[1].toLowerCase()) && 'policy'.startsWith(tokens[2].toLowerCase())) {
+      const prio = parseInt(tokens[3], 10);
+      if (isNaN(prio) || prio < 1 || prio > 10000) return { output: '% Invalid priority (1-10000).' };
+      if (device instanceof Router) {
+        if (!device.cryptoPolicies.has(prio)) {
+          device.cryptoPolicies.set(prio, { priority: prio });
+        }
+      }
+      return {
+        output: '',
+        newMode: 'crypto-isakmp-policy',
+        contextUpdates: { targetIsakmpPriority: prio }
+      };
+    }
+
+    // crypto isakmp key <secret> address <peer>
+    if ('crypto'.startsWith(cmd0) && tokens.length >= 6 && 'isakmp'.startsWith(tokens[1].toLowerCase()) && 'key'.startsWith(tokens[2].toLowerCase()) && 'address'.startsWith(tokens[4].toLowerCase())) {
+      if (device instanceof Router) {
+        device.cryptoKeys = device.cryptoKeys.filter(k => k.address !== tokens[5]);
+        device.cryptoKeys.push({ key: tokens[3], address: tokens[5] });
+      }
+      return { output: '' };
+    }
+
+    // crypto ipsec transform-set <name> <transforms...>
+    if ('crypto'.startsWith(cmd0) && tokens.length >= 5 && 'ipsec'.startsWith(tokens[1].toLowerCase()) && 'transform-set'.startsWith(tokens[2].toLowerCase())) {
+      const tsName = tokens[3];
+      const transforms = tokens.slice(4);
+      if (device instanceof Router) {
+        device.cryptoTransformSets.set(tsName, { name: tsName, transforms });
+      }
+      return { output: '' };
+    }
+
+    // crypto ipsec profile <name>
+    if ('crypto'.startsWith(cmd0) && tokens.length >= 4 && 'ipsec'.startsWith(tokens[1].toLowerCase()) && 'profile'.startsWith(tokens[2].toLowerCase())) {
+      const profName = tokens[3];
+      if (device instanceof Router) {
+        if (!device.cryptoProfiles.has(profName)) {
+          device.cryptoProfiles.set(profName, { name: profName });
+        }
+      }
+      return {
+        output: '',
+        newMode: 'crypto-ipsec-profile',
+        contextUpdates: { targetIpsecProfileName: profName }
+      };
+    }
+
+    // zone security <name>
+    if ('zone'.startsWith(cmd0) && tokens.length >= 3 && 'security'.startsWith(tokens[1].toLowerCase())) {
+      const zName = tokens[2];
+      if (device instanceof Router) {
+        if (!device.securityZones.has(zName)) {
+          device.securityZones.set(zName, { name: zName, interfaces: [] });
+        }
+      }
+      return { output: '' };
+    }
+
+    // zone-pair security <name> source <src> destination <dst>
+    if ('zone-pair'.startsWith(cmd0) && tokens.length >= 7 && 'security'.startsWith(tokens[1].toLowerCase()) && 'source'.startsWith(tokens[3].toLowerCase()) && 'destination'.startsWith(tokens[5].toLowerCase())) {
+      const zpName = tokens[2];
+      const srcZone = tokens[4];
+      const dstZone = tokens[6];
+      if (device instanceof Router) {
+        device.zonePairs.set(zpName, { name: zpName, sourceZone: srcZone, destinationZone: dstZone });
+      }
+      return {
+        output: '',
+        newMode: 'zone-pair-config',
+        contextUpdates: { targetZonePairName: zpName }
+      };
+    }
+
+    // class-map type inspect [match-any | match-all] <name>
+    if ('class-map'.startsWith(cmd0) && tokens.length >= 4 && tokens[1].toLowerCase() === 'type' && tokens[2].toLowerCase() === 'inspect') {
+      let matchType: 'match-any' | 'match-all' = 'match-all';
+      let cmName = tokens[3];
+      if (tokens.length >= 5 && (tokens[3].toLowerCase() === 'match-any' || tokens[3].toLowerCase() === 'match-all')) {
+        matchType = tokens[3].toLowerCase() as any;
+        cmName = tokens[4];
+      }
+      if (device instanceof Router) {
+        if (!device.inspectClassMaps.has(cmName)) {
+          device.inspectClassMaps.set(cmName, { name: cmName, matchType, matches: [] });
+        }
+      }
+      return {
+        output: '',
+        newMode: 'class-map-inspect',
+        contextUpdates: { targetClassMapName: cmName }
+      };
+    }
+
+    // policy-map type inspect <name>
+    if ('policy-map'.startsWith(cmd0) && tokens.length >= 4 && tokens[1].toLowerCase() === 'type' && tokens[2].toLowerCase() === 'inspect') {
+      const pmName = tokens[3];
+      if (device instanceof Router) {
+        if (!device.inspectPolicyMaps.has(pmName)) {
+          device.inspectPolicyMaps.set(pmName, { name: pmName, classes: [] });
+        }
+      }
+      return {
+        output: '',
+        newMode: 'policy-map-inspect',
+        contextUpdates: { targetPolicyMapName: pmName }
+      };
+    }
+
+    // control-plane
+    if ('control-plane'.startsWith(cmd0)) {
+      return {
+        output: '',
+        newMode: 'control-plane-config'
+      };
+    }
+
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
@@ -2054,6 +2295,114 @@ export class IOSCommands {
     // no mpls ip
     if (cmd0 === 'no' && tokens.length >= 3 && 'mpls'.startsWith(tokens[1].toLowerCase()) && 'ip'.startsWith(tokens[2].toLowerCase())) {
       VrfEngine.disableMplsOnInterface(device as Router | Switch, iface.name);
+      return { output: '' };
+    }
+
+    // tunnel source <ip | ifaceName>
+    if ('tunnel'.startsWith(cmd0) && tokens.length >= 3 && 'source'.startsWith(tokens[1].toLowerCase())) {
+      iface.tunnelSource = tokens[2];
+      return { output: '' };
+    }
+
+    // tunnel destination <ip>
+    if ('tunnel'.startsWith(cmd0) && tokens.length >= 3 && 'destination'.startsWith(tokens[1].toLowerCase())) {
+      iface.tunnelDestination = tokens[2];
+      return { output: '' };
+    }
+
+    // tunnel mode <mode...>
+    if ('tunnel'.startsWith(cmd0) && tokens.length >= 3 && 'mode'.startsWith(tokens[1].toLowerCase())) {
+      iface.tunnelMode = tokens.slice(2).join(' ').toLowerCase();
+      return { output: '' };
+    }
+
+    // tunnel protection ipsec profile <name>
+    if (
+      'tunnel'.startsWith(cmd0) &&
+      tokens.length >= 5 &&
+      'protection'.startsWith(tokens[1].toLowerCase()) &&
+      'ipsec'.startsWith(tokens[2].toLowerCase()) &&
+      'profile'.startsWith(tokens[3].toLowerCase())
+    ) {
+      iface.tunnelProtectionProfile = tokens[4];
+      return { output: '' };
+    }
+
+    // ip nhrp network-id <id>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 4 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'network-id'.startsWith(tokens[2].toLowerCase())) {
+      const netId = parseInt(tokens[3], 10);
+      iface.nhrpNetworkId = isNaN(netId) ? 1 : netId;
+      return { output: '' };
+    }
+
+    // ip nhrp map multicast <nbmaIp>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'map'.startsWith(tokens[2].toLowerCase()) && 'multicast'.startsWith(tokens[3].toLowerCase())) {
+      if (!iface.nhrpMaps) iface.nhrpMaps = [];
+      iface.nhrpMaps.push({ nbmaIp: tokens[4], multicast: true });
+      return { output: '' };
+    }
+
+    // ip nhrp map <protoIp> <nbmaIp>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'map'.startsWith(tokens[2].toLowerCase())) {
+      if (!iface.nhrpMaps) iface.nhrpMaps = [];
+      iface.nhrpMaps.push({ protocolIp: tokens[3], nbmaIp: tokens[4] });
+      if (device instanceof Router) {
+        const ex = device.nhrpCache.findIndex(e => e.protocolIp === tokens[3]);
+        const ent = { protocolIp: tokens[3], nbmaIp: tokens[4], type: 'static' as const, flags: 'authoritative' };
+        if (ex >= 0) device.nhrpCache[ex] = ent;
+        else device.nhrpCache.push(ent);
+      }
+      return { output: '' };
+    }
+
+    // ip nhrp nhs <protoIp> [nbma <nbmaIp>]
+    if ('ip'.startsWith(cmd0) && tokens.length >= 4 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'nhs'.startsWith(tokens[2].toLowerCase())) {
+      iface.nhrpNhsIp = tokens[3];
+      if (tokens.length >= 6 && 'nbma'.startsWith(tokens[4].toLowerCase())) {
+        iface.nhrpNhsNbma = tokens[5];
+      }
+      // Register with hub if found in allDevices
+      if (device instanceof Router) {
+        for (const other of allDevices) {
+          if (other instanceof Router && other.id !== device.id) {
+            for (const otherIfc of other.interfaces.values()) {
+              if (otherIfc.ipAddress === iface.nhrpNhsIp || (iface.nhrpNhsNbma && otherIfc.ipAddress === iface.nhrpNhsNbma)) {
+                SecurityVpnEngine.registerSpokeNhrp(
+                  device,
+                  other,
+                  iface.ipAddress || '',
+                  Array.from(device.interfaces.values()).find(i => i.ipAddress && !i.name.startsWith('Tu') && !i.name.startsWith('Lo'))?.ipAddress || '',
+                  iface.nhrpNhsIp,
+                  iface.nhrpNhsNbma || otherIfc.ipAddress || '',
+                  iface.nhrpNetworkId || 1
+                );
+                break;
+              }
+            }
+          }
+        }
+      }
+      return { output: '' };
+    }
+
+    // zone-member security <zoneName>
+    if ('zone-member'.startsWith(cmd0) && tokens.length >= 3 && 'security'.startsWith(tokens[1].toLowerCase())) {
+      const zName = tokens[2];
+      iface.zoneMemberSecurity = zName;
+      if (device instanceof Router) {
+        if (!device.securityZones.has(zName)) {
+          device.securityZones.set(zName, { name: zName, interfaces: [iface.name] });
+        } else {
+          const z = device.securityZones.get(zName)!;
+          if (!z.interfaces.includes(iface.name)) z.interfaces.push(iface.name);
+        }
+      }
+      return { output: '' };
+    }
+
+    // no zone-member security
+    if (cmd0 === 'no' && tokens.length >= 3 && 'zone-member'.startsWith(tokens[1].toLowerCase())) {
+      iface.zoneMemberSecurity = undefined;
       return { output: '' };
     }
 
@@ -2697,6 +3046,297 @@ export class IOSCommands {
         output: '',
         newMode: 'vrf-config'
       };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== CRYPTO ISAKMP POLICY CONFIG MODE =====================
+  private static execCryptoIsakmpPolicyMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const prio = context.targetIsakmpPriority;
+    if (!prio || !(device instanceof Router)) return { output: '% No ISAKMP policy selected.' };
+
+    let policy = device.cryptoPolicies.get(prio);
+    if (!policy) {
+      policy = { priority: prio };
+      device.cryptoPolicies.set(prio, policy);
+    }
+
+    // encryption / encr <alg>
+    if (('encryption'.startsWith(cmd0) || 'encr'.startsWith(cmd0)) && tokens.length > 1) {
+      policy.encryption = tokens.slice(1).join(' ');
+      return { output: '' };
+    }
+
+    // hash <alg>
+    if ('hash'.startsWith(cmd0) && tokens.length > 1) {
+      policy.hash = tokens[1];
+      return { output: '' };
+    }
+
+    // authentication <type>
+    if ('authentication'.startsWith(cmd0) && tokens.length > 1) {
+      policy.authentication = tokens[1];
+      return { output: '' };
+    }
+
+    // group <group-num>
+    if ('group'.startsWith(cmd0) && tokens.length > 1) {
+      policy.group = parseInt(tokens[1], 10);
+      return { output: '' };
+    }
+
+    // lifetime <seconds>
+    if ('lifetime'.startsWith(cmd0) && tokens.length > 1) {
+      policy.lifetime = parseInt(tokens[1], 10);
+      return { output: '' };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== CRYPTO IPSEC PROFILE CONFIG MODE =====================
+  private static execCryptoIpsecProfileMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const profName = context.targetIpsecProfileName;
+    if (!profName || !(device instanceof Router)) return { output: '% No IPsec profile selected.' };
+
+    let prof = device.cryptoProfiles.get(profName);
+    if (!prof) {
+      prof = { name: profName };
+      device.cryptoProfiles.set(profName, prof);
+    }
+
+    // set transform-set <name>
+    if (cmd0 === 'set' && tokens.length >= 3 && 'transform-set'.startsWith(tokens[1].toLowerCase())) {
+      prof.transformSet = tokens[2];
+      return { output: '' };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== ZONE-PAIR CONFIG MODE =====================
+  private static execZonePairConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const zpName = context.targetZonePairName;
+    if (!zpName || !(device instanceof Router)) return { output: '% No zone-pair selected.' };
+
+    const zp = device.zonePairs.get(zpName);
+    if (!zp) return { output: `% Zone-pair ${zpName} not found.` };
+
+    // service-policy type inspect <name>
+    if ('service-policy'.startsWith(cmd0) && tokens.length >= 4 && tokens[1].toLowerCase() === 'type' && tokens[2].toLowerCase() === 'inspect') {
+      zp.servicePolicy = tokens[3];
+      return { output: '' };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== CLASS-MAP INSPECT CONFIG MODE =====================
+  private static execClassMapInspectMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const cmName = context.targetClassMapName;
+    if (!cmName || !(device instanceof Router)) return { output: '% No class-map selected.' };
+
+    const cm = device.inspectClassMaps.get(cmName);
+    if (!cm) return { output: `% Class-map ${cmName} not found.` };
+
+    // match protocol <protocol>
+    if ('match'.startsWith(cmd0) && tokens.length >= 3 && 'protocol'.startsWith(tokens[1].toLowerCase())) {
+      cm.matches.push({ type: 'protocol', protocol: tokens[2].toLowerCase() });
+      return { output: '' };
+    }
+
+    // match access-group <num>
+    if ('match'.startsWith(cmd0) && tokens.length >= 3 && 'access-group'.startsWith(tokens[1].toLowerCase())) {
+      const aclNum = parseInt(tokens[2], 10);
+      cm.matches.push({ type: 'access-group', accessGroup: isNaN(aclNum) ? 1 : aclNum });
+      return { output: '' };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== POLICY-MAP INSPECT CONFIG MODE =====================
+  private static execPolicyMapInspectMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const pmName = context.targetPolicyMapName;
+    if (!pmName || !(device instanceof Router)) return { output: '% No policy-map selected.' };
+
+    const pm = device.inspectPolicyMaps.get(pmName);
+    if (!pm) return { output: `% Policy-map ${pmName} not found.` };
+
+    // class type inspect <className>
+    if ('class'.startsWith(cmd0) && tokens.length >= 4 && tokens[1].toLowerCase() === 'type' && tokens[2].toLowerCase() === 'inspect') {
+      const className = tokens[3];
+      let pClass = pm.classes.find(c => c.className === className);
+      if (!pClass) {
+        pClass = { className, action: 'drop' };
+        pm.classes.push(pClass);
+      }
+      return {
+        output: '',
+        newMode: 'policy-map-class-inspect',
+        contextUpdates: { targetPolicyMapClass: className }
+      };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== POLICY-MAP CLASS INSPECT CONFIG MODE =====================
+  private static execPolicyMapClassInspectMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const pmName = context.targetPolicyMapName;
+    const className = context.targetPolicyMapClass;
+    if (!pmName || !className || !(device instanceof Router)) return { output: '% No class selected.' };
+
+    const pm = device.inspectPolicyMaps.get(pmName);
+    const pClass = pm?.classes.find(c => c.className === className);
+    if (!pClass) return { output: `% Class ${className} not found in policy.` };
+
+    // inspect
+    if ('inspect'.startsWith(cmd0)) {
+      pClass.action = 'inspect';
+      return { output: '' };
+    }
+
+    // pass
+    if ('pass'.startsWith(cmd0)) {
+      pClass.action = 'pass';
+      return { output: '' };
+    }
+
+    // drop
+    if ('drop'.startsWith(cmd0)) {
+      pClass.action = 'drop';
+      return { output: '' };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'policy-map-inspect' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== CONTROL PLANE CONFIG MODE =====================
+  private static execControlPlaneConfigMode(
+    tokens: string[],
+    _raw: string,
+    _context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    if (!(device instanceof Router)) return { output: '% Control plane not supported on this device.' };
+
+    // service-policy input <policyName>
+    if ('service-policy'.startsWith(cmd0) && tokens.length >= 3 && 'input'.startsWith(tokens[1].toLowerCase())) {
+      const pName = tokens[2];
+      device.coppPolicy = {
+        name: pName,
+        classes: [{ className: 'class-default', rateLimitBps: 1000000 }]
+      };
+      return { output: '' };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };

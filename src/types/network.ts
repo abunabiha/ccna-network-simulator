@@ -111,6 +111,149 @@ export interface InterfaceConfig {
 
   // Multiprotocol Label Switching (MPLS) per interface
   mplsEnabled?: boolean;
+
+  // GRE Tunnel, IPsec & DMVPN/NHRP per interface
+  tunnelSource?: string;
+  tunnelDestination?: string;
+  tunnelMode?: 'gre ip' | 'gre multipoint' | 'ipsec ipv4' | string;
+  tunnelProtectionProfile?: string;
+  nhrpNetworkId?: number;
+  nhrpMaps?: { protocolIp?: string; nbmaIp: string; multicast?: boolean }[];
+  nhrpNhsIp?: string;
+  nhrpNhsNbma?: string;
+
+  // Zone-Based Policy Firewall (ZBFW) per interface
+  zoneMemberSecurity?: string;
+}
+
+// ==================== TAHAP 6: SECURITY & VPN SERVICES ====================
+
+export interface CryptoIsakmpPolicy {
+  priority: number;
+  encryption?: 'aes' | 'aes 256' | '3des' | 'des' | string;
+  hash?: 'sha' | 'sha256' | 'md5' | string;
+  authentication?: 'pre-share' | string;
+  group?: 2 | 5 | 14 | number;
+  lifetime?: number;
+}
+
+export interface CryptoIsakmpKey {
+  key: string;
+  address: string;
+}
+
+export interface CryptoTransformSet {
+  name: string;
+  transforms: string[];
+  espCipher?: string;
+  espAuth?: string;
+}
+
+export interface CryptoIpsecProfile {
+  name: string;
+  transformSet?: string;
+}
+
+export interface CryptoSession {
+  peerIp: string;
+  interfaceName: string;
+  status?: 'UP-ACTIVE' | 'DOWN' | string;
+  ikeState: 'QM_IDLE' | 'MM_ACTIVE' | string;
+  ikeSaState?: 'QM_IDLE' | 'MM_ACTIVE';
+  ipsecState: 'ACTIVE' | 'DOWN' | string;
+  inboundSpi: string;
+  outboundSpi: string;
+  transform: string;
+  pktsEncrypted: number;
+  pktsDecrypted: number;
+  ipsecInPkts?: number;
+  ipsecOutPkts?: number;
+  profile?: string;
+}
+
+export interface NhrpMappingEntry {
+  protocolIp: string;
+  nbmaIp: string;
+  type: 'static' | 'dynamic';
+  flags?: string;
+  flag?: 'unique' | 'router' | 'used';
+  tunnelInterface?: string;
+  networkId?: number;
+}
+
+export interface SecurityZone {
+  name: string;
+  interfaces: string[];
+}
+
+export interface ClassMapInspectMatch {
+  type: 'protocol' | 'access-group';
+  protocol?: string;
+  accessGroup?: number;
+}
+
+export interface ClassMapInspect {
+  name: string;
+  matchType: 'match-any' | 'match-all';
+  matchAcl?: string;
+  matchProtocols?: string[];
+  matches: ClassMapInspectMatch[];
+}
+
+export interface PolicyMapInspectClass {
+  className: string;
+  action: 'inspect' | 'pass' | 'drop';
+}
+
+export interface PolicyMapInspect {
+  name: string;
+  classes: PolicyMapInspectClass[];
+}
+
+export interface ZonePair {
+  name: string;
+  sourceZone: string;
+  destinationZone: string;
+  servicePolicy?: string;
+}
+
+export interface ZbfwSession {
+  id: string;
+  zonePair?: string;
+  srcZone: string;
+  dstZone: string;
+  sourceIp?: string;
+  srcIp: string;
+  destIp?: string;
+  dstIp: string;
+  protocol: string;
+  srcPort?: number;
+  dstPort?: number;
+  state: 'ESTABLISHED' | 'OPEN' | 'established' | string;
+  expiresAt: number;
+  lastActivity?: number;
+}
+
+export interface CoppClass {
+  name?: string;
+  className: string;
+  matchAcl?: string;
+  matchProtocols?: string[];
+  policeRateBps?: number;
+  rateLimitBps?: number;
+  conformAction?: 'transmit';
+  exceedAction?: 'drop';
+}
+
+export interface CoppPolicy {
+  name: string;
+  classes: CoppClass[];
+}
+
+export interface CoppState {
+  policyMapName?: string;
+  transmittedPkts: number;
+  droppedPkts: number;
 }
 
 export interface VrfRouteTarget {

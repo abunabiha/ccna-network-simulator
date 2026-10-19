@@ -16,6 +16,7 @@ import { DhcpPool } from '../../types/network';
 import { RoutingProtocolEngine } from './RoutingProtocolEngine';
 import { FhrpEngine } from './FhrpEngine';
 import { PolicyEngine } from './PolicyEngine';
+import { SecurityVpnEngine } from './SecurityVpnEngine';
 
 export interface L2Endpoint {
   device: Device;
@@ -580,6 +581,182 @@ export class TopologyTraversal {
             icmpType: 'timed-out',
             reason: `Antarmuka keluar router (${currentExitIface.name}) berstatus shutdown atau down.`
           };
+        }
+
+        // ZBFW Evaluation on ingress -> egress transition
+        if (gwIface && currentRouter === router) {
+          const zbfwRes = SecurityVpnEngine.evaluateZbfw(currentRouter, gwIface.name, currentExitIface.name, {
+            srcIp: sourceHost.ipAddress,
+            dstIp: destIp,
+            protocol: 'icmp'
+          });
+          if (zbfwRes.action === 'drop') {
+            return {
+              isReachable: false,
+              icmpType: 'timed-out',
+              reason: zbfwRes.reason
+            };
+          }
+        }
+
+        // Handle Tunnel Interface Forwarding (GRE / GRE over IPsec / DMVPN)
+        if (currentExitIface.name.startsWith('Tunnel') || currentExitIface.name.startsWith('Tu')) {
+          let remoteUnderlayIp = currentExitIface.tunnelDestination;
+          if (!remoteUnderlayIp && currentExitIface.nhrpMaps) {
+            const map = currentExitIface.nhrpMaps.find((m: { protocolIp?: string; nbmaIp: string }) => m.protocolIp === targetForwardIp);
+            if (map) remoteUnderlayIp = map.nbmaIp;
+          }
+          if (!remoteUnderlayIp && currentRouter.nhrpCache) {
+            const cacheEntry = currentRouter.nhrpCache.find(e => e.protocolIp === targetForwardIp);
+            if (cacheEntry) remoteUnderlayIp = cacheEntry.nbmaIp;
+          }
+
+          if (!remoteUnderlayIp) {
+            return {
+              isReachable: false,
+              icmpType: 'timed-out',
+              reason: `Tunnel destination or NHRP mapping not found on ${currentExitIface.name} for target ${targetForwardIp}`
+            };
+          }
+
+          // Locate remote router by underlay IP
+          let remoteRouter: Router | null = null;
+          for (const d of allDevices) {
+            if (d instanceof Router && d.id !== currentRouter.id) {
+              for (const ifc of d.interfaces.values()) {
+                if (ifc.ipAddress === remoteUnderlayIp) {
+                  remoteRouter = d;
+                  break;
+                }
+              }
+              if (remoteRouter) break;
+            }
+          }
+
+          if (!remoteRouter) {
+            return {
+              isReachable: false,
+              icmpType: 'dest-host-unreachable',
+              reason: `Underlay destination ${remoteUnderlayIp} unreachable for tunnel ${currentExitIface.name}`
+            };
+          }
+
+          // IPsec Protection SA verification / negotiation
+          if (currentExitIface.tunnelProtectionProfile) {
+            let localUnderlayIp = currentExitIface.tunnelSource;
+            if (localUnderlayIp && currentRouter.interfaces.has(localUnderlayIp)) {
+              localUnderlayIp = currentRouter.interfaces.get(localUnderlayIp)?.ipAddress;
+            }
+            if (!localUnderlayIp) {
+              const phys = Array.from(currentRouter.interfaces.values()).find(i => !i.name.startsWith('Tu') && !i.name.startsWith('Lo') && i.ipAddress);
+              localUnderlayIp = phys?.ipAddress;
+            }
+            const ipsecRes = SecurityVpnEngine.negotiateIpsec(
+              currentRouter,
+              remoteRouter,
+              localUnderlayIp || '0.0.0.0',
+              remoteUnderlayIp,
+              currentExitIface.name,
+              currentExitIface.tunnelProtectionProfile
+            );
+            if (!ipsecRes.success) {
+              return {
+                isReachable: false,
+                icmpType: 'timed-out',
+                reason: `IPsec SA negotiation failed on ${currentExitIface.name}: ${ipsecRes.reason}`
+              };
+            }
+          }
+
+          // Remote tunnel interface on remote router
+          let remoteTunnelIface = Array.from(remoteRouter.interfaces.values()).find(
+            i => (i.name.startsWith('Tu') || i.name.startsWith('Tunnel')) &&
+                 i.ipAddress &&
+                 currentExitIface.subnetMask &&
+                 SubnetUtils.isSameSubnet(currentExitIface.ipAddress, i.ipAddress, currentExitIface.subnetMask)
+          );
+          if (!remoteTunnelIface) {
+            remoteTunnelIface = Array.from(remoteRouter.interfaces.values()).find(
+              i => i.name.startsWith('Tu') || i.name.startsWith('Tunnel')
+            );
+          }
+
+          // Target reached on remote router interface
+          if (Array.from(remoteRouter.interfaces.values()).some(i => i.ipAddress === destIp)) {
+            // Check CoPP on remote router
+            const coppRes = SecurityVpnEngine.evaluateCopp(remoteRouter, {
+              srcIp: sourceHost.ipAddress,
+              dstIp: destIp,
+              protocol: 'icmp'
+            });
+            if (coppRes.action === 'drop') {
+              return {
+                isReachable: false,
+                icmpType: 'timed-out',
+                reason: coppRes.reason
+              };
+            }
+            return {
+              isReachable: true,
+              icmpType: 'reply',
+              respondingIp: destIp,
+              hops: [...hops, currentExitIface.ipAddress || '', destIp]
+            };
+          }
+
+          visitedRouters.add(remoteRouter.id);
+          hops.push(remoteTunnelIface?.ipAddress || remoteUnderlayIp);
+
+          const remoteRoute = remoteRouter.lookupRoute(destIp);
+          if (!remoteRoute) {
+            return {
+              isReachable: false,
+              icmpType: 'dest-net-unreachable',
+              respondingIp: remoteTunnelIface?.ipAddress || remoteUnderlayIp,
+              reason: `Remote router ${remoteRouter.hostname} has no route to ${destIp}`
+            };
+          }
+
+          let remoteExit = remoteRoute.exitInterface ? remoteRouter.interfaces.get(remoteRoute.exitInterface) : undefined;
+          if (!remoteExit && remoteRoute.nextHop) {
+            for (const ifc of remoteRouter.interfaces.values()) {
+              if (!ifc.isShutdown && ifc.status === 'up' && ifc.ipAddress && ifc.subnetMask) {
+                if (SubnetUtils.isSameSubnet(ifc.ipAddress, remoteRoute.nextHop, ifc.subnetMask)) {
+                  remoteExit = ifc;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!remoteExit) {
+            return {
+              isReachable: false,
+              icmpType: 'timed-out',
+              reason: `Remote router ${remoteRouter.hostname} exit interface not found`
+            };
+          }
+
+          // Check ZBFW on remote router
+          if (remoteTunnelIface) {
+            const zbfwRes = SecurityVpnEngine.evaluateZbfw(remoteRouter, remoteTunnelIface.name, remoteExit.name, {
+              srcIp: sourceHost.ipAddress,
+              dstIp: destIp,
+              protocol: 'icmp'
+            });
+            if (zbfwRes.action === 'drop') {
+              return {
+                isReachable: false,
+                icmpType: 'timed-out',
+                reason: zbfwRes.reason
+              };
+            }
+          }
+
+          currentRouter = remoteRouter;
+          currentExitIface = remoteExit;
+          targetForwardIp = destIp;
+          continue;
         }
 
         const exitEndpoints = this.getL2BroadcastDomain(currentRouter, currentExitIface.name, allDevices);

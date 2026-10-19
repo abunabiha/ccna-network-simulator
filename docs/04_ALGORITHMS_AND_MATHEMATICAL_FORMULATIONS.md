@@ -245,3 +245,65 @@ $$\text{Operation}(L_{out}) = \begin{cases}
 \text{Untagged} & \text{jika tujuan terhubung langsung (egress node)}
 \end{cases}$$
 Formulasi ini memastikan penerusan paket berkecepatan tinggi berbasis label tanpa memerlukan rekursi rute IP pada inti jaringan (*core MPLS*).
+
+---
+
+## 10. Formulasi Matematika & State Machine Infrastructure Security & VPN Services (GRE/IPsec, DMVPN NHRP, ZBFW, CoPP)
+
+### 10.1 Enkapsulasi Terowongan GRE & State Machine Negosiasi IPsec SA
+Terowongan GRE (*Generic Routing Encapsulation*) point-to-point dan multipoint memetakan ruang paket payload $P_{in}$ (dengan alamat IP overlay $S_{over}, D_{over}$) ke dalam paket pembungkus baru $P_{out}$ (dengan alamat IP underlay $S_{under}, D_{under}$):
+$$P_{out} = \text{IP}_{under}(S_{under}, D_{under}) \parallel \text{GRE\_Header} \parallel P_{in}(S_{over}, D_{over})$$
+
+Ketika perlindungan IPsec (`tunnel protection ipsec profile`) diterapkan, negosiasi *Security Association* (SA) IKEv1 Phase 1 & Phase 2 dimodelkan sebagai mesin status hingga (*deterministic finite automaton*, DFA):
+$$\mathcal{M}_{IPsec} = \langle \mathcal{S}, \Sigma, \delta, s_0, \mathcal{F} \rangle$$
+di mana:
+- Himpunan status: $\mathcal{S} = \{ \text{MM\_NO\_STATE}, \text{MM\_KEY\_EXCH}, \text{QM\_IDLE}, \text{ACTIVE}, \text{EXPIRED} \}$
+- Status akhir / operasional: $\mathcal{F} = \{ \text{QM\_IDLE} \}$ (IKE SA) dan $\{ \text{ACTIVE} \}$ (IPsec Child SA).
+- Fungsi transisi $\delta$:
+  $$\delta(\text{MM\_NO\_STATE}, \text{PolicyMatch} \land \text{PskMatch}) \to \text{QM\_IDLE}$$
+  $$\delta(\text{QM\_IDLE}, \text{TransformSetMatch}) \to \langle \text{ActiveSAs}, \text{SPI}_{in}, \text{SPI}_{out} \rangle$$
+
+Setiap paket yang melintasi terowongan terenkripsi memperbarui kuantitas statistik:
+$$\text{PktsEncrypted} \leftarrow \text{PktsEncrypted} + 1, \quad \text{PktsDecrypted} \leftarrow \text{PktsDecrypted} + 1$$
+
+### 10.2 Resolusi Pemetaan DMVPN dan Cache NHRP
+Pada arsitektur Dynamic Multipoint VPN (mGRE), router Spoke mendaftarkan asosiasi antara alamat overlay $IP_{proto}$ dan alamat fisik publik underlay $IP_{nbma}$ ke Next Hop Server (NHS) Hub melalui Next Hop Resolution Protocol (NHRP):
+$$\text{NHRP\_Registry}(Hub): \quad \mathcal{C}_{NHRP} \leftarrow \mathcal{C}_{NHRP} \cup \{ \langle IP_{proto}, IP_{nbma}, \text{dynamic}, \text{network\_id} \rangle \}$$
+
+Penerusan paket ke target tunnel $IP_{dst}$ dievaluasi menggunakan pemetaan relasional:
+$$\text{ResolveNBMA}(IP_{dst}) = \begin{cases}
+IP_{nbma} & \text{jika } \exists \langle IP_{dst}, IP_{nbma}, \dots \rangle \in \mathcal{C}_{NHRP} \\
+\text{StaticMap}(IP_{dst}) & \text{jika didefinisikan via } \texttt{ip nhrp map} \\
+\emptyset \implies \text{Drop} & \text{jika tidak ditemukan resolusi pemetaan}
+\end{cases}$$
+
+### 10.3 Model Stateful Connection Tracking pada Zone-Based Policy Firewall (ZBFW)
+Firewall Berbasis Zona (ZBFW) mempartisi antarmuka ke dalam zona keamanan $\mathcal{Z}$. Untuk sebarang paket $P$ dengan tuple aliran $\tau(P) = \langle S_{ip}, D_{ip}, \text{proto}, S_{port}, D_{port} \rangle$:
+
+1. **Intra-Zone Traffic:**
+   $$\text{Zone}(i_{in}) == \text{Zone}(i_{out}) \implies \text{Permit}$$
+2. **Non-Zoned Transition:**
+   $$\text{Zone}(i_{in}) == \emptyset \oplus \text{Zone}(i_{out}) == \emptyset \implies \text{Drop}$$
+3. **Stateful Session Table Lookup:**
+   Himpunan sesi aktif $\mathcal{S}_{ZBFW} = \{ \sigma_1, \sigma_2, \dots \}$ dengan tuple invers $\tau^{-1} = \langle D_{ip}, S_{ip}, \text{proto}, D_{port}, S_{port} \rangle$:
+   $$\text{Match}(\tau(P), \tau^{-1}(\sigma)) \land \text{Timestamp} \le t_{expire} \implies \text{Permit (Return Traffic)}$$
+4. **Policy-Map Evaluation:**
+   Jika paket memulai aliran baru dari $\mathcal{Z}_{src} \to \mathcal{Z}_{dst}$, aturan kelas diperiksa berurutan:
+   $$\text{Action}(P) = \begin{cases}
+   \text{Drop} & \text{jika cocok aturan } \texttt{drop} \text{ atau sampai pada implicit deny} \\
+   \text{Pass} & \text{jika cocok aturan } \texttt{pass} \text{ (stateless)} \\
+   \text{Inspect} \implies \mathcal{S}_{ZBFW} \leftarrow \mathcal{S}_{ZBFW} \cup \{ \tau(P) \} \land \text{Permit} & \text{jika cocok aturan } \texttt{inspect}
+   \end{cases}$$
+
+### 10.4 Formulasi Token Bucket Control Plane Policing (CoPP)
+Untuk melindungi Central Processing Unit (CPU) router dari serangan DoS dan kebanjiran paket kontrol (*control packet flood*), CoPP menerapkan algoritma *Single Rate Token Bucket* $\langle R, B \rangle$:
+- Laju pengisian token: $R$ bit per detik (*rate*).
+- Kapasitas bucket maksimum: $B$ byte (*burst*).
+- Jumlah token tersedia pada waktu $t$: $T(t) = \min(B, T(t_{prev}) + R \cdot (t - t_{prev}))$.
+
+Untuk paket kontrol $P$ berukuran $L(P)$ bit yang ditujukan ke CPU router:
+$$\text{PolicingAction}(P) = \begin{cases}
+\text{Transmit} \quad (T(t) \leftarrow T(t) - L(P)) & \text{jika } T(t) \ge L(P) \implies \text{Conformed} \\
+\text{Drop} & \text{jika } T(t) < L(P) \implies \text{Exceeded}
+\end{cases}$$
+Statistik `conformed packets` dan `exceeded packets` diperbarui secara deterministik untuk pemantauan diagnosa jaringan (`show policy-map control-plane`).

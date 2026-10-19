@@ -102,6 +102,10 @@ export class CliLexer {
       const portPart = clean.replace(/^[a-zA-Z]+/i, '');
       return `Loopback${portPart}`;
     }
+    if (lower.startsWith('tu') || lower.startsWith('tunnel')) {
+      const portPart = clean.replace(/^[a-zA-Z]+/i, '');
+      return `Tunnel${portPart}`;
+    }
     return clean;
   }
 }

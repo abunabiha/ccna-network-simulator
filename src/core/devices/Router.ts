@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry } from '../../types/network';
+import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, EigrpConfig, BgpConfig, AclRule, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -21,6 +21,25 @@ export class Router extends Device {
   mplsLdpRouterId?: string;
   mplsInterfaces: Set<string> = new Set();
   lfib: MplsLabelEntry[] = [];
+
+  // GRE / IPsec / DMVPN
+  cryptoPolicies: Map<number, CryptoIsakmpPolicy> = new Map();
+  cryptoKeys: CryptoIsakmpKey[] = [];
+  cryptoTransformSets: Map<string, CryptoTransformSet> = new Map();
+  cryptoProfiles: Map<string, CryptoIpsecProfile> = new Map();
+  cryptoSessions: Map<string, CryptoSession> = new Map();
+  nhrpCache: NhrpMappingEntry[] = [];
+
+  // Zone-Based Policy Firewall (ZBFW)
+  securityZones: Map<string, SecurityZone> = new Map();
+  zonePairs: Map<string, ZonePair> = new Map();
+  inspectClassMaps: Map<string, ClassMapInspect> = new Map();
+  inspectPolicyMaps: Map<string, PolicyMapInspect> = new Map();
+  zbfwSessions: ZbfwSession[] = [];
+
+  // Control Plane Policing (CoPP)
+  coppPolicy?: CoppPolicy;
+  coppState: CoppState = { transmittedPkts: 0, droppedPkts: 0 };
 
   constructor(id: string, hostname: string, position: DevicePosition) {
     super(id, hostname, 'router', position);
@@ -102,6 +121,39 @@ export class Router extends Device {
     this.interfaces.set('GigabitEthernet0/1', gi001);
     this.interfaces.set('GigabitEthernet0/2', gi002);
     this.interfaces.set('Serial0/0/0', se010);
+  }
+
+  getOrCreateTunnel(nameOrId: string | number): InterfaceConfig {
+    const idStr = typeof nameOrId === 'number' ? nameOrId.toString() : nameOrId.toString().replace(/^[^\d]*/, '');
+    const fullName = `Tunnel${idStr}`;
+    const shortName = `Tu${idStr}`;
+    let iface = this.interfaces.get(fullName);
+    if (!iface) {
+      iface = {
+        name: fullName,
+        shortName: shortName,
+        macAddress: `0001.c4${Math.floor(Math.random() * 89 + 10)}.${Math.floor(Math.random() * 8999 + 1000)}`,
+        status: 'up',
+        isShutdown: false,
+        speed: '1000Mb/s',
+        tunnelMode: 'gre ip'
+      };
+      this.addInterface(iface);
+      this.interfaces.set(shortName, iface);
+    }
+    return iface;
+  }
+
+  override getInterface(name: string): InterfaceConfig | undefined {
+    if (!name) return undefined;
+    const direct = super.getInterface(name);
+    if (direct) return direct;
+
+    const match = name.match(/^(?:tunnel|tu)\s*(\d+)$/i);
+    if (match) {
+      return this.getOrCreateTunnel(match[1]);
+    }
+    return undefined;
   }
 
   updateConnectedRoutes(): void {
@@ -301,6 +353,36 @@ export class Router extends Device {
       if (iface.ipPolicyRouteMap) {
         lines.push(` ip policy route-map ${iface.ipPolicyRouteMap}`);
       }
+      if (iface.zoneMemberSecurity) {
+        lines.push(` zone-member security ${iface.zoneMemberSecurity}`);
+      }
+      if (iface.tunnelSource) {
+        lines.push(` tunnel source ${iface.tunnelSource}`);
+      }
+      if (iface.tunnelDestination) {
+        lines.push(` tunnel destination ${iface.tunnelDestination}`);
+      }
+      if (iface.tunnelMode) {
+        lines.push(` tunnel mode ${iface.tunnelMode}`);
+      }
+      if (iface.tunnelProtectionProfile) {
+        lines.push(` tunnel protection ipsec profile ${iface.tunnelProtectionProfile}`);
+      }
+      if (iface.nhrpNetworkId) {
+        lines.push(` ip nhrp network-id ${iface.nhrpNetworkId}`);
+      }
+      if (iface.nhrpMaps && iface.nhrpMaps.length > 0) {
+        for (const m of iface.nhrpMaps) {
+          if (m.multicast) {
+            lines.push(` ip nhrp map multicast ${m.nbmaIp}`);
+          } else if (m.protocolIp) {
+            lines.push(` ip nhrp map ${m.protocolIp} ${m.nbmaIp}`);
+          }
+        }
+      }
+      if (iface.nhrpNhsIp) {
+        lines.push(` ip nhrp nhs ${iface.nhrpNhsIp}${iface.nhrpNhsNbma ? ' nbma ' + iface.nhrpNhsNbma : ''}`);
+      }
       if (iface.natType) {
         lines.push(` ip nat ${iface.natType}`);
       }
@@ -468,6 +550,74 @@ export class Router extends Device {
           lines.push(`access-list ${num} ${r.action} ${r.protocol || 'ip'} ${r.sourceIp} ${r.sourceWildcard || ''} ${r.destIp || ''} ${r.destWildcard || ''}`.trim());
         }
       }
+    }
+
+    // Security Zones
+    for (const zone of this.securityZones.values()) {
+      lines.push(`zone security ${zone.name}`);
+      lines.push('!');
+    }
+
+    // Inspect Class Maps
+    for (const cm of this.inspectClassMaps.values()) {
+      lines.push(`class-map type inspect ${cm.matchType} ${cm.name}`);
+      for (const m of cm.matches) {
+        if (m.type === 'protocol') lines.push(` match protocol ${m.protocol}`);
+        else if (m.type === 'access-group') lines.push(` match access-group ${m.accessGroup}`);
+      }
+      lines.push('!');
+    }
+
+    // Inspect Policy Maps
+    for (const pm of this.inspectPolicyMaps.values()) {
+      lines.push(`policy-map type inspect ${pm.name}`);
+      for (const c of pm.classes) {
+        lines.push(` class type inspect ${c.className}`);
+        lines.push(`  ${c.action}`);
+      }
+      lines.push('!');
+    }
+
+    // Zone Pairs
+    for (const zp of this.zonePairs.values()) {
+      lines.push(`zone-pair security ${zp.name} source ${zp.sourceZone} destination ${zp.destinationZone}`);
+      if (zp.servicePolicy) lines.push(` service-policy type inspect ${zp.servicePolicy}`);
+      lines.push('!');
+    }
+
+    // Crypto ISAKMP Policies
+    for (const p of this.cryptoPolicies.values()) {
+      lines.push(`crypto isakmp policy ${p.priority}`);
+      if (p.encryption) lines.push(` encr ${p.encryption}`);
+      if (p.hash) lines.push(` hash ${p.hash}`);
+      if (p.authentication) lines.push(` authentication ${p.authentication}`);
+      if (p.group) lines.push(` group ${p.group}`);
+      if (p.lifetime) lines.push(` lifetime ${p.lifetime}`);
+      lines.push('!');
+    }
+
+    // Crypto ISAKMP Keys
+    for (const k of this.cryptoKeys) {
+      lines.push(`crypto isakmp key ${k.key} address ${k.address}`);
+    }
+
+    // Crypto Transform Sets
+    for (const ts of this.cryptoTransformSets.values()) {
+      lines.push(`crypto ipsec transform-set ${ts.name} ${ts.transforms.join(' ')}`);
+    }
+
+    // Crypto IPsec Profiles
+    for (const prof of this.cryptoProfiles.values()) {
+      lines.push(`crypto ipsec profile ${prof.name}`);
+      if (prof.transformSet) lines.push(` set transform-set ${prof.transformSet}`);
+      lines.push('!');
+    }
+
+    // Control Plane
+    if (this.coppPolicy) {
+      lines.push('control-plane');
+      lines.push(` service-policy input ${this.coppPolicy.name}`);
+      lines.push('!');
     }
 
     // Lines

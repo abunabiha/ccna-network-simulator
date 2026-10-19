@@ -128,6 +128,20 @@ export abstract class Device {
         return `${host}(config-vrf)#`;
       case 'vrf-af-config':
         return `${host}(config-vrf-af)#`;
+      case 'crypto-isakmp-policy':
+        return `${host}(config-isakmp)#`;
+      case 'crypto-ipsec-profile':
+        return `${host}(config-ipsec-profile)#`;
+      case 'zone-pair-config':
+        return `${host}(config-sec-zone-pair)#`;
+      case 'class-map-inspect':
+        return `${host}(config-cmap)#`;
+      case 'policy-map-inspect':
+        return `${host}(config-pmap)#`;
+      case 'policy-map-class-inspect':
+        return `${host}(config-pmap-c)#`;
+      case 'control-plane-config':
+        return `${host}(config-cp)#`;
       default:
         return `${host}>`;
     }

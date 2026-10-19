@@ -11,7 +11,14 @@ export type CliMode =
   | 'route-map-config'   // Router(config-route-map)#
   | 'ip-sla-config'      // Router(config-sla-echo)#
   | 'vrf-config'         // Router(config-vrf)#
-  | 'vrf-af-config';     // Router(config-vrf-af)#
+  | 'vrf-af-config'      // Router(config-vrf-af)#
+  | 'crypto-isakmp-policy' // Router(config-isakmp)#
+  | 'crypto-ipsec-profile' // Router(config-ipsec-profile)#
+  | 'zone-pair-config'   // Router(config-sec-zone-pair)#
+  | 'class-map-inspect'  // Router(config-cmap)#
+  | 'policy-map-inspect' // Router(config-pmap)#
+  | 'policy-map-class-inspect' // Router(config-pmap-c)#
+  | 'control-plane-config'; // Router(config-cp)#
 
 export interface CliContext {
   deviceId: string;
@@ -29,6 +36,12 @@ export interface CliContext {
   targetIpSlaId?: number;
   targetVrfName?: string;
   targetVrfAf?: string;
+  targetIsakmpPriority?: number;
+  targetIpsecProfileName?: string;
+  targetZonePairName?: string;
+  targetClassMapName?: string;
+  targetPolicyMapName?: string;
+  targetPolicyMapClass?: string;
 }
 
 export interface CommandHelpItem {

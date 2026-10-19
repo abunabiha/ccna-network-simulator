@@ -12,6 +12,7 @@ import { LabGrader } from '../src/core/grader/LabGrader';
 import { CCNA_LABS } from '../src/data/ccnaLabs';
 import { RoutingProtocolEngine } from '../src/core/network/RoutingProtocolEngine';
 import { PolicyEngine } from '../src/core/network/PolicyEngine';
+import { SecurityVpnEngine } from '../src/core/network/SecurityVpnEngine';
 import { TopologyTraversal } from '../src/core/network/TopologyTraversal';
 
 console.log('=== [1] PENGUJIAN MATEMATIKA PENGALAMATAN IP & SUBNETTING ===');
@@ -1096,7 +1097,253 @@ console.log(`'show mpls ldp neighbor': ${showMplsNbrRes.output.includes('Peer LD
 const showMplsLfibRes = CliParser.execute('show mpls forwarding-table', { deviceId: 'R_MPLS1', mode: 'priv-exec' as const }, rMpls1, mplsDevs);
 console.log(`'show mpls forwarding-table' (LFIB generated): ${showMplsLfibRes.output.includes('16') && showMplsLfibRes.output.includes('192.168.12.0/24') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, 4, & 5 SELESAI DENGAN SUKSES! ===');
+console.log('\n======================================================');
+console.log('--- 15. PENGUJIAN CCNP TAHAP 6: INFRASTRUCTURE SECURITY & VPN SERVICES ---');
+console.log('======================================================');
+
+// 1. GRE over IPsec Testing (R_VPN1 <-> R_VPN2)
+const rVpn1 = new Router('R_VPN1', 'R-VPN1', { x: 100, y: 900 });
+const rVpn2 = new Router('R_VPN2', 'R-VPN2', { x: 300, y: 900 });
+
+// Physical link: Gi0/0/0 (198.51.100.1 <-> 198.51.100.2)
+rVpn1.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '198.51.100.1';
+rVpn1.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rVpn1.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rVpn1.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rVpn1.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_VPN2';
+rVpn1.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/0';
+
+rVpn2.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '198.51.100.2';
+rVpn2.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rVpn2.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rVpn2.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+rVpn2.interfaces.get('GigabitEthernet0/0/0')!.connectedDeviceId = 'R_VPN1';
+rVpn2.interfaces.get('GigabitEthernet0/0/0')!.connectedPort = 'GigabitEthernet0/0/0';
+
+const vpnDevs = [rVpn1, rVpn2];
+rVpn1.updateConnectedRoutes();
+rVpn2.updateConnectedRoutes();
+
+// Configure ISAKMP policy on R_VPN1
+const rVpn1Global = { deviceId: 'R_VPN1', mode: 'global-config' as const };
+CliParser.execute('crypto isakmp policy 10', rVpn1Global, rVpn1, vpnDevs);
+const rVpn1Isakmp = { deviceId: 'R_VPN1', mode: 'crypto-isakmp-policy' as const, targetIsakmpPriority: 10 };
+CliParser.execute('encr aes', rVpn1Isakmp, rVpn1, vpnDevs);
+CliParser.execute('hash sha', rVpn1Isakmp, rVpn1, vpnDevs);
+CliParser.execute('authentication pre-share', rVpn1Isakmp, rVpn1, vpnDevs);
+CliParser.execute('group 2', rVpn1Isakmp, rVpn1, vpnDevs);
+
+// Configure ISAKMP key & IPsec profile on R_VPN1
+CliParser.execute('crypto isakmp key cisco123 address 198.51.100.2', rVpn1Global, rVpn1, vpnDevs);
+CliParser.execute('crypto ipsec transform-set TS-VPN esp-aes esp-sha-hmac', rVpn1Global, rVpn1, vpnDevs);
+CliParser.execute('crypto ipsec profile PROF-VPN', rVpn1Global, rVpn1, vpnDevs);
+const rVpn1Prof = { deviceId: 'R_VPN1', mode: 'crypto-ipsec-profile' as const, targetIpsecProfileName: 'PROF-VPN' };
+CliParser.execute('set transform-set TS-VPN', rVpn1Prof, rVpn1, vpnDevs);
+
+// Configure Tunnel0 on R_VPN1
+CliParser.execute('interface Tunnel0', rVpn1Global, rVpn1, vpnDevs);
+const rVpn1Tu0 = { deviceId: 'R_VPN1', mode: 'interface-config' as const, targetInterface: 'Tunnel0' };
+CliParser.execute('ip address 10.10.10.1 255.255.255.0', rVpn1Tu0, rVpn1, vpnDevs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', rVpn1Tu0, rVpn1, vpnDevs);
+CliParser.execute('tunnel destination 198.51.100.2', rVpn1Tu0, rVpn1, vpnDevs);
+CliParser.execute('tunnel protection ipsec profile PROF-VPN', rVpn1Tu0, rVpn1, vpnDevs);
+
+// Configure ISAKMP policy, key, profile, and Tunnel0 on R_VPN2
+const rVpn2Global = { deviceId: 'R_VPN2', mode: 'global-config' as const };
+CliParser.execute('crypto isakmp policy 10', rVpn2Global, rVpn2, vpnDevs);
+const rVpn2Isakmp = { deviceId: 'R_VPN2', mode: 'crypto-isakmp-policy' as const, targetIsakmpPriority: 10 };
+CliParser.execute('encr aes', rVpn2Isakmp, rVpn2, vpnDevs);
+CliParser.execute('hash sha', rVpn2Isakmp, rVpn2, vpnDevs);
+CliParser.execute('authentication pre-share', rVpn2Isakmp, rVpn2, vpnDevs);
+CliParser.execute('group 2', rVpn2Isakmp, rVpn2, vpnDevs);
+
+CliParser.execute('crypto isakmp key cisco123 address 198.51.100.1', rVpn2Global, rVpn2, vpnDevs);
+CliParser.execute('crypto ipsec transform-set TS-VPN esp-aes esp-sha-hmac', rVpn2Global, rVpn2, vpnDevs);
+CliParser.execute('crypto ipsec profile PROF-VPN', rVpn2Global, rVpn2, vpnDevs);
+const rVpn2Prof = { deviceId: 'R_VPN2', mode: 'crypto-ipsec-profile' as const, targetIpsecProfileName: 'PROF-VPN' };
+CliParser.execute('set transform-set TS-VPN', rVpn2Prof, rVpn2, vpnDevs);
+
+CliParser.execute('interface Tunnel0', rVpn2Global, rVpn2, vpnDevs);
+const rVpn2Tu0 = { deviceId: 'R_VPN2', mode: 'interface-config' as const, targetInterface: 'Tunnel0' };
+CliParser.execute('ip address 10.10.10.2 255.255.255.0', rVpn2Tu0, rVpn2, vpnDevs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', rVpn2Tu0, rVpn2, vpnDevs);
+CliParser.execute('tunnel destination 198.51.100.1', rVpn2Tu0, rVpn2, vpnDevs);
+CliParser.execute('tunnel protection ipsec profile PROF-VPN', rVpn2Tu0, rVpn2, vpnDevs);
+
+// Trigger IPsec negotiation across tunnel
+const ipsecNegRes = SecurityVpnEngine.negotiateIpsec(rVpn1, rVpn2, '198.51.100.1', '198.51.100.2', 'Tunnel0', 'PROF-VPN');
+console.log(`IPsec SA Negotiation between R_VPN1 and R_VPN2: ${ipsecNegRes.success ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show crypto isakmp sa
+const showIsakmpRes = CliParser.execute('show crypto isakmp sa', { deviceId: 'R_VPN1', mode: 'priv-exec' as const }, rVpn1, vpnDevs);
+console.log(`'show crypto isakmp sa' (QM_IDLE / ACTIVE): ${showIsakmpRes.output.includes('QM_IDLE') && showIsakmpRes.output.includes('ACTIVE') ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show crypto ipsec sa
+const showIpsecSaRes = CliParser.execute('show crypto ipsec sa', { deviceId: 'R_VPN1', mode: 'priv-exec' as const }, rVpn1, vpnDevs);
+console.log(`'show crypto ipsec sa' (esp-aes esp-sha-hmac): ${showIpsecSaRes.output.includes('esp-aes esp-sha-hmac') && showIpsecSaRes.output.includes('inbound esp sas') ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show crypto session
+const showCryptoSessRes = CliParser.execute('show crypto session', { deviceId: 'R_VPN1', mode: 'priv-exec' as const }, rVpn1, vpnDevs);
+console.log(`'show crypto session' (UP-ACTIVE): ${showCryptoSessRes.output.includes('UP-ACTIVE') && showCryptoSessRes.output.includes('198.51.100.2') ? 'PASS' : 'FAIL'}`);
+
+// 2. DMVPN & NHRP Testing (R_HUB <-> R_SPOKE)
+const rHub = new Router('R_HUB', 'R-HUB', { x: 500, y: 900 });
+const rSpoke = new Router('R_SPOKE', 'R-SPOKE', { x: 700, y: 900 });
+
+rHub.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '172.16.1.1';
+rHub.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rHub.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rHub.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+
+rSpoke.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '172.16.1.2';
+rSpoke.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rSpoke.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rSpoke.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+
+const dmvpnDevs = [rHub, rSpoke];
+rHub.updateConnectedRoutes();
+rSpoke.updateConnectedRoutes();
+
+// Configure Hub DMVPN Multipoint GRE
+const rHubGlobal = { deviceId: 'R_HUB', mode: 'global-config' as const };
+CliParser.execute('interface Tunnel0', rHubGlobal, rHub, dmvpnDevs);
+const rHubTu0 = { deviceId: 'R_HUB', mode: 'interface-config' as const, targetInterface: 'Tunnel0' };
+CliParser.execute('ip address 10.255.0.1 255.255.255.0', rHubTu0, rHub, dmvpnDevs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', rHubTu0, rHub, dmvpnDevs);
+CliParser.execute('tunnel mode gre multipoint', rHubTu0, rHub, dmvpnDevs);
+CliParser.execute('ip nhrp network-id 99', rHubTu0, rHub, dmvpnDevs);
+CliParser.execute('ip nhrp map multicast dynamic', rHubTu0, rHub, dmvpnDevs);
+
+// Configure Spoke DMVPN
+const rSpokeGlobal = { deviceId: 'R_SPOKE', mode: 'global-config' as const };
+CliParser.execute('interface Tunnel0', rSpokeGlobal, rSpoke, dmvpnDevs);
+const rSpokeTu0 = { deviceId: 'R_SPOKE', mode: 'interface-config' as const, targetInterface: 'Tunnel0' };
+CliParser.execute('ip address 10.255.0.2 255.255.255.0', rSpokeTu0, rSpoke, dmvpnDevs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', rSpokeTu0, rSpoke, dmvpnDevs);
+CliParser.execute('tunnel mode gre multipoint', rSpokeTu0, rSpoke, dmvpnDevs);
+CliParser.execute('ip nhrp network-id 99', rSpokeTu0, rSpoke, dmvpnDevs);
+CliParser.execute('ip nhrp nhs 10.255.0.1 nbma 172.16.1.1', rSpokeTu0, rSpoke, dmvpnDevs);
+
+// Spoke registration into Hub NHRP cache
+SecurityVpnEngine.registerSpokeNhrp(rSpoke, rHub, '10.255.0.2', '172.16.1.2', '10.255.0.1', '172.16.1.1', 99);
+
+// Diagnostics: show ip nhrp on Hub
+const showNhrpHub = CliParser.execute('show ip nhrp', { deviceId: 'R_HUB', mode: 'priv-exec' as const }, rHub, dmvpnDevs);
+console.log(`'show ip nhrp' on Hub (dynamic spoke registered): ${showNhrpHub.output.includes('10.255.0.2/32 via 172.16.1.2') && showNhrpHub.output.includes('dynamic') ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show ip nhrp on Spoke
+const showNhrpSpoke = CliParser.execute('show ip nhrp', { deviceId: 'R_SPOKE', mode: 'priv-exec' as const }, rSpoke, dmvpnDevs);
+console.log(`'show ip nhrp' on Spoke (static hub NHS): ${showNhrpSpoke.output.includes('10.255.0.1/32 via 172.16.1.1') && showNhrpSpoke.output.includes('static') ? 'PASS' : 'FAIL'}`);
+
+// 3. Zone-Based Policy Firewall (ZBFW) Testing
+const rFw = new Router('R_FW', 'R-FW', { x: 500, y: 1100 });
+rFw.interfaces.get('GigabitEthernet0/0/0')!.ipAddress = '203.0.113.1'; // OUTSIDE
+rFw.interfaces.get('GigabitEthernet0/0/0')!.subnetMask = '255.255.255.0';
+rFw.interfaces.get('GigabitEthernet0/0/0')!.isShutdown = false;
+rFw.interfaces.get('GigabitEthernet0/0/0')!.status = 'up';
+
+rFw.interfaces.get('GigabitEthernet0/0/1')!.ipAddress = '192.168.1.1'; // INSIDE
+rFw.interfaces.get('GigabitEthernet0/0/1')!.subnetMask = '255.255.255.0';
+rFw.interfaces.get('GigabitEthernet0/0/1')!.isShutdown = false;
+rFw.interfaces.get('GigabitEthernet0/0/1')!.status = 'up';
+
+const fwDevs = [rFw];
+const rFwGlobal = { deviceId: 'R_FW', mode: 'global-config' as const };
+
+// Security zones
+CliParser.execute('zone security INSIDE', rFwGlobal, rFw, fwDevs);
+CliParser.execute('zone security OUTSIDE', rFwGlobal, rFw, fwDevs);
+
+// Assign interfaces to zones
+CliParser.execute('interface GigabitEthernet0/0/1', rFwGlobal, rFw, fwDevs);
+const rFwGi1 = { deviceId: 'R_FW', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' };
+CliParser.execute('zone-member security INSIDE', rFwGi1, rFw, fwDevs);
+
+CliParser.execute('interface GigabitEthernet0/0/0', rFwGlobal, rFw, fwDevs);
+const rFwGi0 = { deviceId: 'R_FW', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' };
+CliParser.execute('zone-member security OUTSIDE', rFwGi0, rFw, fwDevs);
+
+// Class map type inspect
+CliParser.execute('class-map type inspect match-any CM-INSPECT', rFwGlobal, rFw, fwDevs);
+const rFwCm = { deviceId: 'R_FW', mode: 'class-map-inspect' as const, targetClassMapName: 'CM-INSPECT' };
+CliParser.execute('match protocol tcp', rFwCm, rFw, fwDevs);
+CliParser.execute('match protocol icmp', rFwCm, rFw, fwDevs);
+
+// Policy map type inspect
+CliParser.execute('policy-map type inspect PM-ZBFW', rFwGlobal, rFw, fwDevs);
+const rFwPm = { deviceId: 'R_FW', mode: 'policy-map-inspect' as const, targetPolicyMapName: 'PM-ZBFW' };
+CliParser.execute('class type inspect CM-INSPECT', rFwPm, rFw, fwDevs);
+const rFwPmClass = { deviceId: 'R_FW', mode: 'policy-map-class-inspect' as const, targetPolicyMapName: 'PM-ZBFW', targetPolicyMapClass: 'CM-INSPECT' };
+CliParser.execute('inspect', rFwPmClass, rFw, fwDevs);
+
+// Zone pair
+CliParser.execute('zone-pair security ZP-IN-OUT source INSIDE destination OUTSIDE', rFwGlobal, rFw, fwDevs);
+const rFwZp = { deviceId: 'R_FW', mode: 'zone-pair-config' as const, targetZonePairName: 'ZP-IN-OUT' };
+CliParser.execute('service-policy type inspect PM-ZBFW', rFwZp, rFw, fwDevs);
+
+// Diagnostics: show zone security
+const showZoneSec = CliParser.execute('show zone security', { deviceId: 'R_FW', mode: 'priv-exec' as const }, rFw, fwDevs);
+console.log(`'show zone security': ${showZoneSec.output.includes('zone INSIDE') && showZoneSec.output.includes('GigabitEthernet0/0/1') ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show zone-pair security
+const showZpSec = CliParser.execute('show zone-pair security', { deviceId: 'R_FW', mode: 'priv-exec' as const }, rFw, fwDevs);
+console.log(`'show zone-pair security': ${showZpSec.output.includes('ZP-IN-OUT') && showZpSec.output.includes('Source-Zone INSIDE') ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show policy-map type inspect zone-pair
+const showPmInspect = CliParser.execute('show policy-map type inspect zone-pair ZP-IN-OUT', { deviceId: 'R_FW', mode: 'priv-exec' as const }, rFw, fwDevs);
+console.log(`'show policy-map type inspect zone-pair': ${showPmInspect.output.includes('Service-policy inspect : PM-ZBFW') && showPmInspect.output.includes('Action: inspect') ? 'PASS' : 'FAIL'}`);
+
+// Stateful Inspection Verification
+// Outbound traffic from INSIDE to OUTSIDE (TCP port 80)
+const zbfwOutbound = SecurityVpnEngine.evaluateZbfw(rFw, 'GigabitEthernet0/0/1', 'GigabitEthernet0/0/0', {
+  srcIp: '192.168.1.10',
+  dstIp: '203.0.113.50',
+  protocol: 'tcp',
+  srcPort: 49152,
+  dstPort: 80
+});
+console.log(`ZBFW Outbound Initial Inspection: ${zbfwOutbound.action === 'permit' ? 'PASS' : 'FAIL'} (${zbfwOutbound.reason})`);
+
+// Stateful return traffic from OUTSIDE to INSIDE (Reverse TCP packet)
+const zbfwReturn = SecurityVpnEngine.evaluateZbfw(rFw, 'GigabitEthernet0/0/0', 'GigabitEthernet0/0/1', {
+  srcIp: '203.0.113.50',
+  dstIp: '192.168.1.10',
+  protocol: 'tcp',
+  srcPort: 80,
+  dstPort: 49152
+});
+console.log(`ZBFW Stateful Return Traffic Permitted: ${zbfwReturn.action === 'permit' && zbfwReturn.reason.includes('Stateful return') ? 'PASS' : 'FAIL'}`);
+
+// Unauthorized incoming traffic without existing session (Implicit Deny)
+const zbfwUnauthorized = SecurityVpnEngine.evaluateZbfw(rFw, 'GigabitEthernet0/0/0', 'GigabitEthernet0/0/1', {
+  srcIp: '198.51.100.99',
+  dstIp: '192.168.1.10',
+  protocol: 'tcp',
+  srcPort: 12345,
+  dstPort: 22
+});
+console.log(`ZBFW Unauthorized Inbound Dropped: ${zbfwUnauthorized.action === 'drop' && zbfwUnauthorized.reason.includes('implicit deny') ? 'PASS' : 'FAIL'}`);
+
+// 4. Control Plane Policing (CoPP) Testing
+CliParser.execute('control-plane', rFwGlobal, rFw, fwDevs);
+const rFwCp = { deviceId: 'R_FW', mode: 'control-plane-config' as const };
+CliParser.execute('service-policy input COPP-POLICY', rFwCp, rFw, fwDevs);
+
+// Evaluate CoPP traffic
+const coppEval1 = SecurityVpnEngine.evaluateCopp(rFw, { srcIp: '192.168.1.10', dstIp: '192.168.1.1', protocol: 'icmp' });
+const coppEval2 = SecurityVpnEngine.evaluateCopp(rFw, { srcIp: '192.168.1.11', dstIp: '192.168.1.1', protocol: 'icmp' });
+console.log(`CoPP Traffic Evaluation: ${coppEval1.action === 'transmit' && coppEval2.action === 'transmit' ? 'PASS' : 'FAIL'}`);
+
+// Diagnostics: show policy-map control-plane
+const showCoppRes = CliParser.execute('show policy-map control-plane', { deviceId: 'R_FW', mode: 'priv-exec' as const }, rFw, fwDevs);
+console.log(`'show policy-map control-plane': ${showCoppRes.output.includes('Control Plane') && showCoppRes.output.includes('conformed 2 packets') ? 'PASS' : 'FAIL'}`);
+
+// Verify Running Config includes Tahap 6 serialization
+const rFwRunConfig = rFw.getRunningConfig();
+console.log(`Running-config serializes ZBFW, Zones, and CoPP: ${rFwRunConfig.includes('zone security INSIDE') && rFwRunConfig.includes('zone-pair security ZP-IN-OUT') && rFwRunConfig.includes('control-plane') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1, 2, 3, 4, 5, & 6 SELESAI DENGAN SUKSES! ===');
+
 
 
 
