@@ -12,6 +12,7 @@ export interface InterfaceConfig {
   ipAddress?: string;          // e.g. '192.168.1.1'
   subnetMask?: string;         // e.g. '255.255.255.0'
   ipv6Address?: string;        // e.g. '2001:db8:acad:1::1/64'
+  ipv6LinkLocal?: string;      // e.g. 'fe80::1'
   macAddress: string;          // e.g. '0011.2233.4455'
   status: PortStatus;
   speed?: string;              // '1000Mb/s', '100Mb/s'
@@ -133,6 +134,19 @@ export interface InterfaceConfig {
   ipv6TcpAdjustMss?: number;
   eigrpSplitHorizon?: Record<number, boolean>;
   ipv6EigrpSplitHorizon?: Record<number, boolean>;
+
+  // DHCPv6 & Neighbor Discovery (ND)
+  ipv6NdOtherConfigFlag?: boolean;
+  ipv6NdManagedConfigFlag?: boolean;
+  ipv6NdPrefixNoAutoconfig?: string[];
+  ipv6NdRaDnsServer?: string;
+  ipv6DhcpServerPool?: string;
+
+  // IPv4 / IPv6 Traffic Filter & Access Groups & uRPF
+  ipAccessGroup?: { in?: string; out?: string };
+  ipv6TrafficFilter?: { in?: string; out?: string };
+  urpfMode?: 'rx' | 'any';
+  urpfAllowDefault?: boolean;
 
   // Zone-Based Policy Firewall (ZBFW) per interface
   zoneMemberSecurity?: string;
@@ -701,6 +715,7 @@ export interface TrackObject {
 
 export interface AclRule {
   number: number | string;     // 1-99 Standard, 100-199 Extended, or named
+  sequence?: number;           // sequence number e.g. 10, 15
   action: 'permit' | 'deny';
   protocol?: 'ip' | 'icmp' | 'tcp' | 'udp';
   sourceIp: string;            // 'any', 'host 1.2.3.4', or '192.168.1.0'
@@ -708,6 +723,8 @@ export interface AclRule {
   destIp?: string;
   destWildcard?: string;
   destPort?: number | string;  // e.g. 80, 22, 23
+  portRange?: { start: number; end: number };
+  timeRange?: string;          // e.g. 'REMOTE-CONTROL'
 }
 
 export interface NamedAcl {
@@ -715,6 +732,46 @@ export interface NamedAcl {
   type: 'standard' | 'extended';
   remarks?: string[];
   rules: AclRule[];
+}
+
+export interface Ipv6AclRule {
+  sequence?: number;
+  action: 'permit' | 'deny';
+  protocol: 'ipv6' | 'icmp' | 'tcp' | 'udp';
+  source: string;              // 'any', or prefix '2001:db8:acad:16::/64'
+  dest: string;                // 'any', or prefix
+  icmpType?: string;           // 'router-solicitation', 'echo-request', 'echo-reply'
+  destPort?: number | string;
+  destPortRange?: { start: number; end: number };
+  timeRange?: string;
+}
+
+export interface Ipv6NamedAcl {
+  name: string;
+  remarks?: string[];
+  rules: Ipv6AclRule[];
+}
+
+export interface DhcpV6Pool {
+  name: string;
+  addressPrefix?: string;
+  dnsServer?: string;
+  domainName?: string;
+  preference?: number;
+}
+
+export interface DhcpV6Binding {
+  ipv6Address: string;
+  type: string;
+  duid: string;
+  iaid: string;
+  leaseExpires: string;
+}
+
+export interface TimeRangeConfig {
+  name: string;
+  periodic?: { days: string; startTime: string; endTime: string }[];
+  absolute?: { startTime?: string; startDate?: string; endTime?: string; endDate?: string };
 }
 
 export interface DhcpPool {

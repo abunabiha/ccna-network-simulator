@@ -2465,5 +2465,473 @@ export const CCNP_LABS: LabDefinition[] = [
         { id: 'l3', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/2', cableType: 'straight' }
       ]
     }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB SEC 01: Implement DHCPv6 (SLAAC, Stateless, Stateful)
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-sec-01-dhcpv6',
+    track: 'CCNP',
+    category: 'Infrastructure Security & Services',
+    title: 'CCNP Enterprise: Implement DHCPv6 (SLAAC, Stateless, Stateful)',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    estimatedMinutes: 45,
+    difficulty: 'Advanced',
+    scenario: 'Dalam skenario enterprise infrastruktur ini, Anda ditugaskan untuk mengimplementasikan dan memverifikasi arsitektur pengalamatan dinamis IPv6 pada router Cisco IOS. Anda akan mengonfigurasi SLAAC murni pada antarmuka R1 G0/0/0, Stateless DHCPv6 pada antarmuka R1 G0/0/1 dengan pool DHCPv6 R1-STATELESS yang mendistribusikan informasi DNS dan domain-name menggunakan flag "ipv6 nd other-config-flag", serta Stateful DHCPv6 pada router R2 antarmuka G0/0/0 dengan pool DHCPv6 R2-STATEFUL (address prefix, DNS, domain name) menggunakan flag "ipv6 nd managed-config-flag" dan "ipv6 nd prefix ... no-autoconfig". Terakhir, aktifkan interkoneksi link IPv6 antara R1 dan R2.',
+    objectives: [
+      'Aktifkan routing IPv6 unicast global pada router R1 dan R2',
+      'Konfigurasi antarmuka G0/0/0 pada R1 untuk pengalamatan IPv6 dengan SLAAC',
+      'Konfigurasi pool DHCPv6 stateless R1-STATELESS dan terapkan pada antarmuka G0/0/1 R1',
+      'Konfigurasi pool DHCPv6 stateful R2-STATEFUL dan terapkan pada antarmuka G0/0/0 R2',
+      'Konfigurasi link IPv6 antarmuka interkoneksi R1 G0/0/2 dan R2 G0/0/2'
+    ],
+    tasks: [
+      {
+        id: 'task-dhcpv6-1',
+        description: 'Aktifkan ipv6 unicast-routing secara global pada R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_unicast_routing_enabled',
+        expectedValue: true,
+        hint: 'ipv6 unicast-routing'
+      },
+      {
+        id: 'task-dhcpv6-2',
+        description: 'Konfigurasi IPv6 address 2001:db8:acad:1::1/64 pada R1 G0/0/0',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'interface_ipv6',
+        expectedValue: '2001:db8:acad:1::1',
+        hint: 'interface G0/0/0 -> ipv6 address 2001:db8:acad:1::1/64'
+      },
+      {
+        id: 'task-dhcpv6-3',
+        description: 'Konfigurasi DHCPv6 pool R1-STATELESS dengan DNS server 2001:db8:acad::254 dan domain-name cisco.com pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'dhcpv6_pool',
+        expectedValue: { name: 'R1-STATELESS', dnsServer: '2001:db8:acad::254', domainName: 'cisco.com' },
+        hint: 'ipv6 dhcp pool R1-STATELESS -> dns-server 2001:db8:acad::254 -> domain-name cisco.com'
+      },
+      {
+        id: 'task-dhcpv6-4',
+        description: 'Konfigurasi IPv6 address 2001:db8:acad:2::1/64 pada R1 G0/0/1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'interface_ipv6',
+        expectedValue: '2001:db8:acad:2::1',
+        hint: 'interface G0/0/1 -> ipv6 address 2001:db8:acad:2::1/64'
+      },
+      {
+        id: 'task-dhcpv6-5',
+        description: 'Konfigurasi ipv6 nd other-config-flag dan tautkan DHCPv6 server pool R1-STATELESS pada R1 G0/0/1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'interface_dhcpv6_nd',
+        expectedValue: { otherConfigFlag: true, dhcpServerPool: 'R1-STATELESS' },
+        hint: 'interface G0/0/1 -> ipv6 nd other-config-flag -> ipv6 dhcp server R1-STATELESS'
+      },
+      {
+        id: 'task-dhcpv6-6',
+        description: 'Aktifkan ipv6 unicast-routing secara global pada R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'ipv6_unicast_routing_enabled',
+        expectedValue: true,
+        hint: 'ipv6 unicast-routing'
+      },
+      {
+        id: 'task-dhcpv6-7',
+        description: 'Konfigurasi DHCPv6 pool R2-STATEFUL dengan prefix 2001:db8:acad:3::/64, DNS 2001:db8:acad::254, dan domain-name cisco.com pada R2',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'dhcpv6_pool',
+        expectedValue: { name: 'R2-STATEFUL', addressPrefix: '2001:db8:acad:3::/64', dnsServer: '2001:db8:acad::254', domainName: 'cisco.com' },
+        hint: 'ipv6 dhcp pool R2-STATEFUL -> address prefix 2001:db8:acad:3::/64 -> dns-server 2001:db8:acad::254 -> domain-name cisco.com'
+      },
+      {
+        id: 'task-dhcpv6-8',
+        description: 'Konfigurasi IPv6 address 2001:db8:acad:3::1/64 pada R2 G0/0/0',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'interface_ipv6',
+        expectedValue: '2001:db8:acad:3::1',
+        hint: 'interface G0/0/0 -> ipv6 address 2001:db8:acad:3::1/64'
+      },
+      {
+        id: 'task-dhcpv6-9',
+        description: 'Konfigurasi ipv6 nd managed-config-flag, no-autoconfig prefix, dan tautkan pool R2-STATEFUL pada R2 G0/0/0',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'interface_dhcpv6_nd',
+        expectedValue: { managedConfigFlag: true, prefixNoAutoconfig: '2001:db8:acad:3::/64', dhcpServerPool: 'R2-STATEFUL' },
+        hint: 'interface G0/0/0 -> ipv6 nd managed-config-flag -> ipv6 nd prefix 2001:db8:acad:3::/64 no-autoconfig -> ipv6 dhcp server R2-STATEFUL'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 300, y: 220 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 600, y: 220 },
+        { id: 'S1', hostname: 'S1', type: 'switch', x: 180, y: 360 },
+        { id: 'S2', hostname: 'S2', type: 'switch', x: 420, y: 360 },
+        { id: 'PC-A', hostname: 'PC-A', type: 'host', x: 180, y: 480 },
+        { id: 'PC-B', hostname: 'PC-B', type: 'host', x: 420, y: 480 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/2', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/2', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'S1', targetPort: 'GigabitEthernet0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'S2', targetPort: 'GigabitEthernet0/1', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'S1', sourcePort: 'GigabitEthernet0/2', targetDeviceId: 'PC-A', targetPort: 'eth0', cableType: 'straight' },
+        { id: 'l5', sourceDeviceId: 'S2', sourcePort: 'GigabitEthernet0/2', targetDeviceId: 'PC-B', targetPort: 'eth0', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB SEC 02: Troubleshoot IPv4 ACLs
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-sec-02-troubleshoot-ipv4-acls',
+    track: 'CCNP',
+    category: 'Infrastructure Security & Services',
+    title: 'CCNP Enterprise: Troubleshoot IPv4 ACLs',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    estimatedMinutes: 45,
+    difficulty: 'Intermediate',
+    scenario: 'Jaringan enterprise mengalami masalah konektivitas administratif dan web service akibat kesalahan konfigurasi Access Control List (ACL). Anda diminta untuk menganalisis, mendiagnosis, dan memperbaiki kesalahan pada ACL berikut: (1) Definisi time-range "REMOTE-CONTROL" yang tidak tepat, (2) Urutan aturan (sequence number) pada named extended ACL "ACCESS-RULES" di R1 yang memblokir akses SSH administrator dan Web/HTTPS traffic, (3) Penerapan "ip access-group" pada interface yang salah, dan (4) Pembatasan akses remote terminal pada Line VTY router R3 menggunakan standard ACL "ADMIN-VTY" yang belum terpasang.',
+    objectives: [
+      'Konfigurasi dan perbaiki time-range REMOTE-CONTROL pada R1',
+      'Konfigurasi dan sesuaikan nomor urutan (sequence) named ACL ACCESS-RULES pada R1',
+      'Pasang ip access-group ACCESS-RULES secara tepat pada antarmuka inbound G0/0/1 R1',
+      'Konfigurasi standard ACL ADMIN-VTY dan terapkan dengan access-class pada line vty 0 4 di R3'
+    ],
+    tasks: [
+      {
+        id: 'task-ip4acl-1',
+        description: 'Konfigurasi time-range REMOTE-CONTROL periodic weekdays 09:00 to 17:00 pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'time_range',
+        expectedValue: { name: 'REMOTE-CONTROL', periodic: { days: 'weekdays', start: '09:00', end: '17:00' } },
+        hint: 'time-range REMOTE-CONTROL -> periodic weekdays 09:00 to 17:00'
+      },
+      {
+        id: 'task-ip4acl-2',
+        description: 'Konfigurasi ACL ACCESS-RULES sequence 10 permit tcp any ke 192.168.30.0 dengan time-range REMOTE-CONTROL pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'named_acl_rule',
+        expectedValue: { name: 'ACCESS-RULES', sequence: 10, action: 'permit', protocol: 'tcp', destination: '192.168.30.0', timeRange: 'REMOTE-CONTROL' },
+        hint: 'ip access-list extended ACCESS-RULES -> 10 permit tcp any 192.168.30.0 0.0.0.255 eq 22 time-range REMOTE-CONTROL'
+      },
+      {
+        id: 'task-ip4acl-3',
+        description: 'Konfigurasi ACL ACCESS-RULES sequence 20 permit icmp any ke 192.168.30.0 pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'named_acl_rule',
+        expectedValue: { name: 'ACCESS-RULES', sequence: 20, action: 'permit', protocol: 'icmp', destination: '192.168.30.0' },
+        hint: 'ip access-list extended ACCESS-RULES -> 20 permit icmp any 192.168.30.0 0.0.0.255'
+      },
+      {
+        id: 'task-ip4acl-4',
+        description: 'Konfigurasi ACL ACCESS-RULES sequence 30 permit tcp any any range 80 443 pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'named_acl_rule',
+        expectedValue: { name: 'ACCESS-RULES', sequence: 30, action: 'permit', protocol: 'tcp' },
+        hint: 'ip access-list extended ACCESS-RULES -> 30 permit tcp any any range 80 443'
+      },
+      {
+        id: 'task-ip4acl-5',
+        description: 'Terapkan ip access-group ACCESS-RULES in pada antarmuka R1 G0/0/1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'interface_ip_access_group',
+        expectedValue: { acl: 'ACCESS-RULES', direction: 'in' },
+        hint: 'interface G0/0/1 -> ip access-group ACCESS-RULES in'
+      },
+      {
+        id: 'task-ip4acl-6',
+        description: 'Konfigurasi standard ACL ADMIN-VTY permit 192.168.10.0 0.0.0.255 pada R3',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'named_acl_rule',
+        expectedValue: { name: 'ADMIN-VTY', action: 'permit', source: '192.168.10.0' },
+        hint: 'ip access-list standard ADMIN-VTY -> permit 192.168.10.0 0.0.0.255'
+      },
+      {
+        id: 'task-ip4acl-7',
+        description: 'Terapkan access-class ADMIN-VTY in pada Line VTY 0 4 router R3',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'vty_access_class',
+        expectedValue: { acl: 'ADMIN-VTY', direction: 'in' },
+        hint: 'line vty 0 4 -> access-class ADMIN-VTY in'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 250, y: 180 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 450, y: 180 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 650, y: 180 },
+        { id: 'S1', hostname: 'S1', type: 'switch', x: 250, y: 320 },
+        { id: 'S3', hostname: 'S3', type: 'switch', x: 650, y: 320 },
+        { id: 'PC-A', hostname: 'PC-A', type: 'host', x: 250, y: 440 },
+        { id: 'PC-C', hostname: 'PC-C', type: 'host', x: 650, y: 440 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'S1', targetPort: 'GigabitEthernet0/1', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'S3', targetPort: 'GigabitEthernet0/1', cableType: 'straight' },
+        { id: 'l5', sourceDeviceId: 'S1', sourcePort: 'GigabitEthernet0/2', targetDeviceId: 'PC-A', targetPort: 'eth0', cableType: 'straight' },
+        { id: 'l6', sourceDeviceId: 'S3', sourcePort: 'GigabitEthernet0/2', targetDeviceId: 'PC-C', targetPort: 'eth0', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB SEC 03: Troubleshoot IPv6 ACLs
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-sec-03-troubleshoot-ipv6-acls',
+    track: 'CCNP',
+    category: 'Infrastructure Security & Services',
+    title: 'CCNP Enterprise: Troubleshoot IPv6 ACLs',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    estimatedMinutes: 45,
+    difficulty: 'Intermediate',
+    scenario: 'Dalam implementasi IPv6 Access Control Lists, salah satu tantangan paling kritis adalah pemblokiran paket-paket esensial ICMPv6 seperti Neighbor Discovery (Router Advertisement dan Router Solicitation) akibat penempatan "deny ipv6 any any" yang tidak terencana dengan baik. Di lab ini, PC-A dan PC-B kehilangan konektivitas IPv6. Anda harus memperbaiki named IPv6 ACL "RESTRICT-IPV6" pada R1 dengan menyusun urutan aturan secara presisi: mengizinkan ICMPv6 RA dan RS, mengizinkan ICMP echo-request dan echo-reply, mengizinkan traffic HTTP dan HTTPS dari LAN 1 (2001:db8:acad:1::/64), dan menerapkan filter pada antarmuka G0/0/1.',
+    objectives: [
+      'Aktifkan routing IPv6 unicast pada R1',
+      'Konfigurasi aturan ICMPv6 Neighbor Discovery (RA dan RS) pada IPv6 ACL RESTRICT-IPV6',
+      'Konfigurasi aturan ICMPv6 Echo Request dan Echo Reply pada IPv6 ACL RESTRICT-IPV6',
+      'Konfigurasi aturan TCP Port 80 (HTTP) dan 443 (HTTPS) pada IPv6 ACL RESTRICT-IPV6',
+      'Terapkan ipv6 traffic-filter RESTRICT-IPV6 in pada antarmuka G0/0/1 R1'
+    ],
+    tasks: [
+      {
+        id: 'task-ip6acl-1',
+        description: 'Aktifkan ipv6 unicast-routing secara global pada R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_unicast_routing_enabled',
+        expectedValue: true,
+        hint: 'ipv6 unicast-routing'
+      },
+      {
+        id: 'task-ip6acl-2',
+        description: 'Konfigurasi RESTRICT-IPV6 sequence 10 permit icmp any any router-advertisement pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_acl_rule',
+        expectedValue: { name: 'RESTRICT-IPV6', sequence: 10, action: 'permit', protocol: 'icmp', icmpType: 'router-advertisement' },
+        hint: 'ipv6 access-list RESTRICT-IPV6 -> 10 permit icmp any any router-advertisement'
+      },
+      {
+        id: 'task-ip6acl-3',
+        description: 'Konfigurasi RESTRICT-IPV6 sequence 20 permit icmp any any router-solicitation pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_acl_rule',
+        expectedValue: { name: 'RESTRICT-IPV6', sequence: 20, action: 'permit', protocol: 'icmp', icmpType: 'router-solicitation' },
+        hint: 'ipv6 access-list RESTRICT-IPV6 -> 20 permit icmp any any router-solicitation'
+      },
+      {
+        id: 'task-ip6acl-4',
+        description: 'Konfigurasi RESTRICT-IPV6 sequence 30 permit icmp any any echo-request pada R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_acl_rule',
+        expectedValue: { name: 'RESTRICT-IPV6', sequence: 30, action: 'permit', protocol: 'icmp', icmpType: 'echo-request' },
+        hint: 'ipv6 access-list RESTRICT-IPV6 -> 30 permit icmp any any echo-request'
+      },
+      {
+        id: 'task-ip6acl-5',
+        description: 'Konfigurasi RESTRICT-IPV6 sequence 40 permit icmp any any echo-reply pada R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_acl_rule',
+        expectedValue: { name: 'RESTRICT-IPV6', sequence: 40, action: 'permit', protocol: 'icmp', icmpType: 'echo-reply' },
+        hint: 'ipv6 access-list RESTRICT-IPV6 -> 40 permit icmp any any echo-reply'
+      },
+      {
+        id: 'task-ip6acl-6',
+        description: 'Konfigurasi RESTRICT-IPV6 sequence 50 permit tcp 2001:db8:acad:1::/64 any eq 80 pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_acl_rule',
+        expectedValue: { name: 'RESTRICT-IPV6', sequence: 50, action: 'permit', protocol: 'tcp', source: '2001:db8:acad:1::/64' },
+        hint: 'ipv6 access-list RESTRICT-IPV6 -> 50 permit tcp 2001:db8:acad:1::/64 any eq 80'
+      },
+      {
+        id: 'task-ip6acl-7',
+        description: 'Konfigurasi RESTRICT-IPV6 sequence 60 permit tcp 2001:db8:acad:1::/64 any eq 443 pada R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ipv6_acl_rule',
+        expectedValue: { name: 'RESTRICT-IPV6', sequence: 60, action: 'permit', protocol: 'tcp', source: '2001:db8:acad:1::/64' },
+        hint: 'ipv6 access-list RESTRICT-IPV6 -> 60 permit tcp 2001:db8:acad:1::/64 any eq 443'
+      },
+      {
+        id: 'task-ip6acl-8',
+        description: 'Terapkan ipv6 traffic-filter RESTRICT-IPV6 in pada antarmuka R1 G0/0/1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'interface_ipv6_traffic_filter',
+        expectedValue: { acl: 'RESTRICT-IPV6', direction: 'in' },
+        hint: 'interface G0/0/1 -> ipv6 traffic-filter RESTRICT-IPV6 in'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 300, y: 220 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 600, y: 220 },
+        { id: 'S1', hostname: 'S1', type: 'switch', x: 300, y: 360 },
+        { id: 'PC-A', hostname: 'PC-A', type: 'host', x: 180, y: 480 },
+        { id: 'PC-B', hostname: 'PC-B', type: 'host', x: 420, y: 480 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'S1', targetPort: 'GigabitEthernet0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'S1', sourcePort: 'GigabitEthernet0/2', targetDeviceId: 'PC-A', targetPort: 'eth0', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'S1', sourcePort: 'GigabitEthernet0/3', targetDeviceId: 'PC-B', targetPort: 'eth0', cableType: 'straight' }
+      ]
+    }
+  },
+
+  // -------------------------------------------------------------
+  // CCNP LAB SEC 04: Troubleshoot uRPF
+  // -------------------------------------------------------------
+  {
+    id: 'lab-ccnp-sec-04-troubleshoot-urpf',
+    track: 'CCNP',
+    category: 'Infrastructure Security & Services',
+    title: 'CCNP Enterprise: Troubleshoot uRPF',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    estimatedMinutes: 45,
+    difficulty: 'Intermediate',
+    scenario: 'Unicast Reverse Path Forwarding (uRPF) adalah fitur keamanan anti-spoofing yang memvalidasi source IP packet terhadap tabel FIB router. Di skenario enterprise ini, konfigurasi strict uRPF (ip verify unicast source reachable-via rx) pada antarmuka yang terhubung ke ISP menyebabkan drop pada trafik asimetris dan trafik default route. Anda diminta untuk meneliti status drop menggunakan perintah "show ip traffic" dan "show ip interface", mengonfigurasi strict uRPF pada antarmuka pelanggan internal R1 G0/0/0, mengonfigurasi loose uRPF dengan allow-default pada uplink ISP R1 G0/0/1, serta loose uRPF pada R2 G0/0/0.',
+    objectives: [
+      'Konfigurasi strict uRPF pada antarmuka internal R1 G0/0/0',
+      'Konfigurasi loose uRPF dengan allow-default pada antarmuka uplink R1 G0/0/1',
+      'Konfigurasi static default route pada R1 ke ISP (209.165.200.226)',
+      'Konfigurasi loose uRPF pada antarmuka R2 G0/0/0',
+      'Verifikasi dan pastikan status antarmuka R1 G0/0/0 dan G0/0/1 berstatus UP'
+    ],
+    tasks: [
+      {
+        id: 'task-urpf-1',
+        description: 'Konfigurasi strict uRPF pada antarmuka internal R1 G0/0/0',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'interface_urpf',
+        expectedValue: { mode: 'rx' },
+        hint: 'interface G0/0/0 -> ip verify unicast source reachable-via rx'
+      },
+      {
+        id: 'task-urpf-2',
+        description: 'Konfigurasi loose uRPF dengan allow-default pada antarmuka uplink R1 G0/0/1',
+        points: 25,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'interface_urpf',
+        expectedValue: { mode: 'any', allowDefault: true },
+        hint: 'interface G0/0/1 -> ip verify unicast source reachable-via any allow-default'
+      },
+      {
+        id: 'task-urpf-3',
+        description: 'Konfigurasi static default route ke 209.165.200.226 pada R1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'static_route',
+        expectedValue: { network: '0.0.0.0', mask: '0.0.0.0' },
+        hint: 'ip route 0.0.0.0 0.0.0.0 209.165.200.226'
+      },
+      {
+        id: 'task-urpf-4',
+        description: 'Konfigurasi loose uRPF pada antarmuka R2 G0/0/0',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'interface_urpf',
+        expectedValue: { mode: 'any' },
+        hint: 'interface G0/0/0 -> ip verify unicast source reachable-via any'
+      },
+      {
+        id: 'task-urpf-5',
+        description: 'Pastikan antarmuka R1 G0/0/0 dalam status no shutdown',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/0',
+        expectedProperty: 'interface_no_shutdown',
+        expectedValue: true,
+        hint: 'interface G0/0/0 -> no shutdown'
+      },
+      {
+        id: 'task-urpf-6',
+        description: 'Pastikan antarmuka R1 G0/0/1 dalam status no shutdown',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'interface_no_shutdown',
+        expectedValue: true,
+        hint: 'interface G0/0/1 -> no shutdown'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 300, y: 220 },
+        { id: 'ISP', hostname: 'ISP', type: 'router', x: 550, y: 120 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 550, y: 320 },
+        { id: 'PC-A', hostname: 'PC-A', type: 'host', x: 150, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'PC-A', targetPort: 'eth0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'ISP', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/2', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' }
+      ]
+    }
   }
 ];

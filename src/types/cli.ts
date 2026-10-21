@@ -28,7 +28,10 @@ export type CliMode =
   | 'router-af-interface-config' // Router(config-router-af-interface)#
   | 'router-af-topology-config' // Router(config-router-af-topology)#
   | 'std-nacl-config'     // Router(config-std-nacl)#
-  | 'ext-nacl-config';    // Router(config-ext-nacl)#
+  | 'ext-nacl-config'     // Router(config-ext-nacl)#
+  | 'dhcpv6-config'       // Router(config-dhcpv6)#
+  | 'ipv6-acl-config'     // Router(config-ipv6-acl)#
+  | 'time-range-config';  // Router(config-time-range)#
 
 export interface CliContext {
   deviceId: string;
@@ -64,6 +67,9 @@ export interface CliContext {
   targetAfInterface?: string;
   targetAfType?: 'eigrp' | 'bgp' | 'ospfv3';
   targetEigrpName?: string;
+  targetDhcpV6Pool?: string;
+  targetIpv6AclName?: string;
+  targetTimeRangeName?: string;
 }
 
 export interface CommandHelpItem {

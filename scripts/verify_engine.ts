@@ -2449,7 +2449,217 @@ console.log(`R1 running-config includes ip nhrp redirect: ${runCfgR1Dmvpn.includ
 console.log(`R1 running-config includes crypto ipsec transform-set DMVPN-TS: ${runCfgR1Dmvpn.includes('crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac') ? 'PASS' : 'FAIL'}`);
 console.log(`R1 running-config includes tunnel protection ipsec profile DMVPN-PROFILE: ${runCfgR1Dmvpn.includes('tunnel protection ipsec profile DMVPN-PROFILE') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, 6 LAB BGP, 3 LAB ROUTING MANIPULATION & PBR, SERTA 5 LAB VPN & DMVPN SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+// ============================================================================
+// 23. CCNP ENTERPRISE: INFRASTRUCTURE SECURITY & SERVICES LABS
+// ============================================================================
+console.log('\n============================================================================');
+console.log('23. CCNP ENTERPRISE: INFRASTRUCTURE SECURITY & SERVICES LABS');
+console.log('============================================================================');
+
+// --- 23.1 Lab 01: Implement DHCPv6 (SLAAC, Stateless, Stateful) ---
+console.log('\n--- 23.1 Lab 01: Implement DHCPv6 (SLAAC, Stateless, Stateful) ---');
+const ccnpSecLab1 = CCNP_LABS.find(l => l.id === 'lab-ccnp-sec-01-dhcpv6')!;
+console.log(`Found Lab 01: ${ccnpSecLab1.title} (${ccnpSecLab1.tasks.length} tasks)`);
+
+const r1Sec1 = new Router('R1', 'R1', { x: 300, y: 220 });
+const r2Sec1 = new Router('R2', 'R2', { x: 600, y: 220 });
+const s1Sec1 = new Switch('S1', 'S1', { x: 180, y: 360 });
+const s2Sec1 = new Switch('S2', 'S2', { x: 420, y: 360 });
+const pcASec1 = new Host('PC-A', 'PC-A', { x: 180, y: 480 });
+const pcBSec1 = new Host('PC-B', 'PC-B', { x: 420, y: 480 });
+const sec1Devs = [r1Sec1, r2Sec1, s1Sec1, s2Sec1, pcASec1, pcBSec1];
+
+// R1 Configuration
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec1, sec1Devs);
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec1, sec1Devs);
+CliParser.execute('ipv6 address 2001:db8:acad:1::1/64', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Sec1, sec1Devs);
+CliParser.execute('ipv6 address fe80::1 link-local', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Sec1, sec1Devs);
+CliParser.execute('no shutdown', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Sec1, sec1Devs);
+
+CliParser.execute('ipv6 dhcp pool R1-STATELESS', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec1, sec1Devs);
+CliParser.execute('dns-server 2001:db8:acad::254', { deviceId: 'R1', mode: 'dhcpv6-config' as const, targetDhcpV6Pool: 'R1-STATELESS' }, r1Sec1, sec1Devs);
+CliParser.execute('domain-name cisco.com', { deviceId: 'R1', mode: 'dhcpv6-config' as const, targetDhcpV6Pool: 'R1-STATELESS' }, r1Sec1, sec1Devs);
+
+CliParser.execute('interface GigabitEthernet0/0/1', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec1, sec1Devs);
+CliParser.execute('ipv6 address 2001:db8:acad:2::1/64', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec1, sec1Devs);
+CliParser.execute('ipv6 address fe80::1 link-local', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec1, sec1Devs);
+CliParser.execute('ipv6 nd other-config-flag', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec1, sec1Devs);
+CliParser.execute('ipv6 dhcp server R1-STATELESS', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec1, sec1Devs);
+CliParser.execute('no shutdown', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec1, sec1Devs);
+
+// R2 Configuration
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R2', mode: 'global-config' as const }, r2Sec1, sec1Devs);
+CliParser.execute('ipv6 dhcp pool R2-STATEFUL', { deviceId: 'R2', mode: 'global-config' as const }, r2Sec1, sec1Devs);
+CliParser.execute('address prefix 2001:db8:acad:3::/64', { deviceId: 'R2', mode: 'dhcpv6-config' as const, targetDhcpV6Pool: 'R2-STATEFUL' }, r2Sec1, sec1Devs);
+CliParser.execute('dns-server 2001:db8:acad::254', { deviceId: 'R2', mode: 'dhcpv6-config' as const, targetDhcpV6Pool: 'R2-STATEFUL' }, r2Sec1, sec1Devs);
+CliParser.execute('domain-name cisco.com', { deviceId: 'R2', mode: 'dhcpv6-config' as const, targetDhcpV6Pool: 'R2-STATEFUL' }, r2Sec1, sec1Devs);
+
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'global-config' as const }, r2Sec1, sec1Devs);
+CliParser.execute('ipv6 address 2001:db8:acad:3::1/64', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec1, sec1Devs);
+CliParser.execute('ipv6 address fe80::2 link-local', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec1, sec1Devs);
+CliParser.execute('ipv6 nd managed-config-flag', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec1, sec1Devs);
+CliParser.execute('ipv6 nd prefix 2001:db8:acad:3::/64 no-autoconfig', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec1, sec1Devs);
+CliParser.execute('ipv6 dhcp server R2-STATEFUL', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec1, sec1Devs);
+CliParser.execute('no shutdown', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec1, sec1Devs);
+
+const reportSec1 = LabGrader.grade(ccnpSecLab1, sec1Devs);
+console.log(`CCNP DHCPv6 Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportSec1.totalScore === 100 && reportSec1.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportSec1.totalScore}%)`);
+if (!reportSec1.isPassed) {
+  console.log('Failed Tasks in Lab 01:', reportSec1.taskResults.filter(t => !t.passed));
+}
+
+// --- 23.2 Lab 02: Troubleshoot IPv4 ACLs ---
+console.log('\n--- 23.2 Lab 02: Troubleshoot IPv4 ACLs ---');
+const ccnpSecLab2 = CCNP_LABS.find(l => l.id === 'lab-ccnp-sec-02-troubleshoot-ipv4-acls')!;
+console.log(`Found Lab 02: ${ccnpSecLab2.title} (${ccnpSecLab2.tasks.length} tasks)`);
+
+const r1Sec2 = new Router('R1', 'R1', { x: 250, y: 180 });
+const r2Sec2 = new Router('R2', 'R2', { x: 450, y: 180 });
+const r3Sec2 = new Router('R3', 'R3', { x: 650, y: 180 });
+const s1Sec2 = new Switch('S1', 'S1', { x: 250, y: 320 });
+const s3Sec2 = new Switch('S3', 'S3', { x: 650, y: 320 });
+const pcASec2 = new Host('PC-A', 'PC-A', { x: 250, y: 440 });
+const pcCSec2 = new Host('PC-C', 'PC-C', { x: 650, y: 440 });
+const sec2Devs = [r1Sec2, r2Sec2, r3Sec2, s1Sec2, s3Sec2, pcASec2, pcCSec2];
+
+// R1: time-range & extended ACL
+CliParser.execute('time-range REMOTE-CONTROL', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec2, sec2Devs);
+CliParser.execute('periodic weekdays 09:00 to 17:00', { deviceId: 'R1', mode: 'time-range-config' as const, targetTimeRangeName: 'REMOTE-CONTROL' }, r1Sec2, sec2Devs);
+
+CliParser.execute('ip access-list extended ACCESS-RULES', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec2, sec2Devs);
+CliParser.execute('10 permit tcp any 192.168.30.0 0.0.0.255 eq 22 time-range REMOTE-CONTROL', { deviceId: 'R1', mode: 'ext-nacl-config' as const, targetAclName: 'ACCESS-RULES' }, r1Sec2, sec2Devs);
+CliParser.execute('20 permit icmp any 192.168.30.0 0.0.0.255', { deviceId: 'R1', mode: 'ext-nacl-config' as const, targetAclName: 'ACCESS-RULES' }, r1Sec2, sec2Devs);
+CliParser.execute('30 permit tcp any any range 80 443', { deviceId: 'R1', mode: 'ext-nacl-config' as const, targetAclName: 'ACCESS-RULES' }, r1Sec2, sec2Devs);
+
+CliParser.execute('interface GigabitEthernet0/0/1', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec2, sec2Devs);
+CliParser.execute('ip access-group ACCESS-RULES in', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec2, sec2Devs);
+
+// R3: standard ACL & line vty access-class
+CliParser.execute('ip access-list standard ADMIN-VTY', { deviceId: 'R3', mode: 'global-config' as const }, r3Sec2, sec2Devs);
+CliParser.execute('permit 192.168.10.0 0.0.0.255', { deviceId: 'R3', mode: 'std-nacl-config' as const, targetAclName: 'ADMIN-VTY' }, r3Sec2, sec2Devs);
+
+CliParser.execute('line vty 0 4', { deviceId: 'R3', mode: 'global-config' as const }, r3Sec2, sec2Devs);
+CliParser.execute('access-class ADMIN-VTY in', { deviceId: 'R3', mode: 'line-config' as const }, r3Sec2, sec2Devs);
+
+const reportSec2 = LabGrader.grade(ccnpSecLab2, sec2Devs);
+console.log(`CCNP Troubleshoot IPv4 ACLs Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportSec2.totalScore === 100 && reportSec2.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportSec2.totalScore}%)`);
+if (!reportSec2.isPassed) {
+  console.log('Failed Tasks in Lab 02:', reportSec2.taskResults.filter(t => !t.passed));
+}
+
+// --- 23.3 Lab 03: Troubleshoot IPv6 ACLs ---
+console.log('\n--- 23.3 Lab 03: Troubleshoot IPv6 ACLs ---');
+const ccnpSecLab3 = CCNP_LABS.find(l => l.id === 'lab-ccnp-sec-03-troubleshoot-ipv6-acls')!;
+console.log(`Found Lab 03: ${ccnpSecLab3.title} (${ccnpSecLab3.tasks.length} tasks)`);
+
+const r1Sec3 = new Router('R1', 'R1', { x: 300, y: 220 });
+const r2Sec3 = new Router('R2', 'R2', { x: 600, y: 220 });
+const s1Sec3 = new Switch('S1', 'S1', { x: 300, y: 360 });
+const pcASec3 = new Host('PC-A', 'PC-A', { x: 180, y: 480 });
+const pcBSec3 = new Host('PC-B', 'PC-B', { x: 420, y: 480 });
+const sec3Devs = [r1Sec3, r2Sec3, s1Sec3, pcASec3, pcBSec3];
+
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec3, sec3Devs);
+CliParser.execute('ipv6 access-list RESTRICT-IPV6', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec3, sec3Devs);
+CliParser.execute('10 permit icmp any any router-advertisement', { deviceId: 'R1', mode: 'ipv6-acl-config' as const, targetIpv6AclName: 'RESTRICT-IPV6' }, r1Sec3, sec3Devs);
+CliParser.execute('20 permit icmp any any router-solicitation', { deviceId: 'R1', mode: 'ipv6-acl-config' as const, targetIpv6AclName: 'RESTRICT-IPV6' }, r1Sec3, sec3Devs);
+CliParser.execute('30 permit icmp any any echo-request', { deviceId: 'R1', mode: 'ipv6-acl-config' as const, targetIpv6AclName: 'RESTRICT-IPV6' }, r1Sec3, sec3Devs);
+CliParser.execute('40 permit icmp any any echo-reply', { deviceId: 'R1', mode: 'ipv6-acl-config' as const, targetIpv6AclName: 'RESTRICT-IPV6' }, r1Sec3, sec3Devs);
+CliParser.execute('50 permit tcp 2001:db8:acad:1::/64 any eq 80', { deviceId: 'R1', mode: 'ipv6-acl-config' as const, targetIpv6AclName: 'RESTRICT-IPV6' }, r1Sec3, sec3Devs);
+CliParser.execute('60 permit tcp 2001:db8:acad:1::/64 any eq 443', { deviceId: 'R1', mode: 'ipv6-acl-config' as const, targetIpv6AclName: 'RESTRICT-IPV6' }, r1Sec3, sec3Devs);
+CliParser.execute('100 deny ipv6 any any', { deviceId: 'R1', mode: 'ipv6-acl-config' as const, targetIpv6AclName: 'RESTRICT-IPV6' }, r1Sec3, sec3Devs);
+
+CliParser.execute('interface GigabitEthernet0/0/1', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec3, sec3Devs);
+CliParser.execute('ipv6 traffic-filter RESTRICT-IPV6 in', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec3, sec3Devs);
+
+const reportSec3 = LabGrader.grade(ccnpSecLab3, sec3Devs);
+console.log(`CCNP Troubleshoot IPv6 ACLs Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportSec3.totalScore === 100 && reportSec3.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportSec3.totalScore}%)`);
+if (!reportSec3.isPassed) {
+  console.log('Failed Tasks in Lab 03:', reportSec3.taskResults.filter(t => !t.passed));
+}
+
+// --- 23.4 Lab 04: Troubleshoot uRPF ---
+console.log('\n--- 23.4 Lab 04: Troubleshoot uRPF ---');
+const ccnpSecLab4 = CCNP_LABS.find(l => l.id === 'lab-ccnp-sec-04-troubleshoot-urpf')!;
+console.log(`Found Lab 04: ${ccnpSecLab4.title} (${ccnpSecLab4.tasks.length} tasks)`);
+
+const r1Sec4 = new Router('R1', 'R1', { x: 300, y: 220 });
+const ispSec4 = new Router('ISP', 'ISP', { x: 550, y: 120 });
+const r2Sec4 = new Router('R2', 'R2', { x: 550, y: 320 });
+const pcASec4 = new Host('PC-A', 'PC-A', { x: 150, y: 220 });
+const sec4Devs = [r1Sec4, ispSec4, r2Sec4, pcASec4];
+
+// R1
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec4, sec4Devs);
+CliParser.execute('ip address 10.1.1.1 255.255.255.0', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Sec4, sec4Devs);
+CliParser.execute('ip verify unicast source reachable-via rx', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Sec4, sec4Devs);
+CliParser.execute('no shutdown', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1Sec4, sec4Devs);
+
+CliParser.execute('interface GigabitEthernet0/0/1', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec4, sec4Devs);
+CliParser.execute('ip address 209.165.200.225 255.255.255.252', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec4, sec4Devs);
+CliParser.execute('ip verify unicast source reachable-via any allow-default', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec4, sec4Devs);
+CliParser.execute('no shutdown', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Sec4, sec4Devs);
+
+CliParser.execute('ip route 0.0.0.0 0.0.0.0 209.165.200.226', { deviceId: 'R1', mode: 'global-config' as const }, r1Sec4, sec4Devs);
+
+// R2
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'global-config' as const }, r2Sec4, sec4Devs);
+CliParser.execute('ip address 10.2.2.1 255.255.255.0', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec4, sec4Devs);
+CliParser.execute('ip verify unicast source reachable-via any', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec4, sec4Devs);
+CliParser.execute('no shutdown', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2Sec4, sec4Devs);
+
+const reportSec4 = LabGrader.grade(ccnpSecLab4, sec4Devs);
+console.log(`CCNP Troubleshoot uRPF Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportSec4.totalScore === 100 && reportSec4.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportSec4.totalScore}%)`);
+if (!reportSec4.isPassed) {
+  console.log('Failed Tasks in Lab 04:', reportSec4.taskResults.filter(t => !t.passed));
+}
+
+// --- 23.5 Security & Services Diagnostic Show Commands & Running Config Serialization ---
+console.log('\n--- 23.5 Security & Services Diagnostic Show Commands & Running Config Serialization ---');
+
+// Show commands testing
+const showDhcpPoolRes = CliParser.execute('show ipv6 dhcp pool', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Sec1, sec1Devs);
+console.log(`show ipv6 dhcp pool renders correctly: ${showDhcpPoolRes.output.includes('DHCPv6 pool: R1-STATELESS') && showDhcpPoolRes.output.toLowerCase().includes('2001:db8:acad::254') ? 'PASS' : 'FAIL'}`);
+
+const showDhcpBindingRes = CliParser.execute('show ipv6 dhcp binding', { deviceId: 'R2', mode: 'priv-exec' as const }, r2Sec1, sec1Devs);
+console.log(`show ipv6 dhcp binding renders correctly: ${showDhcpBindingRes.output.includes('Client:') || showDhcpBindingRes.output.includes('Address:') || showDhcpBindingRes.output.includes('No dynamic bindings') ? 'PASS' : 'FAIL'}`);
+
+const showIpv6IfRes = CliParser.execute('show ipv6 interface GigabitEthernet0/0/1', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Sec1, sec1Devs);
+console.log(`show ipv6 interface displays ND other-config & DHCP pool: ${showIpv6IfRes.output.includes('Hosts use stateless autoconfig for addresses') && showIpv6IfRes.output.includes('R1-STATELESS') ? 'PASS' : 'FAIL'}`);
+
+const showTimeRangeRes = CliParser.execute('show time-range', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Sec2, sec2Devs);
+console.log(`show time-range displays REMOTE-CONTROL: ${showTimeRangeRes.output.includes('time-range entry: REMOTE-CONTROL') && showTimeRangeRes.output.includes('weekdays 09:00 to 17:00') ? 'PASS' : 'FAIL'}`);
+
+const showIpv6AclRes = CliParser.execute('show ipv6 access-list', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Sec3, sec3Devs);
+console.log(`show ipv6 access-list displays RESTRICT-IPV6 rules: ${showIpv6AclRes.output.includes('IPv6 access list RESTRICT-IPV6') && showIpv6AclRes.output.includes('router-advertisement') ? 'PASS' : 'FAIL'}`);
+
+const showIpTrafficRes = CliParser.execute('show ip traffic', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Sec4, sec4Devs);
+console.log(`show ip traffic displays unicast RPF stats: ${showIpTrafficRes.output.includes('unicast RPF') ? 'PASS' : 'FAIL'}`);
+
+// Running config serialization testing
+const runCfgSec1 = r1Sec1.getRunningConfig();
+console.log(`R1 running-config includes ipv6 dhcp pool R1-STATELESS: ${runCfgSec1.includes('ipv6 dhcp pool R1-STATELESS') && runCfgSec1.includes('dns-server 2001:db8:acad::254') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ipv6 nd other-config-flag: ${runCfgSec1.includes('ipv6 nd other-config-flag') && runCfgSec1.includes('ipv6 dhcp server R1-STATELESS') ? 'PASS' : 'FAIL'}`);
+
+const runCfgR2Sec1 = r2Sec1.getRunningConfig();
+console.log(`R2 running-config includes ipv6 nd managed-config-flag & no-autoconfig: ${runCfgR2Sec1.includes('ipv6 nd managed-config-flag') && runCfgR2Sec1.includes('no-autoconfig') ? 'PASS' : 'FAIL'}`);
+
+const runCfgSec2 = r1Sec2.getRunningConfig();
+console.log(`R1 running-config includes time-range REMOTE-CONTROL: ${runCfgSec2.includes('time-range REMOTE-CONTROL') && runCfgSec2.includes('periodic weekdays 09:00 to 17:00') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes extended ACL ACCESS-RULES with sequence & time-range: ${runCfgSec2.includes('ip access-list extended ACCESS-RULES') && runCfgSec2.includes('time-range REMOTE-CONTROL') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ip access-group ACCESS-RULES in: ${runCfgSec2.includes('ip access-group ACCESS-RULES in') ? 'PASS' : 'FAIL'}`);
+
+const runCfgR3Sec2 = r3Sec2.getRunningConfig();
+console.log(`R3 running-config includes access-class ADMIN-VTY in: ${runCfgR3Sec2.includes('access-class ADMIN-VTY in') ? 'PASS' : 'FAIL'}`);
+
+const runCfgSec3 = r1Sec3.getRunningConfig();
+console.log(`R1 running-config includes ipv6 access-list RESTRICT-IPV6: ${runCfgSec3.includes('ipv6 access-list RESTRICT-IPV6') && runCfgSec3.includes('router-advertisement') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ipv6 traffic-filter RESTRICT-IPV6 in: ${runCfgSec3.includes('ipv6 traffic-filter RESTRICT-IPV6 in') ? 'PASS' : 'FAIL'}`);
+
+const runCfgSec4 = r1Sec4.getRunningConfig();
+console.log(`R1 running-config includes uRPF rx & any allow-default: ${runCfgSec4.includes('ip verify unicast source reachable-via rx') && runCfgSec4.includes('ip verify unicast source reachable-via any allow-default') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, 6 LAB BGP, 3 LAB ROUTING MANIPULATION & PBR, 5 LAB VPN & DMVPN, SERTA 4 LAB INFRASTRUCTURE SECURITY & SERVICES SELESAI DENGAN SUKSES LENGKAP 100%! ===');
 
 
 

@@ -368,7 +368,7 @@ export class IOSCommands {
       if (context.mode === 'vrf-af-config') {
         return { output: '', newMode: 'vrf-config' };
       }
-      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config', 'crypto-isakmp-policy', 'crypto-ipsec-profile', 'crypto-transform-config', 'zone-pair-config', 'class-map-inspect', 'policy-map-inspect', 'policy-map-class-inspect', 'control-plane-config', 'eem-applet-config', 'mdt-subscription-config', 'keychain-config', 'keychain-key-config', 'std-nacl-config', 'ext-nacl-config'].includes(context.mode)) {
+      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'dhcpv6-config', 'route-map-config', 'ip-sla-config', 'vrf-config', 'crypto-isakmp-policy', 'crypto-ipsec-profile', 'crypto-transform-config', 'zone-pair-config', 'class-map-inspect', 'policy-map-inspect', 'policy-map-class-inspect', 'control-plane-config', 'eem-applet-config', 'mdt-subscription-config', 'keychain-config', 'keychain-key-config', 'std-nacl-config', 'ext-nacl-config', 'ipv6-acl-config', 'time-range-config'].includes(context.mode)) {
         return { output: '', newMode: 'global-config' };
       }
       if (context.mode === 'global-config') {
@@ -495,6 +495,15 @@ export class IOSCommands {
         break;
       case 'ext-nacl-config':
         result = this.execExtNaclConfigMode(tokens, raw, context, device);
+        break;
+      case 'dhcpv6-config':
+        result = this.execDhcpV6ConfigMode(tokens, raw, context, device);
+        break;
+      case 'ipv6-acl-config':
+        result = this.execIpv6AclConfigMode(tokens, raw, context, device);
+        break;
+      case 'time-range-config':
+        result = this.execTimeRangeConfigMode(tokens, raw, context, device);
         break;
       default:
         result = { output: `% Invalid input detected at '^' marker.` };
@@ -633,15 +642,26 @@ export class IOSCommands {
       return this.handlePing(tokens[1], device, allDevices);
     }
 
-    // copy running-config startup-config / wr mem
+    // copy running-config startup-config / wr mem / wri
     if (
       cmd0 === 'wr' ||
+      cmd0 === 'wri' ||
       (cmd0 === 'write' && (tokens.length === 1 || 'memory'.startsWith(tokens[1].toLowerCase()))) ||
       ('copy'.startsWith(cmd0) && tokens.length >= 3 && 'running-config'.startsWith(tokens[1].toLowerCase()) && 'startup-config'.startsWith(tokens[2].toLowerCase()))
     ) {
       return {
         output: `Building configuration...\n[OK]`
       };
+    }
+
+    // debug ipv6 nd
+    if (cmd0 === 'debug' && tokens.length >= 3 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'nd'.startsWith(tokens[2].toLowerCase())) {
+      return { output: 'ICMPv6-ND: Sending RA on GigabitEthernet1/0/23\nICMPv6-ND:   Prefix 2001:DB8:ACAD:23::/64 [LA]\n' };
+    }
+
+    // undebug all / no debug all / undebug ...
+    if (cmd0 === 'undebug' || (cmd0 === 'no' && tokens[1]?.toLowerCase() === 'debug')) {
+      return { output: 'All possible debugging has been turned off\n' };
     }
 
     // clear ip arp / clear arp
@@ -792,6 +812,11 @@ export class IOSCommands {
           return { output: RoutingProtocolEngine.renderShowIpBgp(device, allDevices) };
         }
 
+        // show ip traffic
+        if ('traffic'.startsWith(cmd2)) {
+          return { output: SecurityVpnEngine.renderShowIpTraffic(device) };
+        }
+
         // show ip as-path-access-list [num]
         if ('as-path-access-list'.startsWith(cmd2) || (cmd2 === 'as-path' && tokens.length >= 4 && 'access-list'.startsWith(tokens[3].toLowerCase()))) {
           const lines: string[] = [];
@@ -854,6 +879,11 @@ export class IOSCommands {
       // show access-lists
       if ('access-lists'.startsWith(cmd1)) {
         return { output: this.renderAccessLists(device) };
+      }
+
+      // show time-range
+      if ('time-range'.startsWith(cmd1)) {
+        return { output: SecurityVpnEngine.renderShowTimeRange(device, tokens[2]) };
       }
 
       // show port-security
@@ -1074,6 +1104,27 @@ export class IOSCommands {
         }
         if ('nhrp'.startsWith(cmd2) && device instanceof Router) {
           return { output: SecurityVpnEngine.renderShowIpv6Nhrp(device) };
+        }
+        if ('dhcp'.startsWith(cmd2)) {
+          if (tokens.length >= 4) {
+            const cmd3 = tokens[3].toLowerCase();
+            if ('pool'.startsWith(cmd3)) {
+              return { output: SecurityVpnEngine.renderShowIpv6DhcpPool(device, tokens[4]) };
+            }
+            if ('binding'.startsWith(cmd3)) {
+              return { output: SecurityVpnEngine.renderShowIpv6DhcpBinding(device) };
+            }
+            if ('statistics'.startsWith(cmd3)) {
+              return { output: SecurityVpnEngine.renderShowIpv6DhcpStatistics(device) };
+            }
+          }
+          return { output: SecurityVpnEngine.renderShowIpv6DhcpPool(device) };
+        }
+        if ('access-list'.startsWith(cmd2) || 'access-lists'.startsWith(cmd2)) {
+          return { output: SecurityVpnEngine.renderShowIpv6AccessLists(device, tokens[3]) };
+        }
+        if ('interface'.startsWith(cmd2) || 'interfaces'.startsWith(cmd2)) {
+          return { output: SecurityVpnEngine.renderShowIpv6Interface(device, tokens[3]) };
         }
       }
     }
@@ -1623,6 +1674,60 @@ export class IOSCommands {
       }
     }
 
+    // no ip access-list <standard|extended> <name>
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'access-list'.startsWith(tokens[2].toLowerCase())) {
+      const aclName = tokens[tokens.length - 1];
+      const target = device as Router | Switch;
+      if (target.namedAccessLists) target.namedAccessLists.delete(aclName);
+      return { output: '' };
+    }
+
+    // ipv6 access-list <name>
+    if ('ipv6'.startsWith(cmd0) && tokens.length >= 3 && 'access-list'.startsWith(tokens[1].toLowerCase())) {
+      const aclName = tokens[2];
+      const target = device as Router | Switch;
+      if (!target.ipv6AccessLists) target.ipv6AccessLists = new Map();
+      if (!target.ipv6AccessLists.has(aclName)) {
+        target.ipv6AccessLists.set(aclName, { name: aclName, remarks: [], rules: [] });
+      }
+      return {
+        output: '',
+        newMode: 'ipv6-acl-config',
+        contextUpdates: { targetIpv6AclName: aclName }
+      };
+    }
+
+    // no ipv6 access-list <name>
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'access-list'.startsWith(tokens[2].toLowerCase())) {
+      const aclName = tokens[3];
+      const target = device as Router | Switch;
+      if (target.ipv6AccessLists) target.ipv6AccessLists.delete(aclName);
+      return { output: '' };
+    }
+
+    // time-range <name>
+    if ('time-range'.startsWith(cmd0) && tokens.length >= 2) {
+      const trName = tokens[1];
+      const target = device as Router | Switch;
+      if (!target.timeRanges) target.timeRanges = new Map();
+      if (!target.timeRanges.has(trName)) {
+        target.timeRanges.set(trName, { name: trName, periodic: [] });
+      }
+      return {
+        output: '',
+        newMode: 'time-range-config',
+        contextUpdates: { targetTimeRangeName: trName }
+      };
+    }
+
+    // no time-range <name>
+    if (cmd0 === 'no' && tokens.length >= 3 && 'time-range'.startsWith(tokens[1].toLowerCase())) {
+      const trName = tokens[2];
+      const target = device as Router | Switch;
+      if (target.timeRanges) target.timeRanges.delete(trName);
+      return { output: '' };
+    }
+
     // ip local policy route-map <name>
     if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'local'.startsWith(tokens[1].toLowerCase()) && 'policy'.startsWith(tokens[2].toLowerCase()) && 'route-map'.startsWith(tokens[3].toLowerCase())) {
       const target = device as Router | Switch;
@@ -1901,6 +2006,29 @@ export class IOSCommands {
       if (device instanceof Router || device instanceof Switch) {
         device.dhcpPools.delete(poolName);
       }
+      return { output: '' };
+    }
+
+    // ipv6 dhcp pool <name>
+    if ('ipv6'.startsWith(cmd0) && tokens.length >= 4 && 'dhcp'.startsWith(tokens[1].toLowerCase()) && 'pool'.startsWith(tokens[2].toLowerCase())) {
+      const poolName = tokens[3];
+      const target = device as Router | Switch;
+      if (!target.dhcpv6Pools) target.dhcpv6Pools = new Map();
+      if (!target.dhcpv6Pools.has(poolName)) {
+        target.dhcpv6Pools.set(poolName, { name: poolName });
+      }
+      return {
+        output: '',
+        newMode: 'dhcpv6-config',
+        contextUpdates: { targetDhcpV6Pool: poolName }
+      };
+    }
+
+    // no ipv6 dhcp pool <name>
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'dhcp'.startsWith(tokens[2].toLowerCase()) && 'pool'.startsWith(tokens[3].toLowerCase())) {
+      const poolName = tokens[4];
+      const target = device as Router | Switch;
+      if (target.dhcpv6Pools) target.dhcpv6Pools.delete(poolName);
       return { output: '' };
     }
 
@@ -2449,13 +2577,21 @@ export class IOSCommands {
     // ipv6 address <ipv6-addr/len> [eui-64 | link-local]
     if (cmd0 === 'ipv6' && tokens.length >= 3 && 'address'.startsWith(tokens[1].toLowerCase())) {
       const v6 = tokens[2];
-      iface.ipv6Address = v6;
+      if (tokens.some(t => t.toLowerCase() === 'link-local')) {
+        iface.ipv6LinkLocal = v6;
+      } else {
+        iface.ipv6Address = v6;
+      }
       return { output: '' };
     }
 
     // no ipv6 address [<ipv6-addr/len>]
     if (cmd0 === 'no' && tokens.length >= 3 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase())) {
-      iface.ipv6Address = undefined;
+      if (tokens.some(t => t.toLowerCase() === 'link-local')) {
+        iface.ipv6LinkLocal = undefined;
+      } else {
+        iface.ipv6Address = undefined;
+      }
       return { output: '' };
     }
 
@@ -3185,6 +3321,112 @@ export class IOSCommands {
           }
         }
       }
+      return { output: '' };
+    }
+
+    // ipv6 nd other-config-flag
+    if (cmd0 === 'ipv6' && tokens.length >= 3 && 'nd'.startsWith(tokens[1].toLowerCase()) && 'other-config-flag'.startsWith(tokens[2].toLowerCase())) {
+      iface.ipv6NdOtherConfigFlag = true;
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'nd'.startsWith(tokens[2].toLowerCase()) && 'other-config-flag'.startsWith(tokens[3].toLowerCase())) {
+      iface.ipv6NdOtherConfigFlag = false;
+      return { output: '' };
+    }
+
+    // ipv6 nd managed-config-flag
+    if (cmd0 === 'ipv6' && tokens.length >= 3 && 'nd'.startsWith(tokens[1].toLowerCase()) && 'managed-config-flag'.startsWith(tokens[2].toLowerCase())) {
+      iface.ipv6NdManagedConfigFlag = true;
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'nd'.startsWith(tokens[2].toLowerCase()) && 'managed-config-flag'.startsWith(tokens[3].toLowerCase())) {
+      iface.ipv6NdManagedConfigFlag = false;
+      return { output: '' };
+    }
+
+    // ipv6 nd ra dns server <ipv6-addr>
+    if (cmd0 === 'ipv6' && tokens.length >= 5 && 'nd'.startsWith(tokens[1].toLowerCase()) && 'ra'.startsWith(tokens[2].toLowerCase()) && 'dns'.startsWith(tokens[3].toLowerCase())) {
+      iface.ipv6NdRaDnsServer = tokens[5] || tokens[4];
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'nd'.startsWith(tokens[2].toLowerCase()) && 'ra'.startsWith(tokens[3].toLowerCase())) {
+      iface.ipv6NdRaDnsServer = undefined;
+      return { output: '' };
+    }
+
+    // ipv6 nd prefix <prefix|default> [times...] no-autoconfig
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'nd'.startsWith(tokens[1].toLowerCase()) && 'prefix'.startsWith(tokens[2].toLowerCase())) {
+      const pfx = tokens[3];
+      if (!iface.ipv6NdPrefixNoAutoconfig) iface.ipv6NdPrefixNoAutoconfig = [];
+      if (!iface.ipv6NdPrefixNoAutoconfig.includes(pfx)) {
+        iface.ipv6NdPrefixNoAutoconfig.push(pfx);
+      }
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'nd'.startsWith(tokens[2].toLowerCase()) && 'prefix'.startsWith(tokens[3].toLowerCase())) {
+      const pfx = tokens[4];
+      if (iface.ipv6NdPrefixNoAutoconfig) {
+        iface.ipv6NdPrefixNoAutoconfig = iface.ipv6NdPrefixNoAutoconfig.filter(p => p !== pfx);
+      }
+      return { output: '' };
+    }
+
+    // ipv6 dhcp server <poolName>
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'dhcp'.startsWith(tokens[1].toLowerCase()) && 'server'.startsWith(tokens[2].toLowerCase())) {
+      iface.ipv6DhcpServerPool = tokens[3];
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'dhcp'.startsWith(tokens[2].toLowerCase()) && 'server'.startsWith(tokens[3].toLowerCase())) {
+      iface.ipv6DhcpServerPool = undefined;
+      return { output: '' };
+    }
+
+    // ip access-group <aclName> in|out
+    if (cmd0 === 'ip' && tokens.length >= 4 && 'access-group'.startsWith(tokens[1].toLowerCase())) {
+      const aclName = tokens[2];
+      const dir = tokens[3].toLowerCase() as 'in' | 'out';
+      if (!iface.ipAccessGroup) iface.ipAccessGroup = {};
+      iface.ipAccessGroup[dir] = aclName;
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 3 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'access-group'.startsWith(tokens[2].toLowerCase())) {
+      const dir = (tokens[4] || tokens[3])?.toLowerCase() as 'in' | 'out';
+      if (dir === 'in' || dir === 'out') {
+        if (iface.ipAccessGroup) iface.ipAccessGroup[dir] = undefined;
+      } else {
+        iface.ipAccessGroup = undefined;
+      }
+      return { output: '' };
+    }
+
+    // ipv6 traffic-filter <aclName> in|out
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'traffic-filter'.startsWith(tokens[1].toLowerCase())) {
+      const aclName = tokens[2];
+      const dir = tokens[3].toLowerCase() as 'in' | 'out';
+      if (!iface.ipv6TrafficFilter) iface.ipv6TrafficFilter = {};
+      iface.ipv6TrafficFilter[dir] = aclName;
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 4 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'traffic-filter'.startsWith(tokens[2].toLowerCase())) {
+      const dir = (tokens[4] || tokens[3]).toLowerCase() as 'in' | 'out';
+      if (iface.ipv6TrafficFilter) iface.ipv6TrafficFilter[dir] = undefined;
+      return { output: '' };
+    }
+
+    // ip verify unicast source reachable-via {rx | any} [allow-default]
+    if (cmd0 === 'ip' && tokens.length >= 5 && 'verify'.startsWith(tokens[1].toLowerCase()) && 'unicast'.startsWith(tokens[2].toLowerCase()) && 'source'.startsWith(tokens[3].toLowerCase())) {
+      let idx = 4;
+      if (tokens[idx] && 'reachable-via'.startsWith(tokens[idx].toLowerCase())) idx++;
+      const mode = (tokens[idx]?.toLowerCase() || 'rx') as 'rx' | 'any';
+      iface.urpfMode = mode === 'any' ? 'any' : 'rx';
+      if (tokens.some(t => t.toLowerCase() === 'allow-default')) {
+        iface.urpfAllowDefault = true;
+      }
+      return { output: '' };
+    }
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'verify'.startsWith(tokens[2].toLowerCase()) && 'unicast'.startsWith(tokens[3].toLowerCase())) {
+      iface.urpfMode = undefined;
+      iface.urpfAllowDefault = undefined;
       return { output: '' };
     }
 
@@ -4195,6 +4437,22 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    if (cmd0 === 'access-class' && tokens.length >= 3) {
+      const acl = tokens[1];
+      const dir = tokens[2].toLowerCase() as 'in' | 'out';
+      (device as any).vtyAccessClass = { acl, direction: dir };
+      return { output: '' };
+    }
+
+    if (cmd0 === 'no' && tokens.length >= 2 && 'access-class'.startsWith(tokens[1].toLowerCase())) {
+      (device as any).vtyAccessClass = undefined;
+      return { output: '' };
+    }
+
+    if ('exec-timeout'.startsWith(cmd0) || 'logging'.startsWith(cmd0)) {
+      return { output: '' };
+    }
+
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
@@ -4476,21 +4734,45 @@ export class IOSCommands {
       return { output: '' };
     }
 
-    // permit / deny <source> [wildcard]
-    if (cmd0 === 'permit' || cmd0 === 'deny') {
-      const action = cmd0 as 'permit' | 'deny';
-      let sourceIp = tokens[1] || 'any';
-      let wildcard = tokens[2];
-      if (sourceIp === 'host' && tokens.length >= 3) {
-        sourceIp = tokens[2];
+    // no <seq> / no sequence <seq>
+    if (cmd0 === 'no' && tokens.length >= 2) {
+      const seqTok = tokens[1] === 'sequence' && tokens.length >= 3 ? tokens[2] : tokens[1];
+      const seqNum = parseInt(seqTok, 10);
+      if (!isNaN(seqNum)) {
+        nacl.rules = nacl.rules.filter(r => r.sequence !== seqNum);
+        return { output: '' };
+      }
+    }
+
+    let seq: number | undefined;
+    let workTokens = tokens;
+    if (cmd0 === 'sequence' && tokens.length >= 2) {
+      seq = parseInt(tokens[1], 10);
+      workTokens = tokens.slice(2);
+    } else if (/^\d+$/.test(cmd0)) {
+      seq = parseInt(cmd0, 10);
+      workTokens = tokens.slice(1);
+    }
+
+    const action = workTokens[0]?.toLowerCase();
+    if (action === 'permit' || action === 'deny') {
+      let sourceIp = workTokens[1] || 'any';
+      let wildcard = workTokens[2];
+      if (sourceIp === 'host' && workTokens.length >= 3) {
+        sourceIp = workTokens[2];
         wildcard = '0.0.0.0';
+      }
+      if (seq !== undefined) {
+        nacl.rules = nacl.rules.filter(r => r.sequence !== seq);
       }
       nacl.rules.push({
         number: aclName,
-        action,
+        sequence: seq,
+        action: action as 'permit' | 'deny',
         sourceIp,
         sourceWildcard: wildcard
       });
+      nacl.rules.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
       return { output: '' };
     }
 
@@ -4524,48 +4806,277 @@ export class IOSCommands {
       return { output: '' };
     }
 
-    // permit / deny <protocol> <source> <source-wildcard> <dest> <dest-wildcard>
-    // e.g. permit ip any 192.168.1.0 0.0.0.255
-    if (cmd0 === 'permit' || cmd0 === 'deny') {
-      const action = cmd0 as 'permit' | 'deny';
-      const protocol = (tokens[1]?.toLowerCase() || 'ip') as any;
-      let sourceIp = tokens[2] || 'any';
+    // no <seq> / no sequence <seq>
+    if (cmd0 === 'no' && tokens.length >= 2) {
+      const seqTok = tokens[1] === 'sequence' && tokens.length >= 3 ? tokens[2] : tokens[1];
+      const seqNum = parseInt(seqTok, 10);
+      if (!isNaN(seqNum)) {
+        nacl.rules = nacl.rules.filter(r => r.sequence !== seqNum);
+        return { output: '' };
+      }
+    }
+
+    let seq: number | undefined;
+    let workTokens = tokens;
+    if (cmd0 === 'sequence' && tokens.length >= 2) {
+      seq = parseInt(tokens[1], 10);
+      workTokens = tokens.slice(2);
+    } else if (/^\d+$/.test(cmd0)) {
+      seq = parseInt(cmd0, 10);
+      workTokens = tokens.slice(1);
+    }
+
+    const action = workTokens[0]?.toLowerCase();
+    if (action === 'permit' || action === 'deny') {
+      const protocol = (workTokens[1]?.toLowerCase() || 'ip') as any;
+      let sourceIp = workTokens[2] || 'any';
       let sourceWildcard: string | undefined;
       let destIp: string | undefined;
       let destWildcard: string | undefined;
+      let destPort: string | number | undefined;
+      let portRange: { start: number; end: number } | undefined;
+      let timeRange: string | undefined;
 
       let idx = 3;
-      if (sourceIp !== 'any' && sourceIp !== 'host' && idx < tokens.length && /^\d+\.\d+\.\d+\.\d+$/.test(tokens[idx])) {
-        sourceWildcard = tokens[idx];
+      if (sourceIp !== 'any' && sourceIp !== 'host' && idx < workTokens.length && /^\d+\.\d+\.\d+\.\d+$/.test(workTokens[idx])) {
+        sourceWildcard = workTokens[idx];
         idx++;
-      } else if (sourceIp === 'host' && idx < tokens.length) {
-        sourceIp = tokens[idx];
+      } else if (sourceIp === 'host' && idx < workTokens.length) {
+        sourceIp = workTokens[idx];
         sourceWildcard = '0.0.0.0';
         idx++;
       }
 
-      if (idx < tokens.length) {
-        destIp = tokens[idx];
+      if (idx < workTokens.length) {
+        destIp = workTokens[idx];
         idx++;
-        if (destIp === 'host' && idx < tokens.length) {
-          destIp = tokens[idx];
+        if (destIp === 'host' && idx < workTokens.length) {
+          destIp = workTokens[idx];
           destWildcard = '0.0.0.0';
           idx++;
-        } else if (destIp !== 'any' && idx < tokens.length && /^\d+\.\d+\.\d+\.\d+$/.test(tokens[idx])) {
-          destWildcard = tokens[idx];
+        } else if (destIp !== 'any' && idx < workTokens.length && /^\d+\.\d+\.\d+\.\d+$/.test(workTokens[idx])) {
+          destWildcard = workTokens[idx];
           idx++;
         }
       }
 
+      while (idx < workTokens.length) {
+        const t = workTokens[idx].toLowerCase();
+        if (t === 'eq' && idx + 1 < workTokens.length) {
+          destPort = workTokens[idx + 1];
+          idx += 2;
+        } else if (t === 'range' && idx + 2 < workTokens.length) {
+          const s = parseInt(workTokens[idx + 1], 10);
+          const e = parseInt(workTokens[idx + 2], 10);
+          if (!isNaN(s) && !isNaN(e)) portRange = { start: s, end: e };
+          idx += 3;
+        } else if (t === 'time-range' && idx + 1 < workTokens.length) {
+          timeRange = workTokens[idx + 1];
+          idx += 2;
+        } else {
+          idx++;
+        }
+      }
+
+      if (seq !== undefined) {
+        nacl.rules = nacl.rules.filter(r => r.sequence !== seq);
+      }
       nacl.rules.push({
         number: aclName,
-        action,
+        sequence: seq,
+        action: action as 'permit' | 'deny',
         protocol,
         sourceIp,
         sourceWildcard,
         destIp,
-        destWildcard
+        destWildcard,
+        destPort,
+        portRange,
+        timeRange
       });
+      nacl.rules.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+      return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== DHCPv6 CONFIG MODE =====================
+  private static execDhcpV6ConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+    const poolName = context.targetDhcpV6Pool || '';
+    if (!target.dhcpv6Pools) target.dhcpv6Pools = new Map();
+    let pool = target.dhcpv6Pools.get(poolName);
+    if (!pool) {
+      pool = { name: poolName };
+      target.dhcpv6Pools.set(poolName, pool);
+    }
+
+    if (cmd0 === 'exit') return { output: '', newMode: 'global-config' };
+    if (cmd0 === 'end') return { output: '', newMode: 'priv-exec' };
+
+    // address prefix <prefix/len> [lifetime ...]
+    if ('address'.startsWith(cmd0) && tokens.length >= 3 && 'prefix'.startsWith(tokens[1].toLowerCase())) {
+      pool.addressPrefix = tokens[2];
+      return { output: '' };
+    }
+
+    // dns-server <ipv6Addr>
+    if ('dns-server'.startsWith(cmd0) && tokens.length >= 2) {
+      pool.dnsServer = tokens[1];
+      return { output: '' };
+    }
+
+    // domain-name <name>
+    if ('domain-name'.startsWith(cmd0) && tokens.length >= 2) {
+      pool.domainName = tokens[1];
+      return { output: '' };
+    }
+
+    // preference <num>
+    if ('preference'.startsWith(cmd0) && tokens.length >= 2) {
+      pool.preference = parseInt(tokens[1], 10);
+      return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== IPv6 ACL CONFIG MODE =====================
+  private static execIpv6AclConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+    const aclName = context.targetIpv6AclName || '';
+    if (!target.ipv6AccessLists) target.ipv6AccessLists = new Map();
+    let acl = target.ipv6AccessLists.get(aclName);
+    if (!acl) {
+      acl = { name: aclName, remarks: [], rules: [] };
+      target.ipv6AccessLists.set(aclName, acl);
+    }
+
+    if (cmd0 === 'exit') return { output: '', newMode: 'global-config' };
+    if (cmd0 === 'end') return { output: '', newMode: 'priv-exec' };
+
+    // no sequence <seq> / no <seq>
+    if (cmd0 === 'no' && tokens.length >= 2) {
+      const seqToken = tokens[1] === 'sequence' && tokens.length >= 3 ? tokens[2] : tokens[1];
+      const seqNum = parseInt(seqToken, 10);
+      if (!isNaN(seqNum)) {
+        acl.rules = acl.rules.filter(r => r.sequence !== seqNum);
+        return { output: '' };
+      }
+    }
+
+    let seq: number | undefined;
+    let workTokens = tokens;
+    if (cmd0 === 'sequence' && tokens.length >= 2) {
+      seq = parseInt(tokens[1], 10);
+      workTokens = tokens.slice(2);
+    } else if (/^\d+$/.test(cmd0)) {
+      seq = parseInt(cmd0, 10);
+      workTokens = tokens.slice(1);
+    }
+
+    const action = workTokens[0]?.toLowerCase();
+    if (action === 'permit' || action === 'deny') {
+      const proto = (workTokens[1]?.toLowerCase() || 'ipv6') as 'ipv6' | 'icmp' | 'tcp' | 'udp';
+      const src = workTokens[2] || 'any';
+      const dst = workTokens[3] || 'any';
+
+      let icmpType: string | undefined;
+      let destPort: string | number | undefined;
+      let destPortRange: { start: number; end: number } | undefined;
+      let timeRange: string | undefined;
+
+      let idx = 4;
+      while (idx < workTokens.length) {
+        const t = workTokens[idx].toLowerCase();
+        if (t === 'router-solicitation' || t === 'router-advertisement' || t === 'neighbor-solicitation' || t === 'neighbor-advertisement' || t === 'echo-request' || t === 'echo-reply') {
+          icmpType = t;
+          idx++;
+        } else if (t === 'eq' && idx + 1 < workTokens.length) {
+          destPort = workTokens[idx + 1];
+          idx += 2;
+        } else if (t === 'range' && idx + 2 < workTokens.length) {
+          const s = parseInt(workTokens[idx + 1], 10);
+          const e = parseInt(workTokens[idx + 2], 10);
+          if (!isNaN(s) && !isNaN(e)) {
+            destPortRange = { start: s, end: e };
+          }
+          idx += 3;
+        } else if (t === 'time-range' && idx + 1 < workTokens.length) {
+          timeRange = workTokens[idx + 1];
+          idx += 2;
+        } else {
+          idx++;
+        }
+      }
+
+      if (seq !== undefined) {
+        acl.rules = acl.rules.filter(r => r.sequence !== seq);
+      }
+      acl.rules.push({
+        sequence: seq,
+        action: action as 'permit' | 'deny',
+        protocol: proto,
+        source: src,
+        dest: dst,
+        icmpType,
+        destPort,
+        destPortRange,
+        timeRange
+      });
+      acl.rules.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+      return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== TIME-RANGE CONFIG MODE =====================
+  private static execTimeRangeConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+    const trName = context.targetTimeRangeName || '';
+    if (!target.timeRanges) target.timeRanges = new Map();
+    let tr = target.timeRanges.get(trName);
+    if (!tr) {
+      tr = { name: trName, periodic: [] };
+      target.timeRanges.set(trName, tr);
+    }
+
+    if (cmd0 === 'exit') return { output: '', newMode: 'global-config' };
+    if (cmd0 === 'end') return { output: '', newMode: 'priv-exec' };
+
+    // periodic <days> <startTime> to <endTime>
+    // e.g. periodic weekdays 05:00 to 23:59
+    if ('periodic'.startsWith(cmd0) && tokens.length >= 5 && 'to'.startsWith(tokens[3].toLowerCase())) {
+      const days = tokens[1];
+      const startTime = tokens[2];
+      const endTime = tokens[4];
+      if (!tr.periodic) tr.periodic = [];
+      tr.periodic.push({ days, startTime, endTime });
+      return { output: '' };
+    }
+
+    // absolute ...
+    if ('absolute'.startsWith(cmd0)) {
       return { output: '' };
     }
 

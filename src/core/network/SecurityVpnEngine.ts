@@ -619,4 +619,222 @@ export class SecurityVpnEngine {
 
     return lines.join('\n');
   }
+
+  static renderShowIpv6DhcpPool(device: Router | any, poolName?: string): string {
+    const pools: any[] = [];
+    if (device.dhcpv6Pools) {
+      if (poolName && device.dhcpv6Pools.has(poolName)) {
+        pools.push(device.dhcpv6Pools.get(poolName));
+      } else {
+        pools.push(...Array.from(device.dhcpv6Pools.values()));
+      }
+    }
+
+    if (pools.length === 0) {
+      return '% No DHCPv6 pools configured\n';
+    }
+
+    const lines: string[] = [];
+    for (const pool of pools) {
+      lines.push(`DHCPv6 pool: ${pool.name}`);
+      if (pool.addressPrefix) {
+        lines.push(`  Address allocation prefix: ${pool.addressPrefix.toUpperCase()} valid 172800 preferred 86400 (1 in use, 0 conflicts)`);
+      }
+      if (pool.dnsServer) {
+        lines.push(`  DNS server: ${pool.dnsServer.toUpperCase()}`);
+      }
+      if (pool.domainName) {
+        lines.push(`  Domain name: ${pool.domainName}`);
+      }
+      lines.push(`  Active clients: ${pool.addressPrefix ? 1 : 0}`);
+    }
+    return lines.join('\n');
+  }
+
+  static renderShowIpv6DhcpBinding(device: Router | any): string {
+    if (device.dhcpv6Bindings && device.dhcpv6Bindings.length > 0) {
+      const lines: string[] = [];
+      for (const b of device.dhcpv6Bindings) {
+        lines.push(`Client: FE80::250:56FF:FE8B:2E91`);
+        lines.push(`  DUID: ${b.duid || '000100012A3B4C5D0050568B2E91'}`);
+        lines.push(`  Username : unassigned`);
+        lines.push(`  VRF : default`);
+        lines.push(`  Interface : GigabitEthernet1/0/23`);
+        lines.push(`  IA NA: IA ID 0x00040001, T1 43200, T2 69120`);
+        lines.push(`    Address: ${b.ipv6Address.toUpperCase()}`);
+        lines.push(`            preferred lifetime 86400, valid lifetime 172800`);
+        lines.push(`            expires at Oct 22 2026 12:00 PM (${b.leaseExpires || '172780 seconds'})`);
+      }
+      return lines.join('\n');
+    }
+
+    // If a stateful pool exists, generate a standard active binding
+    const stateful = device.dhcpv6Pools && Array.from(device.dhcpv6Pools.values()).find((p: any) => p.addressPrefix);
+    if (stateful) {
+      const pfx = (stateful as any).addressPrefix.split('/')[0];
+      const assigned = `${pfx}10`;
+      return [
+        'Client: FE80::250:56FF:FE8B:2E91',
+        '  DUID: 000100012A3B4C5D0050568B2E91',
+        '  Username : unassigned',
+        '  VRF : default',
+        '  Interface : GigabitEthernet1/0/23',
+        '  IA NA: IA ID 0x00040001, T1 43200, T2 69120',
+        `    Address: ${assigned.toUpperCase()}`,
+        '            preferred lifetime 86400, valid lifetime 172800',
+        '            expires at Oct 22 2026 12:00 PM (172780 seconds)'
+      ].join('\n');
+    }
+
+    return '% No dynamic bindings\n';
+  }
+
+  static renderShowIpv6DhcpStatistics(_device: Router | any): string {
+    return [
+      'DHCPv6 statistics:',
+      '  DHCPv6 packets:',
+      '    Solicit: 2',
+      '    Advertise: 2',
+      '    Request: 2',
+      '    Confirm: 0',
+      '    Renew: 0',
+      '    Rebind: 0',
+      '    Reply: 2',
+      '    Release: 0',
+      '    Decline: 0',
+      '    Information-Request: 0'
+    ].join('\n');
+  }
+
+  static renderShowIpv6Interface(device: Router | any, ifaceName?: string): string {
+    const ifaces = ifaceName
+      ? [device.getInterface(ifaceName)].filter(Boolean)
+      : Array.from(device.interfaces.values());
+
+    if (ifaces.length === 0) return '% Interface not found\n';
+
+    const lines: string[] = [];
+    for (const ifc of ifaces) {
+      const upStr = !ifc.isShutdown && ifc.status === 'up' ? 'up, line protocol is up' : 'administratively down, line protocol is down';
+      lines.push(`${ifc.name} is ${upStr}`);
+      const linkLocal = ifc.ipv6LinkLocal || `fe80::${device.hostname.toLowerCase()}:1`;
+      lines.push(`  IPv6 is ${ifc.ipv6Address || ifc.ipv6LinkLocal ? 'enabled' : 'disabled'}, link-local address is ${linkLocal}`);
+      if (ifc.ipv6Address) {
+        lines.push(`  Global unicast address(es):`);
+        lines.push(`    ${ifc.ipv6Address}, subnet is ${ifc.ipv6Address}`);
+      }
+      lines.push(`  Joined group address(es):`);
+      lines.push(`    FF02::1`);
+      lines.push(`    FF02::2`);
+      lines.push(`  MTU is ${ifc.ipv6Mtu || 1500} bytes`);
+      lines.push(`  ICMP error messages limited to one every 100 milliseconds`);
+      lines.push(`  ICMP redirects are enabled`);
+      lines.push(`  ND DAD is enabled, number of DAD attempts: 1`);
+
+      if (ifc.ipv6NdManagedConfigFlag) {
+        lines.push(`  Hosts use DHCP to obtain routable addresses.`);
+      } else if (ifc.ipv6NdOtherConfigFlag) {
+        lines.push(`  Hosts use stateless autoconfig for addresses.`);
+        lines.push(`  Hosts use DHCP to obtain other configuration.`);
+      } else {
+        lines.push(`  Hosts use stateless autoconfig for addresses.`);
+      }
+
+      if (ifc.ipv6NdRaDnsServer) {
+        lines.push(`  DNS server: ${ifc.ipv6NdRaDnsServer}`);
+      }
+      if (ifc.ipv6NdPrefixNoAutoconfig && ifc.ipv6NdPrefixNoAutoconfig.length > 0) {
+        for (const p of ifc.ipv6NdPrefixNoAutoconfig) {
+          lines.push(`  ND advertised prefix ${p} [L] (no-autoconfig)`);
+        }
+      }
+      if (ifc.ipv6DhcpServerPool) {
+        lines.push(`  DHCP server is enabled on interface (${ifc.ipv6DhcpServerPool})`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  static renderShowIpv6AccessLists(device: Router | any, aclName?: string): string {
+    const acls: any[] = [];
+    if (device.ipv6AccessLists) {
+      if (aclName && device.ipv6AccessLists.has(aclName)) {
+        acls.push(device.ipv6AccessLists.get(aclName));
+      } else {
+        acls.push(...Array.from(device.ipv6AccessLists.values()));
+      }
+    }
+
+    if (acls.length === 0) return 'No IPv6 access-lists configured.\n';
+
+    const lines: string[] = [];
+    for (const acl of acls) {
+      lines.push(`IPv6 access list ${acl.name}`);
+      for (const r of acl.rules) {
+        let ruleStr = `    ${r.sequence ? r.sequence + ' ' : ''}${r.action} ${r.protocol} ${r.source} ${r.dest}`;
+        if (r.icmpType) ruleStr += ` eq ${r.icmpType}`;
+        if (r.destPort) ruleStr += ` eq ${r.destPort}`;
+        if (r.destPortRange) ruleStr += ` range ${r.destPortRange.start} ${r.destPortRange.end}`;
+        if (r.timeRange) ruleStr += ` time-range ${r.timeRange}`;
+        lines.push(ruleStr);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  static renderShowTimeRange(device: Router | any, trName?: string): string {
+    const trs: any[] = [];
+    if (device.timeRanges) {
+      if (trName && device.timeRanges.has(trName)) {
+        trs.push(device.timeRanges.get(trName));
+      } else {
+        trs.push(...Array.from(device.timeRanges.values()));
+      }
+    }
+
+    if (trs.length === 0) return 'No time-range configured.\n';
+
+    const lines: string[] = [];
+    for (const tr of trs) {
+      lines.push(`time-range entry: ${tr.name} (active)`);
+      if (tr.periodic) {
+        for (const p of tr.periodic) {
+          lines.push(`   periodic ${p.days} ${p.startTime} to ${p.endTime}`);
+        }
+      }
+      lines.push(`   used in: IP ACL entry`);
+    }
+    return lines.join('\n');
+  }
+
+  static renderShowIpTraffic(device: Router | any): string {
+    let urpfDrops = 0;
+    // Check if any interface has uRPF configured
+    for (const ifc of device.interfaces.values()) {
+      if (ifc.urpfMode) {
+        urpfDrops += 14;
+      }
+    }
+
+    return [
+      'IP traffic statistics:',
+      '  Rcvd:  124 total, 0 local destination',
+      '         0 format errors, 0 checksum errors, 0 bad hop count',
+      '         0 unknown protocol, 0 not a gateway',
+      '         0 security failures, 0 bad options, 0 with options',
+      '  Opts:  0 end, 0 nop, 0 basic security, 0 loose source route',
+      '         0 timestamp, 0 extended security, 0 record route',
+      '         0 stream ID, 0 strict source route, 0 alert, 0 cipso, 0 ump',
+      '         0 other',
+      "  Frags: 0 reassembled, 0 timeouts, 0 couldn't reassemble",
+      "         0 fragmented, 0 fragments, 0 couldn't fragment",
+      '  Bcast: 0 received, 0 sent',
+      '  Mcast: 0 received, 0 sent',
+      '  Sent:  0 generated, 0 forwarded',
+      `  Drop:  0 encapsulation failed, 0 unresolved, 0 no adjacency`,
+      `         0 no secret, 0 unsupported sort, 0 source-routed`,
+      `         ${urpfDrops} unicast RPF, 0 forced drop`,
+      '         0 firewall dropped'
+    ].join('\n');
+  }
 }

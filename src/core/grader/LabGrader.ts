@@ -1397,6 +1397,253 @@ export class LabGrader {
       };
     }
 
+    // Check Interface IPv6 Address
+    if (prop === 'interface_ipv6') {
+      const normPort = CliLexer.normalizeInterfaceName(task.targetInterface || '');
+      const iface = device.interfaces.get(normPort);
+      if (!iface) {
+        return {
+          taskId: task.id,
+          passed: false,
+          earnedPoints: 0,
+          maxPoints: task.points,
+          diagnostic: `Antarmuka ${normPort} tidak ditemukan pada ${device.hostname}.`
+        };
+      }
+      const expStr = typeof expected === 'string' ? expected : expected?.address || '';
+      const actualIp = (iface.ipv6Address || '').toLowerCase();
+      const passed = actualIp.includes(expStr.toLowerCase().split('/')[0]);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `IPv6 pada ${normPort} sesuai: ${iface.ipv6Address}`
+          : `IPv6 pada ${normPort} belum tepat. Diharapkan: ${expStr}, terkonfigurasi: ${iface.ipv6Address || 'none'}.`
+      };
+    }
+
+    // Check Interface IPv4 Access Group
+    if (prop === 'interface_ip_access_group') {
+      const normPort = CliLexer.normalizeInterfaceName(task.targetInterface || '');
+      const iface = device.interfaces.get(normPort);
+      const expAcl = typeof expected === 'string' ? expected : expected?.acl;
+      const expDir = (typeof expected === 'object' && expected?.direction) ? expected.direction : 'in';
+      const actualAcl = iface?.ipAccessGroup?.[expDir as 'in' | 'out'];
+      const passed = actualAcl?.toLowerCase() === expAcl?.toLowerCase();
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `ip access-group '${expAcl}' ${expDir} terpasang pada ${normPort}.`
+          : `ip access-group '${expAcl}' ${expDir} belum terpasang pada ${normPort} (aktif: ${actualAcl || 'none'}).`
+      };
+    }
+
+    // CCNP: Check DHCPv6 Pool
+    if (prop === 'dhcpv6_pool' && (device instanceof Router || device instanceof Switch)) {
+      const poolName = typeof expected === 'string' ? expected : expected?.name;
+      const pool = device.dhcpv6Pools?.get(poolName);
+      let passed = !!pool;
+      if (passed && typeof expected === 'object') {
+        if (expected.addressPrefix && pool!.addressPrefix !== expected.addressPrefix) passed = false;
+        if (expected.dnsServer && pool!.dnsServer !== expected.dnsServer) passed = false;
+        if (expected.domainName && pool!.domainName !== expected.domainName) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `DHCPv6 pool '${poolName}' terkonfigurasi dengan benar pada ${device.hostname}.`
+          : `DHCPv6 pool '${poolName}' belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check Interface DHCPv6 and ND Parameters
+    if (prop === 'interface_dhcpv6_nd') {
+      const normPort = CliLexer.normalizeInterfaceName(task.targetInterface || '');
+      const iface = device.interfaces.get(normPort);
+      let passed = !!iface;
+      if (passed && typeof expected === 'object') {
+        if (expected.otherConfigFlag !== undefined && iface!.ipv6NdOtherConfigFlag !== expected.otherConfigFlag) passed = false;
+        if (expected.managedConfigFlag !== undefined && iface!.ipv6NdManagedConfigFlag !== expected.managedConfigFlag) passed = false;
+        if (expected.raDnsServer && iface!.ipv6NdRaDnsServer !== expected.raDnsServer) passed = false;
+        if (expected.dhcpServerPool && iface!.ipv6DhcpServerPool !== expected.dhcpServerPool) passed = false;
+        if (expected.prefixNoAutoconfig) {
+          const hasPfx = iface!.ipv6NdPrefixNoAutoconfig?.includes(expected.prefixNoAutoconfig);
+          if (!hasPfx) passed = false;
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Konfigurasi DHCPv6/ND pada ${normPort} telah sesuai.`
+          : `Konfigurasi DHCPv6/ND pada ${normPort} belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check Time-Range
+    if (prop === 'time_range' && (device instanceof Router || device instanceof Switch)) {
+      const trName = typeof expected === 'string' ? expected : expected?.name;
+      const tr = device.timeRanges?.get(trName);
+      let passed = !!tr;
+      if (passed && typeof expected === 'object' && expected.periodic && tr!.periodic) {
+        const hasPer = tr!.periodic.some(p => 
+          (!expected.periodic.days || p.days.toLowerCase() === expected.periodic.days.toLowerCase()) &&
+          (!expected.periodic.startTime || p.startTime === expected.periodic.startTime || (!expected.periodic.start || p.startTime === expected.periodic.start)) &&
+          (!expected.periodic.endTime || p.endTime === expected.periodic.endTime || (!expected.periodic.end || p.endTime === expected.periodic.end))
+        );
+        if (!hasPer) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Time-range '${trName}' terkonfigurasi dengan benar pada ${device.hostname}.`
+          : `Time-range '${trName}' belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check VTY access-class
+    if (prop === 'vty_access_class' && (device instanceof Router || device instanceof Switch)) {
+      const expAcl = typeof expected === 'string' ? expected : expected?.acl;
+      const expDir = (typeof expected === 'object' && expected?.direction) ? expected.direction : 'in';
+      const vty = device.vtyAccessClass;
+      const passed = !!vty && vty.acl.toLowerCase() === expAcl.toLowerCase() && (!expDir || vty.direction === expDir);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Line VTY access-class '${expAcl}' ${expDir} terkonfigurasi.`
+          : `Line VTY access-class '${expAcl}' ${expDir} belum terkonfigurasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check Named ACL Rule
+    if (prop === 'named_acl_rule' && (device instanceof Router || device instanceof Switch)) {
+      const aclName = expected?.name || expected?.acl;
+      const nacl = device.namedAccessLists?.get(aclName);
+      let passed = !!nacl;
+      if (passed && typeof expected === 'object') {
+        const ruleMatch = nacl!.rules.some(r => {
+          if (expected.sequence !== undefined && r.sequence !== expected.sequence) return false;
+          if (expected.action && r.action !== expected.action) return false;
+          if (expected.protocol && r.protocol !== expected.protocol) return false;
+          if (expected.source && !r.sourceIp.includes(expected.source)) return false;
+          if (expected.destination && (!r.destIp || !r.destIp.includes(expected.destination))) return false;
+          if (expected.timeRange && r.timeRange !== expected.timeRange) return false;
+          return true;
+        });
+        if (!ruleMatch) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Aturan pada named ACL '${aclName}' telah terverifikasi.`
+          : `Aturan pada named ACL '${aclName}' belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check IPv6 ACL Rule
+    if (prop === 'ipv6_acl_rule' && (device instanceof Router || device instanceof Switch)) {
+      const aclName = expected?.name || expected?.acl;
+      const acl = device.ipv6AccessLists?.get(aclName);
+      let passed = !!acl;
+      if (passed && typeof expected === 'object') {
+        const ruleMatch = acl!.rules.some(r => {
+          if (expected.sequence !== undefined && r.sequence !== expected.sequence) return false;
+          if (expected.action && r.action !== expected.action) return false;
+          if (expected.protocol && r.protocol !== expected.protocol) return false;
+          if (expected.source && !r.source.toLowerCase().includes(expected.source.toLowerCase())) return false;
+          if (expected.destination && !r.dest.toLowerCase().includes(expected.destination.toLowerCase())) return false;
+          if (expected.icmpType && r.icmpType !== expected.icmpType) return false;
+          if (expected.timeRange && r.timeRange !== expected.timeRange) return false;
+          return true;
+        });
+        if (!ruleMatch) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Aturan pada IPv6 ACL '${aclName}' telah terverifikasi.`
+          : `Aturan pada IPv6 ACL '${aclName}' belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Check Interface IPv6 Traffic Filter
+    if (prop === 'interface_ipv6_traffic_filter') {
+      const normPort = CliLexer.normalizeInterfaceName(task.targetInterface || '');
+      const iface = device.interfaces.get(normPort);
+      const expAcl = typeof expected === 'string' ? expected : expected?.acl;
+      const expDir = (typeof expected === 'object' && expected?.direction) ? expected.direction : 'in';
+      const actualAcl = iface?.ipv6TrafficFilter?.[expDir as 'in' | 'out'];
+      const passed = actualAcl?.toLowerCase() === expAcl?.toLowerCase();
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `ipv6 traffic-filter '${expAcl}' ${expDir} terpasang pada ${normPort}.`
+          : `ipv6 traffic-filter '${expAcl}' ${expDir} belum terpasang pada ${normPort} (aktif: ${actualAcl || 'none'}).`
+      };
+    }
+
+    // CCNP: Check Interface uRPF
+    if (prop === 'interface_urpf') {
+      const normPort = CliLexer.normalizeInterfaceName(task.targetInterface || '');
+      const iface = device.interfaces.get(normPort);
+      const expMode = typeof expected === 'string' ? expected : expected?.mode;
+      const expAllowDef = typeof expected === 'object' ? expected?.allowDefault : undefined;
+      let passed = !!iface && iface.urpfMode === expMode;
+      if (passed && expAllowDef !== undefined) {
+        if (!!iface!.urpfAllowDefault !== !!expAllowDef) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `uRPF mode '${expMode}' terkonfigurasi pada ${normPort}.`
+          : `uRPF mode '${expMode}' belum terkonfigurasi pada ${normPort} (aktif: ${iface?.urpfMode || 'none'}).`
+      };
+    }
+
+    // Check Banner MOTD
+    if (prop === 'banner_motd') {
+      const exp = String(expected || '').toLowerCase();
+      const actual = (device.bannerMotd || '').toLowerCase();
+      const passed = exp ? actual.includes(exp) : !!device.bannerMotd;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Banner MOTD telah dikonfigurasi.`
+          : `Banner MOTD belum dikonfigurasi pada ${device.hostname}.`
+      };
+    }
+
     return {
       taskId: task.id,
       passed: true,

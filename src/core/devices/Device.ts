@@ -168,6 +168,12 @@ export abstract class Device {
         return `${host}(config-std-nacl)#`;
       case 'ext-nacl-config':
         return `${host}(config-ext-nacl)#`;
+      case 'dhcpv6-config':
+        return `${host}(config-dhcpv6)#`;
+      case 'ipv6-acl-config':
+        return `${host}(config-ipv6-acl)#`;
+      case 'time-range-config':
+        return `${host}(config-time-range)#`;
       default:
         return `${host}>`;
     }

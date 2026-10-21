@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, OspfV3Config, EigrpConfig, EigrpV6Config, BgpConfig, AclRule, NamedAcl, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState, EemApplet, EemHistoryEntry, MdtSubscription, NetconfSession } from '../../types/network';
+import { DevicePosition, RouteEntry, InterfaceConfig, OspfConfig, OspfV3Config, EigrpConfig, EigrpV6Config, BgpConfig, AclRule, NamedAcl, DhcpPool, NatRule, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, CryptoIsakmpPolicy, CryptoIsakmpKey, CryptoTransformSet, CryptoIpsecProfile, CryptoSession, NhrpMappingEntry, SecurityZone, ZonePair, ClassMapInspect, PolicyMapInspect, ZbfwSession, CoppPolicy, CoppState, EemApplet, EemHistoryEntry, MdtSubscription, NetconfSession, DhcpV6Pool, DhcpV6Binding, Ipv6NamedAcl, TimeRangeConfig } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -14,8 +14,13 @@ export class Router extends Device {
   bgpConfig?: BgpConfig;
   dhcpPools: Map<string, DhcpPool> = new Map();
   dhcpExcludedAddresses: string[] = [];
+  dhcpv6Pools: Map<string, DhcpV6Pool> = new Map();
+  dhcpv6Bindings: DhcpV6Binding[] = [];
   accessLists: Map<number, AclRule[]> = new Map();
   namedAccessLists: Map<string, NamedAcl> = new Map();
+  ipv6AccessLists: Map<string, Ipv6NamedAcl> = new Map();
+  timeRanges: Map<string, TimeRangeConfig> = new Map();
+  vtyAccessClass?: { acl: string; direction: 'in' | 'out' };
   ipLocalPolicyRouteMap?: string;
   natRules: NatRule[] = [];
   routeMaps: Map<string, RouteMap> = new Map();
@@ -366,6 +371,9 @@ export class Router extends Device {
       if (iface.ipv6Address) {
         lines.push(` ipv6 address ${iface.ipv6Address}`);
       }
+      if (iface.ipv6LinkLocal) {
+        lines.push(` ipv6 address ${iface.ipv6LinkLocal} link-local`);
+      }
       if (iface.hsrp) {
         lines.push(` standby ${iface.hsrp.group} ip ${iface.hsrp.virtualIp}`);
         if (iface.hsrp.priority !== 100) lines.push(` standby ${iface.hsrp.group} priority ${iface.hsrp.priority}`);
@@ -456,6 +464,26 @@ export class Router extends Device {
         for (const [as, enabled] of Object.entries(iface.ipv6EigrpSplitHorizon)) {
           if (!enabled) lines.push(` no ipv6 split-horizon eigrp ${as}`);
         }
+      }
+      if (iface.ipv6NdOtherConfigFlag) lines.push(' ipv6 nd other-config-flag');
+      if (iface.ipv6NdManagedConfigFlag) lines.push(' ipv6 nd managed-config-flag');
+      if (iface.ipv6NdRaDnsServer) lines.push(` ipv6 nd ra dns server ${iface.ipv6NdRaDnsServer}`);
+      if (iface.ipv6NdPrefixNoAutoconfig) {
+        for (const pfx of iface.ipv6NdPrefixNoAutoconfig) {
+          lines.push(` ipv6 nd prefix ${pfx} no-autoconfig`);
+        }
+      }
+      if (iface.ipv6DhcpServerPool) lines.push(` ipv6 dhcp server ${iface.ipv6DhcpServerPool}`);
+      if (iface.ipAccessGroup) {
+        if (iface.ipAccessGroup.in) lines.push(` ip access-group ${iface.ipAccessGroup.in} in`);
+        if (iface.ipAccessGroup.out) lines.push(` ip access-group ${iface.ipAccessGroup.out} out`);
+      }
+      if (iface.ipv6TrafficFilter) {
+        if (iface.ipv6TrafficFilter.in) lines.push(` ipv6 traffic-filter ${iface.ipv6TrafficFilter.in} in`);
+        if (iface.ipv6TrafficFilter.out) lines.push(` ipv6 traffic-filter ${iface.ipv6TrafficFilter.out} out`);
+      }
+      if (iface.urpfMode) {
+        lines.push(` ip verify unicast source reachable-via ${iface.urpfMode}${iface.urpfAllowDefault ? ' allow-default' : ''}`);
       }
       if (iface.natType) {
         lines.push(` ip nat ${iface.natType}`);
@@ -988,6 +1016,19 @@ export class Router extends Device {
       }
     }
 
+    // Time Ranges
+    if (this.timeRanges) {
+      for (const tr of this.timeRanges.values()) {
+        lines.push(`time-range ${tr.name}`);
+        if (tr.periodic) {
+          for (const p of tr.periodic) {
+            lines.push(` periodic ${p.days} ${p.startTime} to ${p.endTime}`);
+          }
+        }
+        lines.push('!');
+      }
+    }
+
     // Named Access Lists
     if (this.namedAccessLists) {
       for (const nacl of this.namedAccessLists.values()) {
@@ -998,12 +1039,48 @@ export class Router extends Device {
           }
         }
         for (const r of nacl.rules) {
+          const seqPfx = r.sequence ? `${r.sequence} ` : '';
           if (nacl.type === 'standard') {
-            lines.push(` ${r.action} ${r.sourceIp}${r.sourceWildcard ? ' ' + r.sourceWildcard : ''}`);
+            lines.push(` ${seqPfx}${r.action} ${r.sourceIp}${r.sourceWildcard ? ' ' + r.sourceWildcard : ''}`);
           } else {
-            lines.push(` ${r.action} ${r.protocol || 'ip'} ${r.sourceIp}${r.sourceWildcard ? ' ' + r.sourceWildcard : ''}${r.destIp ? ' ' + r.destIp : ''}${r.destWildcard ? ' ' + r.destWildcard : ''}`.trim());
+            let rLine = ` ${seqPfx}${r.action} ${r.protocol || 'ip'} ${r.sourceIp}${r.sourceWildcard ? ' ' + r.sourceWildcard : ''} ${r.destIp || 'any'}${r.destWildcard ? ' ' + r.destWildcard : ''}`;
+            if (r.destPort) rLine += ` eq ${r.destPort}`;
+            if (r.portRange) rLine += ` range ${r.portRange.start} ${r.portRange.end}`;
+            if (r.timeRange) rLine += ` time-range ${r.timeRange}`;
+            lines.push(rLine.trim());
           }
         }
+        lines.push('!');
+      }
+    }
+
+    // IPv6 Access Lists
+    if (this.ipv6AccessLists) {
+      for (const acl of this.ipv6AccessLists.values()) {
+        lines.push(`ipv6 access-list ${acl.name}`);
+        if (acl.remarks) {
+          for (const rem of acl.remarks) lines.push(` remark ${rem}`);
+        }
+        for (const r of acl.rules) {
+          const seqPfx = r.sequence ? `${r.sequence} ` : '';
+          let line = ` ${seqPfx}${r.action} ${r.protocol} ${r.source} ${r.dest}`;
+          if (r.icmpType) line += ` ${r.icmpType}`;
+          if (r.destPort) line += ` eq ${r.destPort}`;
+          if (r.destPortRange) line += ` range ${r.destPortRange.start} ${r.destPortRange.end}`;
+          if (r.timeRange) line += ` time-range ${r.timeRange}`;
+          lines.push(line);
+        }
+        lines.push('!');
+      }
+    }
+
+    // IPv6 DHCP Pools
+    if (this.dhcpv6Pools) {
+      for (const pool of this.dhcpv6Pools.values()) {
+        lines.push(`ipv6 dhcp pool ${pool.name}`);
+        if (pool.addressPrefix) lines.push(` address prefix ${pool.addressPrefix}`);
+        if (pool.dnsServer) lines.push(` dns-server ${pool.dnsServer}`);
+        if (pool.domainName) lines.push(` domain-name ${pool.domainName}`);
         lines.push('!');
       }
     }
@@ -1130,6 +1207,7 @@ export class Router extends Device {
     if (this.consolePassword) lines.push(` password ${this.consolePassword}`, ' login');
     lines.push('!');
     lines.push('line vty 0 4');
+    if (this.vtyAccessClass) lines.push(` access-class ${this.vtyAccessClass.acl} ${this.vtyAccessClass.direction}`);
     if (this.vtyPassword) lines.push(` password ${this.vtyPassword}`, ' login');
     lines.push(' transport input ssh telnet');
     lines.push('!');
