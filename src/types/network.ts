@@ -115,12 +115,24 @@ export interface InterfaceConfig {
   // GRE Tunnel, IPsec & DMVPN/NHRP per interface
   tunnelSource?: string;
   tunnelDestination?: string;
-  tunnelMode?: 'gre ip' | 'gre multipoint' | 'ipsec ipv4' | string;
+  tunnelMode?: 'gre ip' | 'gre multipoint' | 'gre multipoint ipv6' | 'ipsec ipv4' | string;
+  tunnelKey?: number | string;
   tunnelProtectionProfile?: string;
   nhrpNetworkId?: number;
+  nhrpAuthentication?: string;
+  nhrpMulticastDynamic?: boolean;
+  nhrpRedirect?: boolean;
+  nhrpShortcut?: boolean;
   nhrpMaps?: { protocolIp?: string; nbmaIp: string; multicast?: boolean }[];
   nhrpNhsIp?: string;
   nhrpNhsNbma?: string;
+  nhrpIpv6Nhs?: { tunnelIpv6: string; nbmaIpv6: string; multicast?: boolean };
+  ipMtu?: number;
+  ipTcpAdjustMss?: number;
+  ipv6Mtu?: number;
+  ipv6TcpAdjustMss?: number;
+  eigrpSplitHorizon?: Record<number, boolean>;
+  ipv6EigrpSplitHorizon?: Record<number, boolean>;
 
   // Zone-Based Policy Firewall (ZBFW) per interface
   zoneMemberSecurity?: string;
@@ -169,6 +181,7 @@ export interface CryptoTransformSet {
   transforms: string[];
   espCipher?: string;
   espAuth?: string;
+  mode?: 'tunnel' | 'transport';
 }
 
 export interface CryptoIpsecProfile {
@@ -353,7 +366,9 @@ export interface VrfConfig {
   routeTargets: VrfRouteTarget[];
   interfaces: string[];
   routingTable: RouteEntry[];
+  ipv6RoutingTable?: RouteEntry[];
   arpTable: Map<string, string>; // IP -> MAC
+  addressFamilies?: ('ipv4' | 'ipv6')[];
 }
 
 export interface MplsLabelEntry {
@@ -462,6 +477,8 @@ export interface OspfConfig {
 export interface OspfV3AddressFamilyConfig {
   passiveInterfaces: string[];
   redistributions?: RedistributionConfig[];
+  capabilityVrfLite?: boolean;
+  defaultInformationOriginate?: boolean;
 }
 
 export interface OspfV3Config {
@@ -472,6 +489,7 @@ export interface OspfV3Config {
   passiveInterfaces: string[];
   redistributions?: RedistributionConfig[];
   addressFamilies?: Map<'ipv4' | 'ipv6', OspfV3AddressFamilyConfig>;
+  vrfAddressFamilies?: Map<string, Map<'ipv4' | 'ipv6', OspfV3AddressFamilyConfig>>;
 }
 
 export interface RedistributionConfig {

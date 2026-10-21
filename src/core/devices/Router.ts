@@ -5,6 +5,7 @@ import { SubnetUtils } from '../network/Subnet';
 
 export class Router extends Device {
   routingTable: RouteEntry[] = [];
+  ipv6RoutingTable: RouteEntry[] = [];
   ospfConfig?: OspfConfig;
   ospfv3Config?: OspfV3Config;
   ipv6UnicastRouting: boolean = false;
@@ -319,7 +320,17 @@ export class Router extends Device {
       lines.push(`vrf definition ${vrf.name}`);
       if (vrf.rd) lines.push(` rd ${vrf.rd}`);
       if (vrf.description) lines.push(` description ${vrf.description}`);
-      if (vrf.routeTargets.length > 0) {
+      if (vrf.addressFamilies && vrf.addressFamilies.length > 0) {
+        for (const af of vrf.addressFamilies) {
+          lines.push(` address-family ${af}`);
+          if (af === 'ipv4' && vrf.routeTargets.length > 0) {
+            for (const rt of vrf.routeTargets) {
+              lines.push(`  route-target ${rt.type} ${rt.rt}`);
+            }
+          }
+          lines.push(' exit-address-family');
+        }
+      } else if (vrf.routeTargets.length > 0) {
         lines.push(' address-family ipv4');
         for (const rt of vrf.routeTargets) {
           lines.push(`  route-target ${rt.type} ${rt.rt}`);
@@ -352,6 +363,9 @@ export class Router extends Device {
       } else {
         lines.push(` no ip address`);
       }
+      if (iface.ipv6Address) {
+        lines.push(` ipv6 address ${iface.ipv6Address}`);
+      }
       if (iface.hsrp) {
         lines.push(` standby ${iface.hsrp.group} ip ${iface.hsrp.virtualIp}`);
         if (iface.hsrp.priority !== 100) lines.push(` standby ${iface.hsrp.group} priority ${iface.hsrp.priority}`);
@@ -378,11 +392,49 @@ export class Router extends Device {
       if (iface.tunnelMode) {
         lines.push(` tunnel mode ${iface.tunnelMode}`);
       }
+      if (iface.tunnelKey !== undefined) {
+        lines.push(` tunnel key ${iface.tunnelKey}`);
+      }
       if (iface.tunnelProtectionProfile) {
         lines.push(` tunnel protection ipsec profile ${iface.tunnelProtectionProfile}`);
       }
       if (iface.nhrpNetworkId) {
-        lines.push(` ip nhrp network-id ${iface.nhrpNetworkId}`);
+        if (iface.tunnelMode && iface.tunnelMode.includes('ipv6')) {
+          lines.push(` ipv6 nhrp network-id ${iface.nhrpNetworkId}`);
+        } else {
+          lines.push(` ip nhrp network-id ${iface.nhrpNetworkId}`);
+        }
+      }
+      if (iface.nhrpAuthentication) {
+        if (iface.tunnelMode && iface.tunnelMode.includes('ipv6')) {
+          lines.push(` ipv6 nhrp authentication ${iface.nhrpAuthentication}`);
+        } else {
+          lines.push(` ip nhrp authentication ${iface.nhrpAuthentication}`);
+        }
+      }
+      if (iface.nhrpMulticastDynamic) {
+        if (iface.tunnelMode && iface.tunnelMode.includes('ipv6')) {
+          lines.push(` ipv6 nhrp map multicast dynamic`);
+        } else {
+          lines.push(` ip nhrp map multicast dynamic`);
+        }
+      }
+      if (iface.nhrpRedirect) {
+        if (iface.tunnelMode && iface.tunnelMode.includes('ipv6')) {
+          lines.push(` ipv6 nhrp redirect`);
+        } else {
+          lines.push(` ip nhrp redirect`);
+        }
+      }
+      if (iface.nhrpShortcut) {
+        if (iface.tunnelMode && iface.tunnelMode.includes('ipv6')) {
+          lines.push(` ipv6 nhrp shortcut`);
+        } else {
+          lines.push(` ip nhrp shortcut`);
+        }
+      }
+      if (iface.nhrpIpv6Nhs) {
+        lines.push(` ipv6 nhrp nhs ${iface.nhrpIpv6Nhs.tunnelIpv6} nbma ${iface.nhrpIpv6Nhs.nbmaIpv6}${iface.nhrpIpv6Nhs.multicast ? ' multicast' : ''}`);
       }
       if (iface.nhrpMaps && iface.nhrpMaps.length > 0) {
         for (const m of iface.nhrpMaps) {
@@ -395,6 +447,15 @@ export class Router extends Device {
       }
       if (iface.nhrpNhsIp) {
         lines.push(` ip nhrp nhs ${iface.nhrpNhsIp}${iface.nhrpNhsNbma ? ' nbma ' + iface.nhrpNhsNbma : ''}`);
+      }
+      if (iface.ipMtu) lines.push(` ip mtu ${iface.ipMtu}`);
+      if (iface.ipTcpAdjustMss) lines.push(` ip tcp adjust-mss ${iface.ipTcpAdjustMss}`);
+      if (iface.ipv6Mtu) lines.push(` ipv6 mtu ${iface.ipv6Mtu}`);
+      if (iface.ipv6TcpAdjustMss) lines.push(` ipv6 tcp adjust-mss ${iface.ipv6TcpAdjustMss}`);
+      if (iface.ipv6EigrpSplitHorizon) {
+        for (const [as, enabled] of Object.entries(iface.ipv6EigrpSplitHorizon)) {
+          if (!enabled) lines.push(` no ipv6 split-horizon eigrp ${as}`);
+        }
       }
       if (iface.natType) {
         lines.push(` ip nat ${iface.natType}`);

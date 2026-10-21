@@ -1845,5 +1845,625 @@ export const CCNP_LABS: LabDefinition[] = [
         { id: 'l5', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
       ]
     }
+  },
+
+  // ==========================================
+  // VPN TECHNOLOGIES & DMVPN LABS
+  // ==========================================
+  {
+    id: 'lab-ccnp-vpn-01-vrf-lite',
+    title: 'CCNP Enterprise: Implement VRF-Lite',
+    track: 'CCNP',
+    category: 'VPN Technologies & DMVPN',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    difficulty: 'Advanced',
+    estimatedMinutes: 45,
+    scenario: 'Konfigurasi VRF-Lite pada multi-tenant network (CustomerA dan CustomerB) menggunakan router R1, R2, R3 dan switch D1, D2 untuk mengisolasi traffic per-tenant secara end-to-end dengan OSPFv3 multi-AF.',
+    objectives: [
+      'Konfigurasi VRF definition CustomerA dan CustomerB dengan address-family ipv4 dan ipv6',
+      'Tetapkan interface dan subinterface ke dalam masing-masing VRF',
+      'Konfigurasi default static route per-VRF',
+      'Konfigurasi proses OSPFv3 multi-AF per-VRF dengan redistribusi static dan capability vrf-lite'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-vrf-1',
+        description: 'Konfigurasi VRF definition CustomerA dengan address-family ipv4 dan ipv6 pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'vrf_definition',
+        expectedValue: { name: 'CustomerA', addressFamilies: ['ipv4', 'ipv6'] },
+        hint: 'vrf definition CustomerA -> address-family ipv4 -> address-family ipv6'
+      },
+      {
+        id: 'task-ccnp-vrf-2',
+        description: 'Konfigurasi VRF definition CustomerB dengan address-family ipv4 dan ipv6 pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'vrf_definition',
+        expectedValue: { name: 'CustomerB', addressFamilies: ['ipv4', 'ipv6'] },
+        hint: 'vrf definition CustomerB -> address-family ipv4 -> address-family ipv6'
+      },
+      {
+        id: 'task-ccnp-vrf-3',
+        description: 'Tetapkan subinterface GigabitEthernet0/0/1.1 ke VRF CustomerA pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1.1',
+        expectedProperty: 'interface_vrf',
+        expectedValue: 'CustomerA',
+        hint: 'interface GigabitEthernet0/0/1.1 -> vrf forwarding CustomerA'
+      },
+      {
+        id: 'task-ccnp-vrf-4',
+        description: 'Tetapkan subinterface GigabitEthernet0/0/1.2 ke VRF CustomerB pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1.2',
+        expectedProperty: 'interface_vrf',
+        expectedValue: 'CustomerB',
+        hint: 'interface GigabitEthernet0/0/1.2 -> vrf forwarding CustomerB'
+      },
+      {
+        id: 'task-ccnp-vrf-5',
+        description: 'Konfigurasi default static route untuk VRF CustomerA pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'vrf_static_route',
+        expectedValue: { vrf: 'CustomerA', network: '0.0.0.0', mask: '0.0.0.0' },
+        hint: 'ip route vrf CustomerA 0.0.0.0 0.0.0.0 ...'
+      },
+      {
+        id: 'task-ccnp-vrf-6',
+        description: 'Konfigurasi default static route untuk VRF CustomerB pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'vrf_static_route',
+        expectedValue: { vrf: 'CustomerB', network: '0.0.0.0', mask: '0.0.0.0' },
+        hint: 'ip route vrf CustomerB 0.0.0.0 0.0.0.0 ...'
+      },
+      {
+        id: 'task-ccnp-vrf-7',
+        description: 'Konfigurasi VRF definition CustomerA dengan address-family ipv4 dan ipv6 pada Router R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'vrf_definition',
+        expectedValue: { name: 'CustomerA', addressFamilies: ['ipv4', 'ipv6'] },
+        hint: 'vrf definition CustomerA -> address-family ipv4 -> address-family ipv6'
+      },
+      {
+        id: 'task-ccnp-vrf-8',
+        description: 'Konfigurasi capability vrf-lite pada OSPFv3 AF CustomerA ipv4 di Router R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'ospfv3_vrf_af',
+        expectedValue: { vrf: 'CustomerA', af: 'ipv4', capabilityVrfLite: true },
+        hint: 'router ospfv3 1 -> address-family ipv4 unicast vrf CustomerA -> capability vrf-lite'
+      },
+      {
+        id: 'task-ccnp-vrf-9',
+        description: 'Konfigurasi capability vrf-lite pada OSPFv3 AF CustomerB ipv4 di Router R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'ospfv3_vrf_af',
+        expectedValue: { vrf: 'CustomerB', af: 'ipv4', capabilityVrfLite: true },
+        hint: 'router ospfv3 1 -> address-family ipv4 unicast vrf CustomerB -> capability vrf-lite'
+      },
+      {
+        id: 'task-ccnp-vrf-10',
+        description: 'Konfigurasi default-information originate pada OSPFv3 AF CustomerA ipv4 di Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ospfv3_vrf_af',
+        expectedValue: { vrf: 'CustomerA', af: 'ipv4', defaultInformationOriginate: true },
+        hint: 'router ospfv3 1 -> address-family ipv4 unicast vrf CustomerA -> default-information originate'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 200, y: 150 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 420, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 640, y: 150 },
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 200, y: 320 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 640, y: 320 },
+        { id: 'A1', hostname: 'A1', type: 'switch-l2', x: 420, y: 320 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/2', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'D1', targetPort: 'GigabitEthernet1/0/1', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/1', cableType: 'straight' },
+        { id: 'l5', sourceDeviceId: 'D1', sourcePort: 'GigabitEthernet1/0/2', targetDeviceId: 'A1', targetPort: 'FastEthernet0/1', cableType: 'straight' },
+        { id: 'l6', sourceDeviceId: 'D2', sourcePort: 'GigabitEthernet1/0/2', targetDeviceId: 'A1', targetPort: 'FastEthernet0/2', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-vpn-02-dmvpn-phase1',
+    title: 'CCNP Enterprise: Implement a DMVPN Phase 1 Hub-to-Spoke Topology',
+    track: 'CCNP',
+    category: 'VPN Technologies & DMVPN',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    difficulty: 'Advanced',
+    estimatedMinutes: 45,
+    scenario: 'Konfigurasi Dynamic Multipoint VPN (DMVPN) Phase 1 Hub-and-Spoke topology menggunakan mGRE di Hub R1 dan p2p GRE di Spoke R2, R3 dengan protokol NHRP dan EIGRP routing over tunnel.',
+    objectives: [
+      'Konfigurasi mGRE tunnel interface dan tunnel key pada Hub R1',
+      'Konfigurasi NHRP network-id, authentication, dan map multicast dynamic pada Hub',
+      'Nonaktifkan split-horizon pada named EIGRP af-interface tunnel Hub',
+      'Konfigurasi p2p GRE tunnel dan static NHRP mapping serta NHS pada Spoke R2 dan R3'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-dmvpn1-1',
+        description: 'Konfigurasi Hub R1 Tunnel1 sebagai GRE multipoint dengan tunnel source Gi0/0/0 dan tunnel key 1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { mode: 'gre multipoint', source: 'GigabitEthernet0/0/0', key: 1 },
+        hint: 'interface Tunnel1 -> tunnel source GigabitEthernet0/0/0 -> tunnel mode gre multipoint -> tunnel key 1'
+      },
+      {
+        id: 'task-ccnp-dmvpn1-2',
+        description: 'Konfigurasi NHRP network-id 1, authentication cisco, dan map multicast dynamic pada Hub R1 Tunnel1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { networkId: 1, authentication: 'cisco', multicastDynamic: true },
+        hint: 'ip nhrp network-id 1 -> ip nhrp authentication cisco -> ip nhrp map multicast dynamic'
+      },
+      {
+        id: 'task-ccnp-dmvpn1-3',
+        description: 'Konfigurasi IP MTU 1400 dan TCP Adjust-MSS 1360 pada Hub R1 Tunnel1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { ipMtu: 1400, ipTcpAdjustMss: 1360 },
+        hint: 'interface Tunnel1 -> ip mtu 1400 -> ip tcp adjust-mss 1360'
+      },
+      {
+        id: 'task-ccnp-dmvpn1-4',
+        description: 'Konfigurasi Spoke R2 Tunnel1 p2p GRE dengan tunnel destination ke Hub R1 (209.165.200.225) dan key 1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { source: 'GigabitEthernet0/0/0', destination: '209.165.200.225', key: 1 },
+        hint: 'interface Tunnel1 -> tunnel source GigabitEthernet0/0/0 -> tunnel destination 209.165.200.225 -> tunnel key 1'
+      },
+      {
+        id: 'task-ccnp-dmvpn1-5',
+        description: 'Konfigurasi Spoke R2 Tunnel1 NHRP network-id 1, auth cisco, map multicast, dan NHS 10.0.0.1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { networkId: 1, authentication: 'cisco', nhsIp: '10.0.0.1', hasMulticastMap: true },
+        hint: 'ip nhrp network-id 1 -> ip nhrp authentication cisco -> ip nhrp map multicast 209.165.200.225 -> ip nhrp nhs 10.0.0.1'
+      },
+      {
+        id: 'task-ccnp-dmvpn1-6',
+        description: 'Konfigurasi Spoke R3 Tunnel1 p2p GRE dengan tunnel destination ke Hub R1 (209.165.200.225) dan key 1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { source: 'GigabitEthernet0/0/0', destination: '209.165.200.225', key: 1 },
+        hint: 'interface Tunnel1 -> tunnel source GigabitEthernet0/0/0 -> tunnel destination 209.165.200.225 -> tunnel key 1'
+      },
+      {
+        id: 'task-ccnp-dmvpn1-7',
+        description: 'Konfigurasi Spoke R3 Tunnel1 NHRP network-id 1, auth cisco, map multicast, dan NHS 10.0.0.1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { networkId: 1, authentication: 'cisco', nhsIp: '10.0.0.1', hasMulticastMap: true },
+        hint: 'ip nhrp network-id 1 -> ip nhrp authentication cisco -> ip nhrp map multicast 209.165.200.225 -> ip nhrp nhs 10.0.0.1'
+      },
+      {
+        id: 'task-ccnp-dmvpn1-8',
+        description: 'Nonaktifkan EIGRP split-horizon pada Hub R1 Tunnel1 untuk AS 1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'interface_split_horizon',
+        expectedValue: { asNumber: 1 },
+        hint: 'router eigrp DMVPN -> address-family ipv4 unicast autonomous-system 1 -> af-interface Tunnel1 -> no split-horizon'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 450, y: 120 },
+        { id: 'ISP', hostname: 'ISP', type: 'router', x: 450, y: 260 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 250, y: 400 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 650, y: 400 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/2', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-vpn-03-dmvpn-phase3',
+    title: 'CCNP Enterprise: Implement a DMVPN Phase 3 Spoke-to-Spoke Topology',
+    track: 'CCNP',
+    category: 'VPN Technologies & DMVPN',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    difficulty: 'Advanced',
+    estimatedMinutes: 40,
+    scenario: 'Tingkatkan DMVPN Phase 1 menjadi DMVPN Phase 3 Spoke-to-Spoke langsung dengan mGRE di seluruh spokes, NHRP redirect pada Hub R1, dan NHRP shortcut pada Spokes R2 dan R3.',
+    objectives: [
+      'Konfigurasi NHRP redirect pada Hub R1 Tunnel1',
+      'Migrasikan spoke R2 dan R3 dari p2p GRE menjadi mGRE dengan menghapus tunnel destination',
+      'Aktifkan NHRP shortcut pada Spoke R2 dan R3 Tunnel1'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-dmvpn3-1',
+        description: 'Ubah Spoke R2 Tunnel1 menjadi GRE multipoint dan hapus tunnel destination',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { mode: 'gre multipoint', noDestination: true },
+        hint: 'interface Tunnel1 -> tunnel mode gre multipoint -> no tunnel destination'
+      },
+      {
+        id: 'task-ccnp-dmvpn3-2',
+        description: 'Ubah Spoke R3 Tunnel1 menjadi GRE multipoint dan hapus tunnel destination',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { mode: 'gre multipoint', noDestination: true },
+        hint: 'interface Tunnel1 -> tunnel mode gre multipoint -> no tunnel destination'
+      },
+      {
+        id: 'task-ccnp-dmvpn3-3',
+        description: 'Aktifkan ip nhrp redirect pada Hub R1 Tunnel1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { redirect: true },
+        hint: 'interface Tunnel1 -> ip nhrp redirect'
+      },
+      {
+        id: 'task-ccnp-dmvpn3-4',
+        description: 'Aktifkan ip nhrp shortcut pada Spoke R2 Tunnel1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { shortcut: true },
+        hint: 'interface Tunnel1 -> ip nhrp shortcut'
+      },
+      {
+        id: 'task-ccnp-dmvpn3-5',
+        description: 'Aktifkan ip nhrp shortcut pada Spoke R3 Tunnel1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { shortcut: true },
+        hint: 'interface Tunnel1 -> ip nhrp shortcut'
+      },
+      {
+        id: 'task-ccnp-dmvpn3-6',
+        description: 'Pastikan EIGRP split-horizon dinonaktifkan pada Hub R1 Tunnel1 untuk AS 1',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'interface_split_horizon',
+        expectedValue: { asNumber: 1 },
+        hint: 'router eigrp DMVPN -> af-interface Tunnel1 -> no split-horizon'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 450, y: 120 },
+        { id: 'ISP', hostname: 'ISP', type: 'router', x: 450, y: 260 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 250, y: 400 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 650, y: 400 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/2', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-vpn-04-dmvpn-ipv6-phase3',
+    title: 'CCNP Enterprise: Implement an IPv6 DMVPN Phase 3 Spoke-to-Spoke Topology',
+    track: 'CCNP',
+    category: 'VPN Technologies & DMVPN',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    difficulty: 'Advanced',
+    estimatedMinutes: 45,
+    scenario: 'Implementasikan IPv6 DMVPN Phase 3 Spoke-to-Spoke topology menggunakan tunnel mode gre multipoint ipv6, NHRP IPv6 redirect dan shortcut, serta EIGRP for IPv6 routing.',
+    objectives: [
+      'Konfigurasi mGRE IPv6 tunnel dan key pada Hub R1',
+      'Konfigurasi IPv6 NHRP network-id, redirect, dan dynamic multicast pada Hub R1',
+      'Konfigurasi MTU dan TCP MSS tuning pada IPv6 tunnel interface',
+      'Konfigurasi IPv6 DMVPN Phase 3 mGRE, shortcut, multicast map, dan NHS pada Spoke R2 dan R3'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-dmvpn6-1',
+        description: 'Konfigurasi Hub R1 Tunnel1 dengan tunnel mode gre multipoint ipv6 dan key 1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { mode: 'gre multipoint ipv6', key: 1 },
+        hint: 'interface Tunnel1 -> tunnel mode gre multipoint ipv6 -> tunnel key 1'
+      },
+      {
+        id: 'task-ccnp-dmvpn6-2',
+        description: 'Konfigurasi IPv6 NHRP network-id 1, redirect, dan dynamic multicast pada Hub R1 Tunnel1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { networkId: 1, redirect: true, multicastDynamic: true },
+        hint: 'ipv6 nhrp network-id 1 -> ipv6 nhrp redirect -> ipv6 nhrp map multicast dynamic'
+      },
+      {
+        id: 'task-ccnp-dmvpn6-3',
+        description: 'Konfigurasi IPv6 MTU 1400 dan IPv6 TCP MSS 1360 pada Hub R1 Tunnel1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { ipv6Mtu: 1400, ipv6TcpAdjustMss: 1360 },
+        hint: 'interface Tunnel1 -> ipv6 mtu 1400 -> ipv6 tcp adjust-mss 1360'
+      },
+      {
+        id: 'task-ccnp-dmvpn6-4',
+        description: 'Konfigurasi Spoke R2 Tunnel1 dengan tunnel mode gre multipoint ipv6 dan key 1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { mode: 'gre multipoint ipv6', key: 1 },
+        hint: 'interface Tunnel1 -> tunnel mode gre multipoint ipv6 -> tunnel key 1'
+      },
+      {
+        id: 'task-ccnp-dmvpn6-5',
+        description: 'Konfigurasi Spoke R2 Tunnel1 IPv6 NHRP network-id 1, shortcut, map multicast, dan NHS ke Hub R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { networkId: 1, shortcut: true, ipv6Nhs: '2001:db8:0:1::1', hasMulticastMap: true },
+        hint: 'ipv6 nhrp network-id 1 -> ipv6 nhrp shortcut -> ipv6 nhrp map multicast 209.165.200.225 -> ipv6 nhrp nhs 2001:db8:0:1::1'
+      },
+      {
+        id: 'task-ccnp-dmvpn6-6',
+        description: 'Konfigurasi Spoke R3 Tunnel1 dengan tunnel mode gre multipoint ipv6 dan key 1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { mode: 'gre multipoint ipv6', key: 1 },
+        hint: 'interface Tunnel1 -> tunnel mode gre multipoint ipv6 -> tunnel key 1'
+      },
+      {
+        id: 'task-ccnp-dmvpn6-7',
+        description: 'Konfigurasi Spoke R3 Tunnel1 IPv6 NHRP network-id 1, shortcut, map multicast, dan NHS ke Hub R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'nhrp_config',
+        expectedValue: { networkId: 1, shortcut: true, ipv6Nhs: '2001:db8:0:1::1', hasMulticastMap: true },
+        hint: 'ipv6 nhrp network-id 1 -> ipv6 nhrp shortcut -> ipv6 nhrp map multicast 209.165.200.225 -> ipv6 nhrp nhs 2001:db8:0:1::1'
+      },
+      {
+        id: 'task-ccnp-dmvpn6-8',
+        description: 'Nonaktifkan IPv6 EIGRP split-horizon pada Hub R1 Tunnel1 untuk AS 1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'interface_split_horizon',
+        expectedValue: { asNumber: 1, af: 'ipv6' },
+        hint: 'interface Tunnel1 -> no ipv6 split-horizon eigrp 1'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 450, y: 120 },
+        { id: 'ISP', hostname: 'ISP', type: 'router', x: 450, y: 260 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 250, y: 400 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 650, y: 400 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/2', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-vpn-05-secure-dmvpn',
+    title: 'CCNP Enterprise: Configure Secure DMVPN Tunnels',
+    track: 'CCNP',
+    category: 'VPN Technologies & DMVPN',
+    domain: 'CCNP Enterprise: Infrastructure Security & Virtualization',
+    difficulty: 'Advanced',
+    estimatedMinutes: 45,
+    scenario: 'Amankan tunnel DMVPN Phase 3 menggunakan IPsec over GRE: ISAKMP Policy, pre-shared key, IPsec transform-set dalam mode transport, IPsec profile, dan tunnel protection ipsec profile.',
+    objectives: [
+      'Konfigurasi Crypto ISAKMP policy dengan authentication pre-share dan pre-shared key',
+      'Konfigurasi IPsec transform-set dalam mode transport',
+      'Konfigurasi Crypto IPsec profile yang mengikat transform-set',
+      'Terapkan tunnel protection ipsec profile pada interface Tunnel1'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-sec-1',
+        description: 'Konfigurasi ISAKMP policy 10 authentication pre-share pada Hub R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'crypto_isakmp_policy',
+        expectedValue: { priority: 10, authentication: 'pre-share' },
+        hint: 'crypto isakmp policy 10 -> authentication pre-share'
+      },
+      {
+        id: 'task-ccnp-sec-2',
+        description: 'Konfigurasi ISAKMP pre-shared key cisco123 address 0.0.0.0 pada Hub R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'crypto_isakmp_key',
+        expectedValue: { key: 'cisco123', address: '0.0.0.0' },
+        hint: 'crypto isakmp key cisco123 address 0.0.0.0 0.0.0.0'
+      },
+      {
+        id: 'task-ccnp-sec-3',
+        description: 'Konfigurasi IPsec transform-set DMVPN-TS dengan mode transport pada Hub R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'crypto_transform_set',
+        expectedValue: { name: 'DMVPN-TS', mode: 'transport' },
+        hint: 'crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac -> mode transport'
+      },
+      {
+        id: 'task-ccnp-sec-4',
+        description: 'Konfigurasi IPsec profile DMVPN-PROFILE mengaitkan DMVPN-TS pada Hub R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'crypto_ipsec_profile',
+        expectedValue: { name: 'DMVPN-PROFILE', transformSet: 'DMVPN-TS' },
+        hint: 'crypto ipsec profile DMVPN-PROFILE -> set transform-set DMVPN-TS'
+      },
+      {
+        id: 'task-ccnp-sec-5',
+        description: 'Terapkan tunnel protection ipsec profile DMVPN-PROFILE pada Hub R1 Tunnel1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { protectionProfile: 'DMVPN-PROFILE' },
+        hint: 'interface Tunnel1 -> tunnel protection ipsec profile DMVPN-PROFILE'
+      },
+      {
+        id: 'task-ccnp-sec-6',
+        description: 'Konfigurasi IPsec transform-set DMVPN-TS dengan mode transport pada Spoke R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'crypto_transform_set',
+        expectedValue: { name: 'DMVPN-TS', mode: 'transport' },
+        hint: 'crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac -> mode transport'
+      },
+      {
+        id: 'task-ccnp-sec-7',
+        description: 'Konfigurasi IPsec profile DMVPN-PROFILE mengaitkan DMVPN-TS pada Spoke R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'crypto_ipsec_profile',
+        expectedValue: { name: 'DMVPN-PROFILE', transformSet: 'DMVPN-TS' },
+        hint: 'crypto ipsec profile DMVPN-PROFILE -> set transform-set DMVPN-TS'
+      },
+      {
+        id: 'task-ccnp-sec-8',
+        description: 'Terapkan tunnel protection ipsec profile DMVPN-PROFILE pada Spoke R2 Tunnel1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { protectionProfile: 'DMVPN-PROFILE' },
+        hint: 'interface Tunnel1 -> tunnel protection ipsec profile DMVPN-PROFILE'
+      },
+      {
+        id: 'task-ccnp-sec-9',
+        description: 'Konfigurasi IPsec transform-set DMVPN-TS dengan mode transport pada Spoke R3',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'crypto_transform_set',
+        expectedValue: { name: 'DMVPN-TS', mode: 'transport' },
+        hint: 'crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac -> mode transport'
+      },
+      {
+        id: 'task-ccnp-sec-10',
+        description: 'Konfigurasi IPsec profile DMVPN-PROFILE mengaitkan DMVPN-TS pada Spoke R3',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'crypto_ipsec_profile',
+        expectedValue: { name: 'DMVPN-PROFILE', transformSet: 'DMVPN-TS' },
+        hint: 'crypto ipsec profile DMVPN-PROFILE -> set transform-set DMVPN-TS'
+      },
+      {
+        id: 'task-ccnp-sec-11',
+        description: 'Terapkan tunnel protection ipsec profile DMVPN-PROFILE pada Spoke R3 Tunnel1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R3',
+        targetInterface: 'Tunnel1',
+        expectedProperty: 'tunnel_config',
+        expectedValue: { protectionProfile: 'DMVPN-PROFILE' },
+        hint: 'interface Tunnel1 -> tunnel protection ipsec profile DMVPN-PROFILE'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'R1', hostname: 'R1', type: 'router', x: 450, y: 120 },
+        { id: 'ISP', hostname: 'ISP', type: 'router', x: 450, y: 260 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 250, y: 400 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 650, y: 400 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'ISP', targetPort: 'GigabitEthernet0/0/2', cableType: 'straight' }
+      ]
+    }
   }
 ];

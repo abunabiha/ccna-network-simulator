@@ -14,6 +14,7 @@ export type CliMode =
   | 'vrf-af-config'      // Router(config-vrf-af)#
   | 'crypto-isakmp-policy' // Router(config-isakmp)#
   | 'crypto-ipsec-profile' // Router(config-ipsec-profile)#
+  | 'crypto-transform-config' // Router(cfg-crypto-trans)#
   | 'zone-pair-config'   // Router(config-sec-zone-pair)#
   | 'class-map-inspect'  // Router(config-cmap)#
   | 'policy-map-inspect' // Router(config-pmap)#
@@ -49,6 +50,7 @@ export interface CliContext {
   targetVrfAf?: string;
   targetIsakmpPriority?: number;
   targetIpsecProfileName?: string;
+  targetTransformSetName?: string;
   targetZonePairName?: string;
   targetClassMapName?: string;
   targetPolicyMapName?: string;
@@ -58,6 +60,7 @@ export interface CliContext {
   targetKeyChain?: string;
   targetKeyId?: number;
   targetAfProto?: 'ipv4' | 'ipv6';
+  targetAfVrf?: string;
   targetAfInterface?: string;
   targetAfType?: 'eigrp' | 'bgp' | 'ospfv3';
   targetEigrpName?: string;

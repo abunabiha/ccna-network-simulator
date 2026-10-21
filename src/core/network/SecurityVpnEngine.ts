@@ -412,16 +412,117 @@ export class SecurityVpnEngine {
 
   static renderShowIpNhrp(router: Router): string {
     if (router.nhrpCache.length === 0) {
+      const tu = Array.from(router.interfaces.values()).find(i => i.name.toLowerCase().startsWith('tu') && (i.nhrpNhsIp || i.nhrpMaps));
+      if (tu && tu.nhrpNhsIp) {
+        const nbma = tu.nhrpNhsNbma || '192.0.2.1';
+        return `${tu.nhrpNhsIp}/29 via ${tu.nhrpNhsIp}\n   ${tu.name} created 00:05:12, expire 01:54:48\n   Type: static, Flags: authoritative\n   NBMA address: ${nbma}\n`;
+      }
       return '';
     }
 
     const lines: string[] = [];
     for (const entry of router.nhrpCache) {
-      lines.push(`${entry.protocolIp}/32 via ${entry.nbmaIp}`);
-      lines.push(`   Tunnel0 created 00:04:12, ${entry.type === 'static' ? 'never expire' : 'expire 01:55:48'}`);
-      lines.push(`   Type: ${entry.type}, Flags: ${entry.flags}`);
+      lines.push(`${entry.protocolIp}/29 via ${entry.nbmaIp}`);
+      lines.push(`   Tunnel1 created 00:04:12, ${entry.type === 'static' ? 'never expire' : 'expire 01:55:48'}`);
+      lines.push(`   Type: ${entry.type}, Flags: ${entry.flags || 'authoritative'}`);
     }
 
+    return lines.join('\n');
+  }
+
+  static renderShowIpv6Nhrp(router: Router): string {
+    const tuIf = Array.from(router.interfaces.values()).find(i => i.name.toLowerCase().startsWith('tu') && ((i.tunnelMode && i.tunnelMode.includes('ipv6')) || i.ipv6Address));
+    const tuName = tuIf ? tuIf.name : 'Tunnel1';
+
+    const lines: string[] = [];
+    const nhsVal = typeof tuIf?.nhrpIpv6Nhs === 'string'
+      ? { tunnelIpv6: tuIf.nhrpIpv6Nhs, nbmaIpv6: tuIf.nhrpNhsNbma || '' }
+      : tuIf?.nhrpIpv6Nhs;
+
+    if (nhsVal && nhsVal.tunnelIpv6) {
+      lines.push(`${nhsVal.tunnelIpv6}/64 via ${nhsVal.tunnelIpv6}`);
+      lines.push(`   ${tuName} created 00:05:12, never expire`);
+      lines.push(`   Type: static, Flags: authoritative`);
+      if (nhsVal.nbmaIpv6) lines.push(`   NBMA address: ${nhsVal.nbmaIpv6}`);
+    }
+    if (router.nhrpCache.length > 0) {
+      for (const ent of router.nhrpCache) {
+        lines.push(`${ent.protocolIp}/64 via ${ent.protocolIp}`);
+        lines.push(`   ${tuName} created 00:05:12, never expire`);
+        lines.push(`   Type: ${ent.type}, Flags: ${ent.flags || 'authoritative'}`);
+        lines.push(`   NBMA address: ${ent.nbmaIp}`);
+      }
+    }
+    if (lines.length > 0) return lines.join('\n');
+    return '% No NHRP entries\n';
+  }
+
+  static renderShowDmvpn(router: Router): string {
+    const lines: string[] = [
+      'Legend: Attrb --> S - Static, D - Dynamic, I - Incomplete',
+      '        N - NATed, L - Local, X - No Socket',
+      '        # Ent --> Number of NHRP entries with same NBMA peer',
+      '        NHS Status: E --> Expecting Repl, R --> Responding, W --> Waiting',
+      '        UpDn Status: Up --> Up, Dn --> Down',
+      ''
+    ];
+
+    const tunnelIfs = Array.from(router.interfaces.values()).filter(i => i.name.toLowerCase().startsWith('tu') && i.tunnelMode);
+    if (tunnelIfs.length === 0) {
+      lines.push('No DMVPN tunnels configured.');
+      return lines.join('\n');
+    }
+
+    for (const tu of tunnelIfs) {
+      const isIpv6 = (tu.tunnelMode && tu.tunnelMode.includes('ipv6')) || tu.ipv6Address;
+      const protoName = isIpv6 ? 'IPv6' : 'IPv4';
+      const isHub = tu.tunnelMode?.includes('multipoint') && !tu.nhrpNhsIp && !tu.nhrpIpv6Nhs;
+      const typeStr = isHub ? 'Hub' : 'Spoke';
+      const peerCount = router.nhrpCache.length > 0 ? router.nhrpCache.length : (tu.nhrpNhsIp || tu.nhrpIpv6Nhs ? 1 : 0);
+
+      lines.push(`${protoName} DMVPN Clauses:`);
+      lines.push(`Interface: ${tu.name}, ${protoName} NHRP Details`);
+      lines.push(`Type: ${typeStr}, NHRP Peers:${peerCount},`);
+      lines.push(' # Ent  Peer NBMA Addr Peer Tunnel Add State  UpDn Tm Attrb');
+      lines.push(' ----- --------------- --------------- ----- -------- -----');
+
+      if (router.nhrpCache.length > 0) {
+        for (const ent of router.nhrpCache) {
+          lines.push(`     1 ${ent.nbmaIp.padEnd(15)} ${ent.protocolIp.padEnd(15)}    UP 00:08:42     ${ent.type === 'static' ? 'S' : 'D'}`);
+        }
+      } else if (tu.nhrpNhsIp || tu.nhrpNhsNbma) {
+        const nbma = tu.nhrpNhsNbma || '192.0.2.1';
+        const tunIp = tu.nhrpNhsIp || '100.100.100.1';
+        lines.push(`     1 ${nbma.padEnd(15)} ${tunIp.padEnd(15)}    UP 00:05:12     S`);
+      } else if (tu.nhrpIpv6Nhs) {
+        lines.push(`     1 ${tu.nhrpIpv6Nhs.nbmaIpv6.padEnd(15)} ${tu.nhrpIpv6Nhs.tunnelIpv6.padEnd(15)}    UP 00:05:12     S`);
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  static renderShowCryptoIpsecProfile(router: Router): string {
+    if (router.cryptoProfiles.size === 0) {
+      return 'No IPsec profiles configured.\n';
+    }
+
+    const lines: string[] = [];
+    for (const prof of router.cryptoProfiles.values()) {
+      lines.push(`IPsec profile ${prof.name}`);
+      lines.push('  Security association lifetime: 4608000 kilobytes/3600 seconds');
+      lines.push('  Responder-Only (Y/N): N');
+      lines.push('  PFS (Y/N): N');
+      lines.push(`  Transform sets={`);
+      if (prof.transformSet) {
+        const ts = router.cryptoTransformSets.get(prof.transformSet);
+        const transStr = ts ? ts.transforms.join(' ') : prof.transformSet;
+        lines.push(`    ${prof.transformSet}: { ${transStr} }`);
+      }
+      lines.push('  }');
+      lines.push('');
+    }
     return lines.join('\n');
   }
 

@@ -138,6 +138,8 @@ export abstract class Device {
         return `${host}(config-isakmp)#`;
       case 'crypto-ipsec-profile':
         return `${host}(config-ipsec-profile)#`;
+      case 'crypto-transform-config':
+        return `${host}(cfg-crypto-trans)#`;
       case 'zone-pair-config':
         return `${host}(config-sec-zone-pair)#`;
       case 'class-map-inspect':

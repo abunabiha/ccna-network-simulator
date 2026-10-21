@@ -1139,6 +1139,264 @@ export class LabGrader {
       };
     }
 
+    // CCNP VPN: Check VRF Definition
+    if (prop === 'vrf_definition' && (device instanceof Router || device instanceof Switch)) {
+      const vrfName = typeof expected === 'string' ? expected : expected?.name;
+      const targetDev = device as Router | Switch;
+      const vrf = targetDev.vrfInstances ? targetDev.vrfInstances.get(vrfName) : undefined;
+      let passed = !!vrf;
+      if (passed && typeof expected === 'object') {
+        if (expected.addressFamilies) {
+          const expectedAfs: string[] = Array.isArray(expected.addressFamilies) ? expected.addressFamilies : [expected.addressFamilies];
+          const hasAll = expectedAfs.every(af => vrf!.addressFamilies?.includes(af as any));
+          if (!hasAll) passed = false;
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `VRF definition '${vrfName}' telah terkonfigurasi dengan benar.`
+          : `VRF definition '${vrfName}' belum terkonfigurasi atau address-family belum lengkap pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check Interface VRF Assignment
+    if (prop === 'interface_vrf' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const expectedVrf = typeof expected === 'string' ? expected : expected?.vrf;
+      const passed = ifc?.vrf === expectedVrf;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Interface ${task.targetInterface} terikat pada VRF '${expectedVrf}'.`
+          : `Interface ${task.targetInterface} belum terikat pada VRF '${expectedVrf}' (saat ini: '${ifc?.vrf || 'global'}').`
+      };
+    }
+
+    // CCNP VPN: Check VRF Static Route
+    if (prop === 'vrf_static_route' && (device instanceof Router || device instanceof Switch)) {
+      const vrfName = expected?.vrf;
+      const targetDev = device as Router | Switch;
+      const vrf = targetDev.vrfInstances ? targetDev.vrfInstances.get(vrfName) : undefined;
+      let passed = false;
+      if (vrf) {
+        if (expected.af === 'ipv6' || expected.network?.includes(':')) {
+          const routes = vrf.ipv6RoutingTable || [];
+          passed = routes.some(r => r.network.toLowerCase() === expected.network.toLowerCase());
+        } else {
+          const routes = vrf.routingTable || [];
+          passed = routes.some(r => r.network === expected.network && (!expected.mask || r.mask === expected.mask));
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Static route ke ${expected.network} pada VRF '${vrfName}' terkonfigurasi.`
+          : `Static route ke ${expected.network} pada VRF '${vrfName}' tidak ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check OSPFv3 VRF Address Family
+    if (prop === 'ospfv3_vrf_af' && (device instanceof Router || device instanceof Switch)) {
+      const vrfName = expected?.vrf;
+      const afProto = (expected?.af || 'ipv4') as 'ipv4' | 'ipv6';
+      const afCfg = device.ospfv3Config?.vrfAddressFamilies?.get(vrfName)?.get(afProto);
+      let passed = !!afCfg;
+      if (passed && expected.capabilityVrfLite !== undefined) {
+        if (afCfg!.capabilityVrfLite !== expected.capabilityVrfLite) passed = false;
+      }
+      if (passed && expected.defaultInformationOriginate !== undefined) {
+        if (afCfg!.defaultInformationOriginate !== expected.defaultInformationOriginate) passed = false;
+      }
+      if (passed && expected.redistributeStatic !== undefined) {
+        const hasStatic = !!afCfg!.redistributions?.some(r => r.protocol === 'static');
+        if (hasStatic !== expected.redistributeStatic) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `OSPFv3 address-family ${afProto} vrf '${vrfName}' terkonfigurasi dengan benar.`
+          : `OSPFv3 address-family ${afProto} vrf '${vrfName}' belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check Tunnel Interface Configuration
+    if (prop === 'tunnel_config' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      let passed = !!ifc;
+      if (passed && expected) {
+        if (expected.mode && ifc!.tunnelMode?.toLowerCase() !== expected.mode.toLowerCase()) passed = false;
+        if (expected.source && ifc!.tunnelSource?.toLowerCase() !== expected.source.toLowerCase()) passed = false;
+        if (expected.destination && ifc!.tunnelDestination?.toLowerCase() !== expected.destination.toLowerCase()) passed = false;
+        if (expected.noDestination && ifc!.tunnelDestination !== undefined) passed = false;
+        if (expected.key !== undefined && ifc!.tunnelKey !== expected.key) passed = false;
+        if (expected.ipMtu !== undefined && ifc!.ipMtu !== expected.ipMtu) passed = false;
+        if (expected.ipv6Mtu !== undefined && ifc!.ipv6Mtu !== expected.ipv6Mtu) passed = false;
+        if (expected.ipTcpAdjustMss !== undefined && ifc!.ipTcpAdjustMss !== expected.ipTcpAdjustMss) passed = false;
+        if (expected.ipv6TcpAdjustMss !== undefined && ifc!.ipv6TcpAdjustMss !== expected.ipv6TcpAdjustMss) passed = false;
+        if (expected.protectionProfile && ifc!.tunnelProtectionProfile !== expected.protectionProfile) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Konfigurasi tunnel ${task.targetInterface} telah sesuai.`
+          : `Konfigurasi tunnel ${task.targetInterface} belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check NHRP Configuration
+    if (prop === 'nhrp_config' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      let passed = !!ifc;
+      if (passed && expected) {
+        if (expected.networkId !== undefined && ifc!.nhrpNetworkId !== expected.networkId) passed = false;
+        if (expected.authentication !== undefined && ifc!.nhrpAuthentication !== expected.authentication) passed = false;
+        if (expected.multicastDynamic !== undefined && ifc!.nhrpMulticastDynamic !== expected.multicastDynamic) passed = false;
+        if (expected.redirect !== undefined && ifc!.nhrpRedirect !== expected.redirect) passed = false;
+        if (expected.shortcut !== undefined && ifc!.nhrpShortcut !== expected.shortcut) passed = false;
+        if (expected.nhsIp && ifc!.nhrpNhsIp !== expected.nhsIp) passed = false;
+        if (expected.ipv6Nhs) {
+          const actualNhs = typeof ifc!.nhrpIpv6Nhs === 'string'
+            ? ifc!.nhrpIpv6Nhs
+            : (ifc!.nhrpIpv6Nhs?.tunnelIpv6 || ifc!.nhrpNhsIp);
+          if (actualNhs?.toLowerCase() !== expected.ipv6Nhs.toLowerCase()) passed = false;
+        }
+        if (expected.hasMulticastMap) {
+          const hasMap = !!ifc!.nhrpMaps?.some(m => m.multicast);
+          if (!hasMap) passed = false;
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Konfigurasi NHRP pada ${task.targetInterface} telah sesuai.`
+          : `Konfigurasi NHRP pada ${task.targetInterface} belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check Crypto ISAKMP Policy
+    if (prop === 'crypto_isakmp_policy' && device instanceof Router) {
+      const prio = expected?.priority || 10;
+      const pol = device.cryptoPolicies.get(prio);
+      let passed = !!pol;
+      if (passed && expected) {
+        if (expected.encryption && pol!.encryption !== expected.encryption) passed = false;
+        if (expected.hash && pol!.hash !== expected.hash) passed = false;
+        if (expected.authentication && (pol!.authentication || (pol as any).auth) !== expected.authentication) passed = false;
+        if (expected.group && pol!.group !== expected.group) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Crypto ISAKMP policy ${prio} terkonfigurasi dengan benar.`
+          : `Crypto ISAKMP policy ${prio} belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check Crypto ISAKMP Key
+    if (prop === 'crypto_isakmp_key' && device instanceof Router) {
+      const passed = device.cryptoKeys.some(k => 
+        (!expected.key || k.key === expected.key) &&
+        (!expected.address || k.address === expected.address || (k as any).peerAddress === expected.address)
+      );
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Crypto ISAKMP pre-shared key terkonfigurasi.`
+          : `Crypto ISAKMP key '${expected.key}' untuk peer '${expected.address}' tidak ditemukan pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check Crypto IPsec Transform-Set
+    if (prop === 'crypto_transform_set' && device instanceof Router) {
+      const tsName = typeof expected === 'string' ? expected : expected?.name;
+      const ts = device.cryptoTransformSets.get(tsName);
+      let passed = !!ts;
+      if (passed && typeof expected === 'object') {
+        if (expected.mode && ts!.mode !== expected.mode) passed = false;
+        if (expected.transforms && Array.isArray(expected.transforms)) {
+          const hasAll = expected.transforms.every((tr: string) => ts!.transforms.includes(tr));
+          if (!hasAll) passed = false;
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Crypto transform-set '${tsName}' terkonfigurasi.`
+          : `Crypto transform-set '${tsName}' belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check Crypto IPsec Profile
+    if (prop === 'crypto_ipsec_profile' && device instanceof Router) {
+      const profName = typeof expected === 'string' ? expected : expected?.name;
+      const prof = device.cryptoProfiles.get(profName);
+      let passed = !!prof;
+      if (passed && typeof expected === 'object' && expected.transformSet) {
+        if (prof!.transformSet !== expected.transformSet) passed = false;
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Crypto IPsec profile '${profName}' terkonfigurasi.`
+          : `Crypto IPsec profile '${profName}' belum sesuai pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP VPN: Check Interface Split Horizon Disabled
+    if (prop === 'interface_split_horizon' && (device instanceof Router || device instanceof Switch)) {
+      const ifc = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const as = expected?.asNumber || 1;
+      const isIpv6 = expected?.af === 'ipv6';
+      let passed = false;
+      if (ifc) {
+        if (isIpv6) {
+          passed = ifc.ipv6EigrpSplitHorizon?.[as] === false;
+        } else {
+          passed = ifc.eigrpSplitHorizon?.[as] === false;
+        }
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `EIGRP split-horizon pada ${task.targetInterface} telah dinonaktifkan.`
+          : `EIGRP split-horizon pada ${task.targetInterface} belum dinonaktifkan pada ${device.hostname}.`
+      };
+    }
+
     return {
       taskId: task.id,
       passed: true,

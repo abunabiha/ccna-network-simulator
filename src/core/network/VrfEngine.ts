@@ -187,13 +187,79 @@ export class VrfEngine {
     }
 
     const lines: string[] = [];
-    lines.push('Name                             Default RD          Protocols   Interfaces');
+    lines.push('Name                             Default RD            Protocols   Interfaces');
     for (const vrf of device.vrfInstances.values()) {
-      const rd = vrf.rd ? vrf.rd.padEnd(20) : '<not set>'.padEnd(20);
+      const rd = vrf.rd ? vrf.rd.padEnd(22) : '<not set>'.padEnd(22);
       const name = vrf.name.padEnd(33);
-      const ifaces = vrf.interfaces.join(', ');
-      lines.push(`${name}${rd}ipv4        ${ifaces}`);
+      const protos = (vrf.addressFamilies && vrf.addressFamilies.length > 0 ? vrf.addressFamilies.join(', ') : 'ipv4').padEnd(12);
+      if (vrf.interfaces.length === 0) {
+        lines.push(`${name}${rd}${protos}`);
+      } else {
+        lines.push(`${name}${rd}${protos}${vrf.interfaces[0]}`);
+        for (let i = 1; i < vrf.interfaces.length; i++) {
+          lines.push(`${' '.repeat(33 + 22 + 12)}${vrf.interfaces[i]}`);
+        }
+      }
     }
+    return lines.join('\n') + '\n';
+  }
+
+  static renderShowIpVrfInterfaces(device: Router | Switch): string {
+    if (!device.vrfInstances || device.vrfInstances.size === 0) {
+      return 'Interface              IP-Address      VRF                              Protocol\n';
+    }
+
+    const lines: string[] = [
+      'Interface              IP-Address      VRF                              Protocol'
+    ];
+
+    for (const ifc of device.interfaces.values()) {
+      if (ifc.vrf) {
+        const ifName = ifc.name.padEnd(23);
+        const ip = (ifc.ipAddress || 'unassigned').padEnd(16);
+        const vrf = ifc.vrf.padEnd(33);
+        const proto = (ifc.status === 'up' && !ifc.isShutdown ? 'up' : 'down');
+        lines.push(`${ifName}${ip}${vrf}${proto}`);
+      }
+    }
+
+    return lines.join('\n') + '\n';
+  }
+
+  static renderShowIpv6RouteVrf(device: Router | Switch, vrfName: string): string {
+    const vrf = device.vrfInstances?.get(vrfName);
+    if (!vrf) {
+      return `% VRF ${vrfName} does not exist.\n`;
+    }
+
+    const lines: string[] = [
+      `IPv6 Routing Table - ${vrfName} - ${(vrf.ipv6RoutingTable?.length || 0)} entries`,
+      'Codes: C - Connected, L - Local, S - Static, U - Per-user Static route',
+      '       B - BGP, R - RIP, H - NHRP, O - OSPF Intra, OI - OSPF Inter',
+      '       OE1 - OSPF ext 1, OE2 - OSPF ext 2, ON1 - OSPF NSSA ext 1, ON2 - OSPF NSSA ext 2',
+      '       D - EIGRP, EX - EIGRP external',
+      ''
+    ];
+
+    if (!vrf.ipv6RoutingTable || vrf.ipv6RoutingTable.length === 0) {
+      lines.push('% Network not in table');
+      return lines.join('\n') + '\n';
+    }
+
+    for (const r of vrf.ipv6RoutingTable) {
+      const protoCode = r.protocol.padEnd(4);
+      if (r.protocol === 'C') {
+        lines.push(`${protoCode} ${r.network}/${r.cidr} [0/0]\n     via ${r.exitInterface || ''}, directly connected`);
+      } else if (r.protocol === 'L') {
+        lines.push(`${protoCode} ${r.network}/${r.cidr} [0/0]\n     via ${r.exitInterface || ''}, receive`);
+      } else if (r.protocol === 'S') {
+        const via = r.exitInterface ? (r.nextHop ? `${r.nextHop}, ${r.exitInterface}` : r.exitInterface) : r.nextHop;
+        lines.push(`${protoCode} ${r.network}/${r.cidr} [${r.adminDistance || 1}/${r.metric || 0}]\n     via ${via}`);
+      } else {
+        lines.push(`${protoCode} ${r.network}/${r.cidr} [${r.adminDistance}/${r.metric}]\n     via ${r.nextHop || r.exitInterface}`);
+      }
+    }
+
     return lines.join('\n') + '\n';
   }
 

@@ -1,5 +1,5 @@
 import { CliContext, CliExecutionResult, CommandHelpItem } from '../../types/cli';
-import { RouteEntry, DhcpPool, InterfaceConfig, RedistributionConfig } from '../../types/network';
+import { RouteEntry, DhcpPool, InterfaceConfig, RedistributionConfig, OspfV3AddressFamilyConfig } from '../../types/network';
 import { Router } from '../devices/Router';
 import { Switch } from '../devices/Switch';
 import { Device } from '../devices/Device';
@@ -368,7 +368,7 @@ export class IOSCommands {
       if (context.mode === 'vrf-af-config') {
         return { output: '', newMode: 'vrf-config' };
       }
-      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config', 'crypto-isakmp-policy', 'crypto-ipsec-profile', 'zone-pair-config', 'class-map-inspect', 'policy-map-inspect', 'policy-map-class-inspect', 'control-plane-config', 'eem-applet-config', 'mdt-subscription-config', 'keychain-config', 'keychain-key-config', 'std-nacl-config', 'ext-nacl-config'].includes(context.mode)) {
+      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config', 'crypto-isakmp-policy', 'crypto-ipsec-profile', 'crypto-transform-config', 'zone-pair-config', 'class-map-inspect', 'policy-map-inspect', 'policy-map-class-inspect', 'control-plane-config', 'eem-applet-config', 'mdt-subscription-config', 'keychain-config', 'keychain-key-config', 'std-nacl-config', 'ext-nacl-config'].includes(context.mode)) {
         return { output: '', newMode: 'global-config' };
       }
       if (context.mode === 'global-config') {
@@ -450,6 +450,9 @@ export class IOSCommands {
         break;
       case 'crypto-ipsec-profile':
         result = this.execCryptoIpsecProfileMode(tokens, raw, context, device);
+        break;
+      case 'crypto-transform-config':
+        result = this.execCryptoTransformConfigMode(tokens, raw, context, device);
         break;
       case 'zone-pair-config':
         result = this.execZonePairConfigMode(tokens, raw, context, device);
@@ -734,7 +737,15 @@ export class IOSCommands {
 
         // show ip vrf
         if ('vrf'.startsWith(cmd2)) {
+          if (tokens.length >= 4 && 'interfaces'.startsWith(tokens[3].toLowerCase())) {
+            return { output: VrfEngine.renderShowIpVrfInterfaces(device as Router | Switch) };
+          }
           return { output: VrfEngine.renderShowVrf(device as Router | Switch) };
+        }
+
+        // show ip nhrp
+        if ('nhrp'.startsWith(cmd2) && device instanceof Router) {
+          return { output: SecurityVpnEngine.renderShowIpNhrp(device) };
         }
 
         // show ip route
@@ -951,10 +962,18 @@ export class IOSCommands {
         if (tokens.length >= 4 && 'ipsec'.startsWith(tokens[2].toLowerCase()) && 'sa'.startsWith(tokens[3].toLowerCase())) {
           return { output: SecurityVpnEngine.renderShowCryptoIpsecSa(device) };
         }
+        if (tokens.length >= 4 && 'ipsec'.startsWith(tokens[2].toLowerCase()) && 'profile'.startsWith(tokens[3].toLowerCase())) {
+          return { output: SecurityVpnEngine.renderShowCryptoIpsecProfile(device) };
+        }
         if (tokens.length >= 3 && 'session'.startsWith(tokens[2].toLowerCase())) {
           return { output: SecurityVpnEngine.renderShowCryptoSession(device) };
         }
         return { output: SecurityVpnEngine.renderShowCryptoSession(device) };
+      }
+
+      // show dmvpn
+      if ('dmvpn'.startsWith(cmd1) && device instanceof Router) {
+        return { output: SecurityVpnEngine.renderShowDmvpn(device) };
       }
 
       // show zone security
@@ -1048,7 +1067,13 @@ export class IOSCommands {
           return { output: RoutingProtocolEngine.renderShowIpv6EigrpNeighbors(device, allDevices) };
         }
         if ('route'.startsWith(cmd2)) {
+          if (tokens.length >= 5 && tokens[3].toLowerCase() === 'vrf') {
+            return { output: VrfEngine.renderShowIpv6RouteVrf(device as Router | Switch, tokens[4]) };
+          }
           return { output: this.renderIpv6Route(device) };
+        }
+        if ('nhrp'.startsWith(cmd2) && device instanceof Router) {
+          return { output: SecurityVpnEngine.renderShowIpv6Nhrp(device) };
         }
       }
     }
@@ -1702,27 +1727,36 @@ export class IOSCommands {
       return { output: '' };
     }
 
-    // ip route vrf <name> <network> <mask|cidr> <next-hop>
+    // ip route vrf <name> <network> <mask|cidr> [exit-interface] <next-hop>
     if ('ip'.startsWith(cmd0) && tokens.length >= 7 && 'route'.startsWith(tokens[1].toLowerCase()) && tokens[2].toLowerCase() === 'vrf') {
       const vrfName = tokens[3];
       const net = tokens[4];
       const mask = tokens[5];
-      const next = tokens[6];
+      const remaining = tokens.slice(6);
+      let exitIface: string | undefined;
+      let nextHop: string | undefined;
+
+      if (remaining.length >= 2 && (remaining[0].toLowerCase() === 'lo' || remaining[0].toLowerCase() === 'loopback')) {
+        exitIface = `Loopback${remaining[1]}`;
+        nextHop = remaining[2];
+      } else if (remaining.length > 0 && (remaining[0].startsWith('Gi') || remaining[0].startsWith('Fa') || remaining[0].startsWith('Se') || remaining[0].startsWith('Tu') || remaining[0].startsWith('Lo') || remaining[0].startsWith('lo'))) {
+        exitIface = CliLexer.normalizeInterfaceName(remaining[0]);
+        nextHop = remaining[1];
+      } else {
+        nextHop = remaining[0];
+      }
 
       if (!SubnetUtils.isValidIpv4(net) || !SubnetUtils.isValidSubnetMask(mask)) {
         return { output: `% Invalid IP address or mask.` };
       }
 
       const cidr = SubnetUtils.maskToCidr(mask);
-      const isExitIf = next.startsWith('Gi') || next.startsWith('Fa') || next.startsWith('Se');
-      const normExit = isExitIf ? CliLexer.normalizeInterfaceName(next) : undefined;
-
-      const routeEntry = {
+      const routeEntry: RouteEntry = {
         network: net,
         mask,
         cidr,
-        nextHop: isExitIf ? undefined : next,
-        exitInterface: normExit,
+        nextHop,
+        exitInterface: exitIface,
         protocol: 'S' as const,
         adminDistance: 1,
         metric: 0
@@ -1733,6 +1767,58 @@ export class IOSCommands {
       vrf.routingTable = vrf.routingTable.filter(r => !(r.network === net && r.mask === mask));
       vrf.routingTable.push(routeEntry);
       return { output: '' };
+    }
+
+    // ipv6 route [vrf <name>] <prefix>/<len> [exit-interface] [next-hop]
+    if (cmd0 === 'ipv6' && tokens.length >= 3 && 'route'.startsWith(tokens[1].toLowerCase())) {
+      let idx = 2;
+      let vrfName: string | undefined;
+      if (tokens[idx].toLowerCase() === 'vrf' && idx + 1 < tokens.length) {
+        vrfName = tokens[idx + 1];
+        idx += 2;
+      }
+      if (idx < tokens.length) {
+        const prefixWithLen = tokens[idx];
+        const [net, lenStr] = prefixWithLen.includes('/') ? prefixWithLen.split('/') : [prefixWithLen, '128'];
+        const cidr = parseInt(lenStr, 10) || 128;
+        const remaining = tokens.slice(idx + 1);
+        let exitIface: string | undefined;
+        let nextHop: string | undefined;
+
+        if (remaining.length >= 2 && (remaining[0].toLowerCase() === 'lo' || remaining[0].toLowerCase() === 'loopback')) {
+          exitIface = `Loopback${remaining[1]}`;
+          nextHop = remaining[2];
+        } else if (remaining.length > 0 && (remaining[0].startsWith('Gi') || remaining[0].startsWith('Fa') || remaining[0].startsWith('Se') || remaining[0].startsWith('Tu') || remaining[0].startsWith('Lo') || remaining[0].startsWith('lo'))) {
+          exitIface = CliLexer.normalizeInterfaceName(remaining[0]);
+          nextHop = remaining[1];
+        } else if (remaining.length > 0) {
+          nextHop = remaining[0];
+        }
+
+        const routeEntry: RouteEntry = {
+          network: net,
+          mask: `${cidr}`,
+          cidr,
+          nextHop,
+          exitInterface: exitIface,
+          protocol: 'S' as const,
+          adminDistance: 1,
+          metric: 0
+        };
+
+        const target = device as Router | Switch;
+        if (vrfName) {
+          const vrf = VrfEngine.getOrCreateVrf(target, vrfName);
+          if (!vrf.ipv6RoutingTable) vrf.ipv6RoutingTable = [];
+          vrf.ipv6RoutingTable = vrf.ipv6RoutingTable.filter(r => !(r.network.toLowerCase() === net.toLowerCase() && r.cidr === cidr));
+          vrf.ipv6RoutingTable.push(routeEntry);
+        } else {
+          if (!target.ipv6RoutingTable) target.ipv6RoutingTable = [];
+          target.ipv6RoutingTable = target.ipv6RoutingTable.filter(r => !(r.network.toLowerCase() === net.toLowerCase() && r.cidr === cidr));
+          target.ipv6RoutingTable.push(routeEntry);
+        }
+        return { output: '' };
+      }
     }
 
     // no ip route vrf <name> <network> <mask|cidr> [next-hop]
@@ -2068,13 +2154,17 @@ export class IOSCommands {
     }
 
     // crypto ipsec transform-set <name> <transforms...>
-    if ('crypto'.startsWith(cmd0) && tokens.length >= 5 && 'ipsec'.startsWith(tokens[1].toLowerCase()) && 'transform-set'.startsWith(tokens[2].toLowerCase())) {
+    if ('crypto'.startsWith(cmd0) && tokens.length >= 4 && 'ipsec'.startsWith(tokens[1].toLowerCase()) && 'transform-set'.startsWith(tokens[2].toLowerCase())) {
       const tsName = tokens[3];
       const transforms = tokens.slice(4);
       if (device instanceof Router) {
         device.cryptoTransformSets.set(tsName, { name: tsName, transforms });
       }
-      return { output: '' };
+      return {
+        output: '',
+        newMode: 'crypto-transform-config',
+        contextUpdates: { targetTransformSetName: tsName }
+      };
     }
 
     // crypto ipsec profile <name>
@@ -2353,6 +2443,19 @@ export class IOSCommands {
         device.routingTable = device.routingTable.filter(r => !(r.network === '0.0.0.0' && r.mask === '0.0.0.0' && r.adminDistance === 254 && r.exitInterface === iface.name));
         device.updateL3ConnectedRoutes();
       }
+      return { output: '' };
+    }
+
+    // ipv6 address <ipv6-addr/len> [eui-64 | link-local]
+    if (cmd0 === 'ipv6' && tokens.length >= 3 && 'address'.startsWith(tokens[1].toLowerCase())) {
+      const v6 = tokens[2];
+      iface.ipv6Address = v6;
+      return { output: '' };
+    }
+
+    // no ipv6 address [<ipv6-addr/len>]
+    if (cmd0 === 'no' && tokens.length >= 3 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase())) {
+      iface.ipv6Address = undefined;
       return { output: '' };
     }
 
@@ -2846,6 +2949,19 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // no tunnel destination
+    if (cmd0 === 'no' && tokens.length >= 3 && 'tunnel'.startsWith(tokens[1].toLowerCase()) && 'destination'.startsWith(tokens[2].toLowerCase())) {
+      iface.tunnelDestination = undefined;
+      return { output: '' };
+    }
+
+    // tunnel key <key>
+    if ('tunnel'.startsWith(cmd0) && tokens.length >= 3 && 'key'.startsWith(tokens[1].toLowerCase())) {
+      const keyVal = parseInt(tokens[2], 10);
+      iface.tunnelKey = isNaN(keyVal) ? 0 : keyVal;
+      return { output: '' };
+    }
+
     // tunnel mode <mode...>
     if ('tunnel'.startsWith(cmd0) && tokens.length >= 3 && 'mode'.startsWith(tokens[1].toLowerCase())) {
       iface.tunnelMode = tokens.slice(2).join(' ').toLowerCase();
@@ -2864,10 +2980,52 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // ip mtu <mtu>
+    if (cmd0 === 'ip' && tokens.length >= 3 && 'mtu'.startsWith(tokens[1].toLowerCase())) {
+      const mtuVal = parseInt(tokens[2], 10);
+      if (!isNaN(mtuVal)) {
+        iface.ipMtu = mtuVal;
+        return { output: '' };
+      }
+    }
+
+    // ip tcp adjust-mss <mss>
+    if (cmd0 === 'ip' && tokens.length >= 4 && 'tcp'.startsWith(tokens[1].toLowerCase()) && 'adjust-mss'.startsWith(tokens[2].toLowerCase())) {
+      const mssVal = parseInt(tokens[3], 10);
+      if (!isNaN(mssVal)) {
+        iface.ipTcpAdjustMss = mssVal;
+        return { output: '' };
+      }
+    }
+
+    // ip nhrp authentication <pass>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 4 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'authentication'.startsWith(tokens[2].toLowerCase())) {
+      iface.nhrpAuthentication = tokens[3];
+      return { output: '' };
+    }
+
+    // ip nhrp redirect
+    if ('ip'.startsWith(cmd0) && tokens.length >= 3 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'redirect'.startsWith(tokens[2].toLowerCase())) {
+      iface.nhrpRedirect = true;
+      return { output: '' };
+    }
+
+    // ip nhrp shortcut
+    if ('ip'.startsWith(cmd0) && tokens.length >= 3 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'shortcut'.startsWith(tokens[2].toLowerCase())) {
+      iface.nhrpShortcut = true;
+      return { output: '' };
+    }
+
     // ip nhrp network-id <id>
     if ('ip'.startsWith(cmd0) && tokens.length >= 4 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'network-id'.startsWith(tokens[2].toLowerCase())) {
       const netId = parseInt(tokens[3], 10);
       iface.nhrpNetworkId = isNaN(netId) ? 1 : netId;
+      return { output: '' };
+    }
+
+    // ip nhrp map multicast dynamic
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'map'.startsWith(tokens[2].toLowerCase()) && 'multicast'.startsWith(tokens[3].toLowerCase()) && 'dynamic'.startsWith(tokens[4].toLowerCase())) {
+      iface.nhrpMulticastDynamic = true;
       return { output: '' };
     }
 
@@ -2912,6 +3070,115 @@ export class IOSCommands {
                   iface.nhrpNhsNbma || otherIfc.ipAddress || '',
                   iface.nhrpNetworkId || 1
                 );
+                break;
+              }
+            }
+          }
+        }
+      }
+      return { output: '' };
+    }
+
+    // ipv6 mtu <mtu>
+    if (cmd0 === 'ipv6' && tokens.length >= 3 && 'mtu'.startsWith(tokens[1].toLowerCase())) {
+      const mtuVal = parseInt(tokens[2], 10);
+      if (!isNaN(mtuVal)) {
+        iface.ipv6Mtu = mtuVal;
+        return { output: '' };
+      }
+    }
+
+    // ipv6 tcp adjust-mss <mss>
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'tcp'.startsWith(tokens[1].toLowerCase()) && 'adjust-mss'.startsWith(tokens[2].toLowerCase())) {
+      const mssVal = parseInt(tokens[3], 10);
+      if (!isNaN(mssVal)) {
+        iface.ipv6TcpAdjustMss = mssVal;
+        return { output: '' };
+      }
+    }
+
+    // ipv6 nhrp authentication <pass>
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'authentication'.startsWith(tokens[2].toLowerCase())) {
+      iface.nhrpAuthentication = tokens[3];
+      return { output: '' };
+    }
+
+    // ipv6 nhrp redirect
+    if (cmd0 === 'ipv6' && tokens.length >= 3 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'redirect'.startsWith(tokens[2].toLowerCase())) {
+      iface.nhrpRedirect = true;
+      return { output: '' };
+    }
+
+    // ipv6 nhrp shortcut
+    if (cmd0 === 'ipv6' && tokens.length >= 3 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'shortcut'.startsWith(tokens[2].toLowerCase())) {
+      iface.nhrpShortcut = true;
+      return { output: '' };
+    }
+
+    // ipv6 nhrp network-id <id>
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'network-id'.startsWith(tokens[2].toLowerCase())) {
+      const netId = parseInt(tokens[3], 10);
+      iface.nhrpNetworkId = isNaN(netId) ? 1 : netId;
+      return { output: '' };
+    }
+
+    // ipv6 nhrp map multicast dynamic
+    if (cmd0 === 'ipv6' && tokens.length >= 5 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'map'.startsWith(tokens[2].toLowerCase()) && 'multicast'.startsWith(tokens[3].toLowerCase()) && 'dynamic'.startsWith(tokens[4].toLowerCase())) {
+      iface.nhrpMulticastDynamic = true;
+      return { output: '' };
+    }
+
+    // ipv6 nhrp map multicast <nbmaIp>
+    if (cmd0 === 'ipv6' && tokens.length >= 5 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'map'.startsWith(tokens[2].toLowerCase()) && 'multicast'.startsWith(tokens[3].toLowerCase())) {
+      if (!iface.nhrpMaps) iface.nhrpMaps = [];
+      iface.nhrpMaps.push({ nbmaIp: tokens[4], multicast: true });
+      return { output: '' };
+    }
+
+    // ipv6 nhrp map <protoIpv6> <nbmaIp>
+    if (cmd0 === 'ipv6' && tokens.length >= 5 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'map'.startsWith(tokens[2].toLowerCase())) {
+      if (!iface.nhrpMaps) iface.nhrpMaps = [];
+      iface.nhrpMaps.push({ protocolIp: tokens[3], nbmaIp: tokens[4] });
+      if (device instanceof Router) {
+        const ex = device.nhrpCache.findIndex(e => e.protocolIp === tokens[3]);
+        const ent = { protocolIp: tokens[3], nbmaIp: tokens[4], type: 'static' as const, flags: 'authoritative' };
+        if (ex >= 0) device.nhrpCache[ex] = ent;
+        else device.nhrpCache.push(ent);
+      }
+      return { output: '' };
+    }
+
+    // ipv6 nhrp nhs <protoIpv6> [nbma <nbmaIp>]
+    if (cmd0 === 'ipv6' && tokens.length >= 4 && 'nhrp'.startsWith(tokens[1].toLowerCase()) && 'nhs'.startsWith(tokens[2].toLowerCase())) {
+      const nhsIpv6 = tokens[3];
+      let nbmaIp: string | undefined;
+      if (tokens.length >= 6 && 'nbma'.startsWith(tokens[4].toLowerCase())) {
+        nbmaIp = tokens[5];
+        iface.nhrpNhsNbma = nbmaIp;
+      }
+      iface.nhrpIpv6Nhs = { tunnelIpv6: nhsIpv6, nbmaIpv6: nbmaIp || '' };
+      iface.nhrpNhsIp = nhsIpv6;
+      if (device instanceof Router) {
+        for (const other of allDevices) {
+          if (other instanceof Router && other.id !== device.id) {
+            for (const otherIfc of other.interfaces.values()) {
+              if (
+                otherIfc.ipv6Address?.split('/')[0].toLowerCase() === nhsIpv6.toLowerCase() ||
+                (iface.nhrpNhsNbma && otherIfc.ipAddress === iface.nhrpNhsNbma)
+              ) {
+                const spokeNbma = Array.from(device.interfaces.values()).find(i => i.ipAddress && !i.name.startsWith('Tu') && !i.name.startsWith('Lo'))?.ipAddress || '209.165.200.226';
+                const spokeProto = iface.ipv6Address?.split('/')[0] || '';
+                if (spokeProto) {
+                  SecurityVpnEngine.registerSpokeNhrp(
+                    device,
+                    other,
+                    spokeProto,
+                    spokeNbma,
+                    nhsIpv6,
+                    iface.nhrpNhsNbma || otherIfc.ipAddress || '',
+                    iface.nhrpNetworkId || 1
+                  );
+                }
                 break;
               }
             }
@@ -3047,6 +3314,26 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // no ip split-horizon eigrp <as>
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'split-horizon'.startsWith(tokens[2].toLowerCase()) && 'eigrp'.startsWith(tokens[3].toLowerCase())) {
+      const as = parseInt(tokens[4], 10);
+      if (!isNaN(as)) {
+        if (!iface.eigrpSplitHorizon) iface.eigrpSplitHorizon = {};
+        iface.eigrpSplitHorizon[as] = false;
+        return { output: '' };
+      }
+    }
+
+    // no ipv6 split-horizon eigrp <as>
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ipv6'.startsWith(tokens[1].toLowerCase()) && 'split-horizon'.startsWith(tokens[2].toLowerCase()) && 'eigrp'.startsWith(tokens[3].toLowerCase())) {
+      const as = parseInt(tokens[4], 10);
+      if (!isNaN(as)) {
+        if (!iface.ipv6EigrpSplitHorizon) iface.ipv6EigrpSplitHorizon = {};
+        iface.ipv6EigrpSplitHorizon[as] = false;
+        return { output: '' };
+      }
+    }
+
     return { output: `% Invalid input detected at '^' marker.` };
   }
 
@@ -3168,6 +3455,35 @@ export class IOSCommands {
               passiveInterfaces: []
             };
           }
+          const vrfIdx = tokens.findIndex(t => t.toLowerCase() === 'vrf');
+          let vrfName: string | undefined;
+          if (vrfIdx !== -1 && vrfIdx + 1 < tokens.length) {
+            vrfName = tokens[vrfIdx + 1];
+          }
+          if (vrfName) {
+            if (!target.ospfv3Config.vrfAddressFamilies) {
+              target.ospfv3Config.vrfAddressFamilies = new Map();
+            }
+            if (!target.ospfv3Config.vrfAddressFamilies.has(vrfName)) {
+              target.ospfv3Config.vrfAddressFamilies.set(vrfName, new Map());
+            }
+            const vrfMap = target.ospfv3Config.vrfAddressFamilies.get(vrfName)!;
+            if (!vrfMap.has(afProto)) {
+              vrfMap.set(afProto, {
+                passiveInterfaces: [],
+                redistributions: []
+              });
+            }
+            return {
+              output: '',
+              newMode: 'router-af-config',
+              contextUpdates: {
+                targetAfProto: afProto,
+                targetAfType: 'ospfv3',
+                targetAfVrf: vrfName
+              }
+            };
+          }
           if (!target.ospfv3Config.addressFamilies) {
             target.ospfv3Config.addressFamilies = new Map();
           }
@@ -3182,7 +3498,8 @@ export class IOSCommands {
             newMode: 'router-af-config',
             contextUpdates: {
               targetAfProto: afProto,
-              targetAfType: 'ospfv3'
+              targetAfType: 'ospfv3',
+              targetAfVrf: undefined
             }
           };
         }
@@ -4305,6 +4622,16 @@ export class IOSCommands {
     const target = device as Router | Switch;
     const vrf = VrfEngine.getOrCreateVrf(target, vrfName);
 
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
     // rd <ASN:nn | IP:nn>
     if ('rd'.startsWith(cmd0) && tokens.length >= 2) {
       vrf.rd = tokens[1];
@@ -4327,12 +4654,15 @@ export class IOSCommands {
       }
     }
 
-    // address-family ipv4 [unicast]
-    if ('address-family'.startsWith(cmd0) && tokens.length >= 2 && 'ipv4'.startsWith(tokens[1].toLowerCase())) {
+    // address-family <ipv4|ipv6> [unicast]
+    if ('address-family'.startsWith(cmd0) && tokens.length >= 2) {
+      const af = tokens[1].toLowerCase().startsWith('ipv6') ? 'ipv6' : 'ipv4';
+      if (!vrf.addressFamilies) vrf.addressFamilies = [];
+      if (!vrf.addressFamilies.includes(af)) vrf.addressFamilies.push(af);
       return {
         output: '',
         newMode: 'vrf-af-config',
-        contextUpdates: { targetVrfAf: 'ipv4' }
+        contextUpdates: { targetVrfAf: af }
       };
     }
 
@@ -4353,6 +4683,30 @@ export class IOSCommands {
     const target = device as Router | Switch;
     const vrf = VrfEngine.getOrCreateVrf(target, vrfName);
 
+    // exit-address-family / exit
+    if ('exit-address-family'.startsWith(cmd0) || cmd0 === 'exit') {
+      return {
+        output: '',
+        newMode: 'vrf-config'
+      };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    // address-family <ipv4|ipv6> [unicast] (direct switch between address families)
+    if ('address-family'.startsWith(cmd0) && tokens.length >= 2) {
+      const af = tokens[1].toLowerCase().startsWith('ipv6') ? 'ipv6' : 'ipv4';
+      if (!vrf.addressFamilies) vrf.addressFamilies = [];
+      if (!vrf.addressFamilies.includes(af)) vrf.addressFamilies.push(af);
+      return {
+        output: '',
+        contextUpdates: { targetVrfAf: af }
+      };
+    }
+
     // route-target {export|import|both} <rt>
     if ('route-target'.startsWith(cmd0) && tokens.length >= 3) {
       const type = tokens[1].toLowerCase();
@@ -4361,14 +4715,6 @@ export class IOSCommands {
         vrf.routeTargets.push({ type: type as any, rt });
         return { output: '' };
       }
-    }
-
-    // exit-address-family / exit
-    if ('exit-address-family'.startsWith(cmd0) || cmd0 === 'exit') {
-      return {
-        output: '',
-        newMode: 'vrf-config'
-      };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -4455,6 +4801,45 @@ export class IOSCommands {
     if (cmd0 === 'set' && tokens.length >= 3 && 'transform-set'.startsWith(tokens[1].toLowerCase())) {
       prof.transformSet = tokens[2];
       return { output: '' };
+    }
+
+    // exit
+    if (cmd0 === 'exit') {
+      return { output: '', newMode: 'global-config' };
+    }
+
+    // end
+    if (cmd0 === 'end') {
+      return { output: '', newMode: 'priv-exec' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== CRYPTO TRANSFORM CONFIG MODE =====================
+  private static execCryptoTransformConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const tsName = context.targetTransformSetName;
+    if (!tsName || !(device instanceof Router)) return { output: '% No transform set selected.' };
+
+    let ts = device.cryptoTransformSets.get(tsName);
+    if (!ts) {
+      ts = { name: tsName, transforms: [] };
+      device.cryptoTransformSets.set(tsName, ts);
+    }
+
+    // mode transport / mode tunnel
+    if (cmd0 === 'mode' && tokens.length >= 2) {
+      const modeVal = tokens[1].toLowerCase();
+      if (modeVal === 'transport' || modeVal === 'tunnel') {
+        ts.mode = modeVal;
+        return { output: '' };
+      }
     }
 
     // exit
@@ -4949,6 +5334,69 @@ export class IOSCommands {
       return { output: '', newMode: 'priv-exec' };
     }
 
+    // address-family <ipv4|ipv6> [unicast] [vrf <name>] (direct switch within router-af mode)
+    if ('address-family'.startsWith(cmd0) && tokens.length >= 2) {
+      const afProto = tokens[1].toLowerCase() as 'ipv4' | 'ipv6';
+      if (afProto === 'ipv4' || afProto === 'ipv6') {
+        const vrfIdx = tokens.findIndex(t => t.toLowerCase() === 'vrf');
+        const vrfName = (vrfIdx !== -1 && vrfIdx + 1 < tokens.length) ? tokens[vrfIdx + 1] : undefined;
+        if (context.targetAfType === 'ospfv3' && target.ospfv3Config) {
+          if (vrfName) {
+            if (!target.ospfv3Config.vrfAddressFamilies) target.ospfv3Config.vrfAddressFamilies = new Map();
+            if (!target.ospfv3Config.vrfAddressFamilies.has(vrfName)) target.ospfv3Config.vrfAddressFamilies.set(vrfName, new Map());
+            const vrfMap = target.ospfv3Config.vrfAddressFamilies.get(vrfName)!;
+            if (!vrfMap.has(afProto)) {
+              vrfMap.set(afProto, { passiveInterfaces: [], redistributions: [] });
+            }
+          }
+          return {
+            output: '',
+            contextUpdates: {
+              targetAfProto: afProto,
+              targetAfVrf: vrfName
+            }
+          };
+        }
+      }
+    }
+
+    const getOspfV3AfCfg = (): OspfV3AddressFamilyConfig | undefined => {
+      if (!target.ospfv3Config) return undefined;
+      const af = (context.targetAfProto as 'ipv4' | 'ipv6') || 'ipv4';
+      const vrfName = context.targetAfVrf;
+      if (vrfName) {
+        if (!target.ospfv3Config.vrfAddressFamilies) target.ospfv3Config.vrfAddressFamilies = new Map();
+        if (!target.ospfv3Config.vrfAddressFamilies.has(vrfName)) target.ospfv3Config.vrfAddressFamilies.set(vrfName, new Map());
+        const vrfMap = target.ospfv3Config.vrfAddressFamilies.get(vrfName)!;
+        if (!vrfMap.has(af)) vrfMap.set(af, { passiveInterfaces: [], redistributions: [] });
+        return vrfMap.get(af);
+      } else {
+        if (!target.ospfv3Config.addressFamilies) target.ospfv3Config.addressFamilies = new Map();
+        if (!target.ospfv3Config.addressFamilies.has(af)) {
+          target.ospfv3Config.addressFamilies.set(af, { passiveInterfaces: [], redistributions: [] });
+        }
+        return target.ospfv3Config.addressFamilies.get(af);
+      }
+    };
+
+    // capability vrf-lite
+    if (tokens.length >= 2 && 'capability'.startsWith(cmd0) && 'vrf-lite'.startsWith(tokens[1].toLowerCase())) {
+      const afCfg = getOspfV3AfCfg();
+      if (afCfg) {
+        afCfg.capabilityVrfLite = true;
+        return { output: '' };
+      }
+    }
+
+    // default-information originate
+    if (tokens.length >= 2 && 'default-information'.startsWith(cmd0) && 'originate'.startsWith(tokens[1].toLowerCase())) {
+      const afCfg = getOspfV3AfCfg();
+      if (afCfg) {
+        afCfg.defaultInformationOriginate = true;
+        return { output: '' };
+      }
+    }
+
     const isBgp = context.targetAfType === 'bgp' || (!!target.bgpConfig && !target.eigrpConfig && !target.eigrpV6Config);
     const afKey = context.targetAfProto || 'ipv4';
 
@@ -5209,23 +5657,20 @@ export class IOSCommands {
       }
 
       if (context.targetAfType === 'ospfv3' && target.ospfv3Config) {
-        const af = (context.targetAfProto as 'ipv4' | 'ipv6') || 'ipv4';
-        if (!target.ospfv3Config.addressFamilies) target.ospfv3Config.addressFamilies = new Map();
-        if (!target.ospfv3Config.addressFamilies.has(af)) {
-          target.ospfv3Config.addressFamilies.set(af, { passiveInterfaces: [], redistributions: [] });
+        const afCfg = getOspfV3AfCfg();
+        if (afCfg) {
+          if (!afCfg.redistributions) afCfg.redistributions = [];
+          afCfg.redistributions = afCfg.redistributions.filter((r: RedistributionConfig) => r.protocol !== redisProto);
+          afCfg.redistributions.push({
+            protocol: redisProto as any,
+            asOrProcessId: asOrPid,
+            metric,
+            metricType,
+            routeMap,
+            includeConnected
+          });
+          return { output: '' };
         }
-        const afCfg = target.ospfv3Config.addressFamilies.get(af)!;
-        if (!afCfg.redistributions) afCfg.redistributions = [];
-        afCfg.redistributions = afCfg.redistributions.filter(r => r.protocol !== redisProto);
-        afCfg.redistributions.push({
-          protocol: redisProto as any,
-          asOrProcessId: asOrPid,
-          metric,
-          metricType,
-          routeMap,
-          includeConnected
-        });
-        return { output: '' };
       }
     }
 
@@ -5468,6 +5913,20 @@ export class IOSCommands {
     // no shutdown
     if (cmd0 === 'no' && tokens.length >= 2 && 'shutdown'.startsWith(tokens[1].toLowerCase())) {
       if (iface) iface.eigrpAfShutdown = false;
+      return { output: '' };
+    }
+
+    // no split-horizon
+    if (cmd0 === 'no' && tokens.length >= 2 && 'split-horizon'.startsWith(tokens[1].toLowerCase())) {
+      if (iface) {
+        if (!iface.eigrpSplitHorizon) iface.eigrpSplitHorizon = {};
+        iface.eigrpSplitHorizon[as] = false;
+      }
+      return { output: '' };
+    }
+
+    // no next-hop-self
+    if (cmd0 === 'no' && tokens.length >= 2 && 'next-hop-self'.startsWith(tokens[1].toLowerCase())) {
       return { output: '' };
     }
 

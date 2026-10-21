@@ -8,6 +8,7 @@ export class Switch extends Device {
   macTable: MacTableEntry[] = [];
   isLayer3: boolean = false;
   routingTable: RouteEntry[] = [];
+  ipv6RoutingTable: RouteEntry[] = [];
   ospfConfig?: OspfConfig;
   ospfv3Config?: OspfV3Config;
   ipv6UnicastRouting: boolean = false;
@@ -375,6 +376,9 @@ export class Switch extends Device {
         lines.push(' ip address dhcp');
       } else if (iface.ipAddress && iface.subnetMask) {
         lines.push(` ip address ${iface.ipAddress} ${iface.subnetMask}`);
+      }
+      if (iface.ipv6Address) {
+        lines.push(` ipv6 address ${iface.ipv6Address}`);
       }
 
       if (!iface.name.startsWith('Vlan')) {

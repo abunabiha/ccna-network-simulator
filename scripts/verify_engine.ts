@@ -2185,7 +2185,271 @@ console.log(`R2 running-config includes distribute-list 5 out: ${runCfgR2Rm2.inc
 console.log(`R2 running-config includes ip prefix-list EIGRP_TO_OSPF: ${runCfgR2Rm2.includes('ip prefix-list EIGRP_TO_OSPF') ? 'PASS' : 'FAIL'}`);
 console.log(`R2 running-config includes route-map RED_TO_OSPF: ${runCfgR2Rm2.includes('route-map RED_TO_OSPF permit 10') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, 6 LAB BGP, DAN 3 LAB ROUTING MANIPULATION & PBR SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+// ======================================================
+// 22. CCNP ENTERPRISE: VPN TECHNOLOGIES & DMVPN LABS
+// ======================================================
+console.log('\n======================================================');
+console.log('22. CCNP ENTERPRISE: VPN TECHNOLOGIES & DMVPN LABS');
+console.log('======================================================');
+
+// --- 22.1 Lab 01: Implement VRF-Lite ---
+console.log('\n--- 22.1 Lab 01: Implement VRF-Lite ---');
+const ccnpVpnLab1 = CCNP_LABS.find(l => l.id === 'lab-ccnp-vpn-01-vrf-lite')!;
+console.log(`Found Lab 01: ${ccnpVpnLab1.title} (${ccnpVpnLab1.tasks.length} tasks)`);
+
+const r1Vrf = new Router('R1', 'R1');
+const r2Vrf = new Router('R2', 'R2');
+const r3Vrf = new Router('R3', 'R3');
+const d1Vrf = new Switch('D1', 'D1', 'switch-l3');
+const d2Vrf = new Switch('D2', 'D2', 'switch-l3');
+const a1Vrf = new Switch('A1', 'A1', 'switch-l2');
+const vrf1Devs = [r1Vrf, r2Vrf, r3Vrf, d1Vrf, d2Vrf, a1Vrf];
+
+// R1 VRF configuration
+CliParser.execute('vrf definition CustomerA', { deviceId: 'R1', mode: 'global-config' as const }, r1Vrf, vrf1Devs);
+CliParser.execute('address-family ipv4', { deviceId: 'R1', mode: 'vrf-config' as const, targetVrfName: 'CustomerA' }, r1Vrf, vrf1Devs);
+CliParser.execute('address-family ipv6', { deviceId: 'R1', mode: 'vrf-af-config' as const, targetVrfName: 'CustomerA', targetVrfAf: 'ipv4' }, r1Vrf, vrf1Devs);
+CliParser.execute('exit', { deviceId: 'R1', mode: 'vrf-af-config' as const, targetVrfName: 'CustomerA', targetVrfAf: 'ipv6' }, r1Vrf, vrf1Devs);
+
+CliParser.execute('vrf definition CustomerB', { deviceId: 'R1', mode: 'global-config' as const }, r1Vrf, vrf1Devs);
+CliParser.execute('address-family ipv4', { deviceId: 'R1', mode: 'vrf-config' as const, targetVrfName: 'CustomerB' }, r1Vrf, vrf1Devs);
+CliParser.execute('address-family ipv6', { deviceId: 'R1', mode: 'vrf-af-config' as const, targetVrfName: 'CustomerB', targetVrfAf: 'ipv4' }, r1Vrf, vrf1Devs);
+
+// R1 Interface VRF assignment
+CliParser.execute('interface GigabitEthernet0/0/1.1', { deviceId: 'R1', mode: 'global-config' as const }, r1Vrf, vrf1Devs);
+CliParser.execute('vrf forwarding CustomerA', { deviceId: 'R1', mode: 'subinterface-config' as const, targetInterface: 'GigabitEthernet0/0/1.1' }, r1Vrf, vrf1Devs);
+CliParser.execute('ip address 10.1.1.1 255.255.255.0', { deviceId: 'R1', mode: 'subinterface-config' as const, targetInterface: 'GigabitEthernet0/0/1.1' }, r1Vrf, vrf1Devs);
+
+CliParser.execute('interface GigabitEthernet0/0/1.2', { deviceId: 'R1', mode: 'global-config' as const }, r1Vrf, vrf1Devs);
+CliParser.execute('vrf forwarding CustomerB', { deviceId: 'R1', mode: 'subinterface-config' as const, targetInterface: 'GigabitEthernet0/0/1.2' }, r1Vrf, vrf1Devs);
+CliParser.execute('ip address 10.2.1.1 255.255.255.0', { deviceId: 'R1', mode: 'subinterface-config' as const, targetInterface: 'GigabitEthernet0/0/1.2' }, r1Vrf, vrf1Devs);
+
+// R1 VRF static routes
+CliParser.execute('ip route vrf CustomerA 0.0.0.0 0.0.0.0 lo 1 64.100.1.2', { deviceId: 'R1', mode: 'global-config' as const }, r1Vrf, vrf1Devs);
+CliParser.execute('ip route vrf CustomerB 0.0.0.0 0.0.0.0 lo 2 64.100.2.2', { deviceId: 'R1', mode: 'global-config' as const }, r1Vrf, vrf1Devs);
+
+// R1 OSPFv3 VRF AF
+CliParser.execute('router ospfv3 1', { deviceId: 'R1', mode: 'global-config' as const }, r1Vrf, vrf1Devs);
+CliParser.execute('address-family ipv4 unicast vrf CustomerA', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProcess: 'ospfv3', targetProcessId: 1 }, r1Vrf, vrf1Devs);
+CliParser.execute('redistribute static', { deviceId: 'R1', mode: 'router-af-config' as const, targetAfProto: 'ipv4', targetAfType: 'ospfv3', targetAfVrf: 'CustomerA' }, r1Vrf, vrf1Devs);
+CliParser.execute('default-information originate', { deviceId: 'R1', mode: 'router-af-config' as const, targetAfProto: 'ipv4', targetAfType: 'ospfv3', targetAfVrf: 'CustomerA' }, r1Vrf, vrf1Devs);
+
+// R2 VRF & OSPFv3 capability vrf-lite
+CliParser.execute('vrf definition CustomerA', { deviceId: 'R2', mode: 'global-config' as const }, r2Vrf, vrf1Devs);
+CliParser.execute('address-family ipv4', { deviceId: 'R2', mode: 'vrf-config' as const, targetVrfName: 'CustomerA' }, r2Vrf, vrf1Devs);
+CliParser.execute('address-family ipv6', { deviceId: 'R2', mode: 'vrf-af-config' as const, targetVrfName: 'CustomerA', targetVrfAf: 'ipv4' }, r2Vrf, vrf1Devs);
+
+CliParser.execute('router ospfv3 1', { deviceId: 'R2', mode: 'global-config' as const }, r2Vrf, vrf1Devs);
+CliParser.execute('address-family ipv4 unicast vrf CustomerA', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProcess: 'ospfv3', targetProcessId: 1 }, r2Vrf, vrf1Devs);
+CliParser.execute('capability vrf-lite', { deviceId: 'R2', mode: 'router-af-config' as const, targetAfProto: 'ipv4', targetAfType: 'ospfv3', targetAfVrf: 'CustomerA' }, r2Vrf, vrf1Devs);
+CliParser.execute('address-family ipv4 unicast vrf CustomerB', { deviceId: 'R2', mode: 'router-af-config' as const, targetAfProto: 'ipv4', targetAfType: 'ospfv3', targetAfVrf: 'CustomerA' }, r2Vrf, vrf1Devs);
+CliParser.execute('capability vrf-lite', { deviceId: 'R2', mode: 'router-af-config' as const, targetAfProto: 'ipv4', targetAfType: 'ospfv3', targetAfVrf: 'CustomerB' }, r2Vrf, vrf1Devs);
+
+const reportVpn1 = LabGrader.grade(ccnpVpnLab1, vrf1Devs);
+console.log(`CCNP VRF-Lite Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportVpn1.totalScore === 100 && reportVpn1.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportVpn1.totalScore}%)`);
+
+// --- 22.2 Lab 02: Implement a DMVPN Phase 1 Hub-to-Spoke Topology ---
+console.log('\n--- 22.2 Lab 02: Implement a DMVPN Phase 1 Hub-to-Spoke Topology ---');
+const ccnpVpnLab2 = CCNP_LABS.find(l => l.id === 'lab-ccnp-vpn-02-dmvpn-phase1')!;
+console.log(`Found Lab 02: ${ccnpVpnLab2.title} (${ccnpVpnLab2.tasks.length} tasks)`);
+
+const r1Dmvpn = new Router('R1', 'R1');
+const r2Dmvpn = new Router('R2', 'R2');
+const r3Dmvpn = new Router('R3', 'R3');
+const ispDmvpn = new Router('ISP', 'ISP');
+const dmvpn1Devs = [r1Dmvpn, r2Dmvpn, r3Dmvpn, ispDmvpn];
+
+// R1 Hub Tunnel1
+CliParser.execute('interface Tunnel1', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('ip address 10.0.0.1 255.255.255.0', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel mode gre multipoint', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel key 1', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp network-id 1', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp authentication cisco', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp map multicast dynamic', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('ip mtu 1400', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('ip tcp adjust-mss 1360', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+
+// R1 EIGRP split-horizon disabled on Tunnel1
+CliParser.execute('router eigrp DMVPN', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 1', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProcess: 'eigrp', targetEigrpName: 'DMVPN' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('af-interface Tunnel1', { deviceId: 'R1', mode: 'router-af-config' as const, targetAfProto: 'ipv4', targetAsNumber: 1 }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('no split-horizon', { deviceId: 'R1', mode: 'router-af-interface-config' as const, targetAfInterface: 'Tunnel1', targetAsNumber: 1 }, r1Dmvpn, dmvpn1Devs);
+
+// R2 Spoke Tunnel1
+CliParser.execute('interface Tunnel1', { deviceId: 'R2', mode: 'global-config' as const }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('ip address 10.0.0.2 255.255.255.0', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel destination 209.165.200.225', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel key 1', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp network-id 1', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp authentication cisco', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp map multicast 209.165.200.225', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp map 10.0.0.1 209.165.200.225', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp nhs 10.0.0.1', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+
+// R3 Spoke Tunnel1
+CliParser.execute('interface Tunnel1', { deviceId: 'R3', mode: 'global-config' as const }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('ip address 10.0.0.3 255.255.255.0', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel destination 209.165.200.225', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel key 1', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp network-id 1', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp authentication cisco', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp map multicast 209.165.200.225', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp map 10.0.0.1 209.165.200.225', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp nhs 10.0.0.1', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+
+const reportVpn2 = LabGrader.grade(ccnpVpnLab2, dmvpn1Devs);
+console.log(`CCNP DMVPN Phase 1 Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportVpn2.totalScore === 100 && reportVpn2.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportVpn2.totalScore}%)`);
+
+// --- 22.3 Lab 03: Implement a DMVPN Phase 3 Spoke-to-Spoke Topology ---
+console.log('\n--- 22.3 Lab 03: Implement a DMVPN Phase 3 Spoke-to-Spoke Topology ---');
+const ccnpVpnLab3 = CCNP_LABS.find(l => l.id === 'lab-ccnp-vpn-03-dmvpn-phase3')!;
+console.log(`Found Lab 03: ${ccnpVpnLab3.title} (${ccnpVpnLab3.tasks.length} tasks)`);
+
+// R1 Hub Phase 3 redirect
+CliParser.execute('interface Tunnel1', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp redirect', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+
+// R2 Spoke Phase 3 shortcut & multipoint
+CliParser.execute('interface Tunnel1', { deviceId: 'R2', mode: 'global-config' as const }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel mode gre multipoint', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('no tunnel destination', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp shortcut', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+
+// R3 Spoke Phase 3 shortcut & multipoint
+CliParser.execute('interface Tunnel1', { deviceId: 'R3', mode: 'global-config' as const }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel mode gre multipoint', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('no tunnel destination', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('ip nhrp shortcut', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+
+const reportVpn3 = LabGrader.grade(ccnpVpnLab3, dmvpn1Devs);
+console.log(`CCNP DMVPN Phase 3 Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportVpn3.totalScore === 100 && reportVpn3.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportVpn3.totalScore}%)`);
+
+// --- 22.4 Lab 04: Implement an IPv6 DMVPN Phase 3 Spoke-to-Spoke Topology ---
+console.log('\n--- 22.4 Lab 04: Implement an IPv6 DMVPN Phase 3 Spoke-to-Spoke Topology ---');
+const ccnpVpnLab4 = CCNP_LABS.find(l => l.id === 'lab-ccnp-vpn-04-dmvpn-ipv6-phase3')!;
+console.log(`Found Lab 04: ${ccnpVpnLab4.title} (${ccnpVpnLab4.tasks.length} tasks)`);
+
+const r1V6 = new Router('R1', 'R1');
+const r2V6 = new Router('R2', 'R2');
+const r3V6 = new Router('R3', 'R3');
+const ispV6 = new Router('ISP', 'ISP');
+const dmvpn6Devs = [r1V6, r2V6, r3V6, ispV6];
+
+// R1 IPv6 Hub
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'global-config' as const }, r1V6, dmvpn6Devs);
+CliParser.execute('ip address 209.165.200.225 255.255.255.224', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r1V6, dmvpn6Devs);
+CliParser.execute('interface Tunnel1', { deviceId: 'R1', mode: 'global-config' as const }, r1V6, dmvpn6Devs);
+CliParser.execute('ipv6 address 2001:db8:0:1::1/64', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('tunnel mode gre multipoint ipv6', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('tunnel key 1', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp network-id 1', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp redirect', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp map multicast dynamic', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('ipv6 mtu 1400', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('ipv6 tcp adjust-mss 1360', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+CliParser.execute('no ipv6 split-horizon eigrp 1', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1V6, dmvpn6Devs);
+
+// R2 IPv6 Spoke
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'global-config' as const }, r2V6, dmvpn6Devs);
+CliParser.execute('ip address 209.165.200.226 255.255.255.224', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r2V6, dmvpn6Devs);
+CliParser.execute('interface Tunnel1', { deviceId: 'R2', mode: 'global-config' as const }, r2V6, dmvpn6Devs);
+CliParser.execute('ipv6 address 2001:db8:0:1::2/64', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+CliParser.execute('tunnel mode gre multipoint ipv6', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+CliParser.execute('tunnel key 1', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp network-id 1', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp shortcut', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp map multicast 209.165.200.225', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp nhs 2001:db8:0:1::1', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2V6, dmvpn6Devs);
+
+// R3 IPv6 Spoke
+CliParser.execute('interface GigabitEthernet0/0/0', { deviceId: 'R3', mode: 'global-config' as const }, r3V6, dmvpn6Devs);
+CliParser.execute('ip address 209.165.200.227 255.255.255.224', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/0' }, r3V6, dmvpn6Devs);
+CliParser.execute('interface Tunnel1', { deviceId: 'R3', mode: 'global-config' as const }, r3V6, dmvpn6Devs);
+CliParser.execute('ipv6 address 2001:db8:0:1::3/64', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+CliParser.execute('tunnel source GigabitEthernet0/0/0', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+CliParser.execute('tunnel mode gre multipoint ipv6', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+CliParser.execute('tunnel key 1', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp network-id 1', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp shortcut', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp map multicast 209.165.200.225', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+CliParser.execute('ipv6 nhrp nhs 2001:db8:0:1::1', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3V6, dmvpn6Devs);
+
+const reportVpn4 = LabGrader.grade(ccnpVpnLab4, dmvpn6Devs);
+console.log(`CCNP IPv6 DMVPN Phase 3 Lab 04 Auto-Grader Evaluation (100% Mastery): ${reportVpn4.totalScore === 100 && reportVpn4.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportVpn4.totalScore}%)`);
+
+// --- 22.5 Lab 05: Configure Secure DMVPN Tunnels ---
+console.log('\n--- 22.5 Lab 05: Configure Secure DMVPN Tunnels ---');
+const ccnpVpnLab5 = CCNP_LABS.find(l => l.id === 'lab-ccnp-vpn-05-secure-dmvpn')!;
+console.log(`Found Lab 05: ${ccnpVpnLab5.title} (${ccnpVpnLab5.tasks.length} tasks)`);
+
+// R1 Crypto ISAKMP & IPsec
+CliParser.execute('crypto isakmp policy 10', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('authentication pre-share', { deviceId: 'R1', mode: 'crypto-isakmp-policy' as const, targetIsakmpPriority: 10 }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('crypto isakmp key cisco123 address 0.0.0.0 0.0.0.0', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('mode transport', { deviceId: 'R1', mode: 'crypto-transform-config' as const, targetTransformSetName: 'DMVPN-TS' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('crypto ipsec profile DMVPN-PROFILE', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('set transform-set DMVPN-TS', { deviceId: 'R1', mode: 'crypto-ipsec-profile' as const, targetIpsecProfileName: 'DMVPN-PROFILE' }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('interface Tunnel1', { deviceId: 'R1', mode: 'global-config' as const }, r1Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel protection ipsec profile DMVPN-PROFILE', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r1Dmvpn, dmvpn1Devs);
+
+// R2 Crypto IPsec
+CliParser.execute('crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac', { deviceId: 'R2', mode: 'global-config' as const }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('mode transport', { deviceId: 'R2', mode: 'crypto-transform-config' as const, targetTransformSetName: 'DMVPN-TS' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('crypto ipsec profile DMVPN-PROFILE', { deviceId: 'R2', mode: 'global-config' as const }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('set transform-set DMVPN-TS', { deviceId: 'R2', mode: 'crypto-ipsec-profile' as const, targetIpsecProfileName: 'DMVPN-PROFILE' }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('interface Tunnel1', { deviceId: 'R2', mode: 'global-config' as const }, r2Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel protection ipsec profile DMVPN-PROFILE', { deviceId: 'R2', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r2Dmvpn, dmvpn1Devs);
+
+// R3 Crypto IPsec
+CliParser.execute('crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac', { deviceId: 'R3', mode: 'global-config' as const }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('mode transport', { deviceId: 'R3', mode: 'crypto-transform-config' as const, targetTransformSetName: 'DMVPN-TS' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('crypto ipsec profile DMVPN-PROFILE', { deviceId: 'R3', mode: 'global-config' as const }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('set transform-set DMVPN-TS', { deviceId: 'R3', mode: 'crypto-ipsec-profile' as const, targetIpsecProfileName: 'DMVPN-PROFILE' }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('interface Tunnel1', { deviceId: 'R3', mode: 'global-config' as const }, r3Dmvpn, dmvpn1Devs);
+CliParser.execute('tunnel protection ipsec profile DMVPN-PROFILE', { deviceId: 'R3', mode: 'interface-config' as const, targetInterface: 'Tunnel1' }, r3Dmvpn, dmvpn1Devs);
+
+const reportVpn5 = LabGrader.grade(ccnpVpnLab5, dmvpn1Devs);
+console.log(`CCNP Secure DMVPN Lab 05 Auto-Grader Evaluation (100% Mastery): ${reportVpn5.totalScore === 100 && reportVpn5.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportVpn5.totalScore}%)`);
+
+// Test VPN & DMVPN Show Commands & Running Config
+console.log('\n--- Test VPN & DMVPN Show Commands & Running Config ---');
+const showIpVrfIfRes = CliParser.execute('show ip vrf interfaces', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Vrf, vrf1Devs);
+console.log(`show ip vrf interfaces executes cleanly: ${showIpVrfIfRes.output.includes('CustomerA') && showIpVrfIfRes.output.includes('GigabitEthernet0/0/1.1') ? 'PASS' : 'FAIL'}`);
+
+const showIpv6RouteVrfRes = CliParser.execute('show ipv6 route vrf CustomerA', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Vrf, vrf1Devs);
+console.log(`show ipv6 route vrf CustomerA executes cleanly: ${showIpv6RouteVrfRes.output.includes('IPv6 Routing Table - CustomerA') ? 'PASS' : 'FAIL'}`);
+
+const showDmvpnRes = CliParser.execute('show dmvpn', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Dmvpn, dmvpn1Devs);
+console.log(`show dmvpn displays tunnel and peers: ${showDmvpnRes.output.includes('Tunnel1') && showDmvpnRes.output.includes('DMVPN') ? 'PASS' : 'FAIL'}`);
+
+const showIpNhrpRes = CliParser.execute('show ip nhrp', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Dmvpn, dmvpn1Devs);
+console.log(`show ip nhrp displays NHRP cache table: ${showIpNhrpRes.output.includes('Tunnel1') && showIpNhrpRes.output.includes('10.0.0.2') ? 'PASS' : 'FAIL'}`);
+
+const showIpv6NhrpRes = CliParser.execute('show ipv6 nhrp', { deviceId: 'R1', mode: 'priv-exec' as const }, r1V6, dmvpn6Devs);
+console.log(`show ipv6 nhrp displays IPv6 NHRP cache table: ${showIpv6NhrpRes.output.includes('Tunnel1') && showIpv6NhrpRes.output.includes('2001:db8:0:1::2') ? 'PASS' : 'FAIL'}`);
+
+const showCryptoProfileRes = CliParser.execute('show crypto ipsec profile', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Dmvpn, dmvpn1Devs);
+console.log(`show crypto ipsec profile displays DMVPN-PROFILE: ${showCryptoProfileRes.output.includes('DMVPN-PROFILE') && showCryptoProfileRes.output.includes('DMVPN-TS') ? 'PASS' : 'FAIL'}`);
+
+const runCfgR1Vrf = r1Vrf.getRunningConfig();
+console.log(`R1 running-config includes vrf definition CustomerA: ${runCfgR1Vrf.includes('vrf definition CustomerA') && runCfgR1Vrf.includes('address-family ipv4') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes vrf forwarding CustomerA: ${runCfgR1Vrf.includes('vrf forwarding CustomerA') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ip route vrf CustomerA: ${runCfgR1Vrf.includes('ip route vrf CustomerA 0.0.0.0 0.0.0.0') ? 'PASS' : 'FAIL'}`);
+
+const runCfgR1Dmvpn = r1Dmvpn.getRunningConfig();
+console.log(`R1 running-config includes tunnel mode gre multipoint: ${runCfgR1Dmvpn.includes('tunnel mode gre multipoint') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ip nhrp redirect: ${runCfgR1Dmvpn.includes('ip nhrp redirect') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes crypto ipsec transform-set DMVPN-TS: ${runCfgR1Dmvpn.includes('crypto ipsec transform-set DMVPN-TS esp-aes esp-sha-hmac') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes tunnel protection ipsec profile DMVPN-PROFILE: ${runCfgR1Dmvpn.includes('tunnel protection ipsec profile DMVPN-PROFILE') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, 6 LAB BGP, 3 LAB ROUTING MANIPULATION & PBR, SERTA 5 LAB VPN & DMVPN SELESAI DENGAN SUKSES LENGKAP 100%! ===');
 
 
 
