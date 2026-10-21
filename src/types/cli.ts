@@ -25,7 +25,9 @@ export type CliMode =
   | 'keychain-key-config' // Router(config-keychain-key)#
   | 'router-af-config'    // Router(config-router-af)#
   | 'router-af-interface-config' // Router(config-router-af-interface)#
-  | 'router-af-topology-config'; // Router(config-router-af-topology)#
+  | 'router-af-topology-config' // Router(config-router-af-topology)#
+  | 'std-nacl-config'     // Router(config-std-nacl)#
+  | 'ext-nacl-config';    // Router(config-ext-nacl)#
 
 export interface CliContext {
   deviceId: string;
@@ -38,6 +40,8 @@ export interface CliContext {
   targetProcessId?: number;
   targetLine?: string;
   targetDhcpPool?: string;
+  targetAclName?: string;
+  targetAclType?: 'standard' | 'extended';
   targetRouteMapName?: string;
   targetRouteMapSeq?: number;
   targetIpSlaId?: number;
@@ -55,7 +59,7 @@ export interface CliContext {
   targetKeyId?: number;
   targetAfProto?: 'ipv4' | 'ipv6';
   targetAfInterface?: string;
-  targetAfType?: 'eigrp' | 'bgp';
+  targetAfType?: 'eigrp' | 'bgp' | 'ospfv3';
   targetEigrpName?: string;
 }
 

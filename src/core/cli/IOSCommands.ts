@@ -368,7 +368,7 @@ export class IOSCommands {
       if (context.mode === 'vrf-af-config') {
         return { output: '', newMode: 'vrf-config' };
       }
-      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config', 'crypto-isakmp-policy', 'crypto-ipsec-profile', 'zone-pair-config', 'class-map-inspect', 'policy-map-inspect', 'policy-map-class-inspect', 'control-plane-config', 'eem-applet-config', 'mdt-subscription-config'].includes(context.mode)) {
+      if (['interface-config', 'subinterface-config', 'vlan-config', 'router-config', 'line-config', 'dhcp-config', 'route-map-config', 'ip-sla-config', 'vrf-config', 'crypto-isakmp-policy', 'crypto-ipsec-profile', 'zone-pair-config', 'class-map-inspect', 'policy-map-inspect', 'policy-map-class-inspect', 'control-plane-config', 'eem-applet-config', 'mdt-subscription-config', 'keychain-config', 'keychain-key-config', 'std-nacl-config', 'ext-nacl-config'].includes(context.mode)) {
         return { output: '', newMode: 'global-config' };
       }
       if (context.mode === 'global-config') {
@@ -486,6 +486,12 @@ export class IOSCommands {
         break;
       case 'router-af-topology-config':
         result = this.execRouterAfTopologyConfigMode(tokens, raw, context, device);
+        break;
+      case 'std-nacl-config':
+        result = this.execStdNaclConfigMode(tokens, raw, context, device);
+        break;
+      case 'ext-nacl-config':
+        result = this.execExtNaclConfigMode(tokens, raw, context, device);
         break;
       default:
         result = { output: `% Invalid input detected at '^' marker.` };
@@ -697,8 +703,27 @@ export class IOSCommands {
 
         // show ip prefix-list ...
         if ('prefix-list'.startsWith(cmd2)) {
-          const plName = tokens.length >= 4 ? tokens[3] : undefined;
-          return { output: PolicyEngine.renderShowIpPrefixList(device, plName) };
+          let plName: string | undefined;
+          const detail = tokens.some(t => t.toLowerCase() === 'detail');
+          if (tokens.length >= 4 && tokens[3].toLowerCase() !== 'detail') {
+            plName = tokens[3];
+          }
+          return { output: PolicyEngine.renderShowIpPrefixList(device, plName, detail) };
+        }
+
+        // show ip policy
+        if ('policy'.startsWith(cmd2)) {
+          const dev = device as Router | Switch;
+          const lines: string[] = ['Interface      Route map'];
+          for (const [ifName, iface] of dev.interfaces.entries()) {
+            if (iface.ipPolicyRouteMap) {
+              lines.push(`${ifName.padEnd(15)}${iface.ipPolicyRouteMap}`);
+            }
+          }
+          if (dev.ipLocalPolicyRouteMap) {
+            lines.push(`local          ${dev.ipLocalPolicyRouteMap}`);
+          }
+          return { output: lines.length > 1 ? lines.join('\n') : '% No IP policy configured' };
         }
 
         // show ip sla ...
@@ -1552,6 +1577,41 @@ export class IOSCommands {
       return { output: '' };
     }
 
+    // ip access-list <standard|extended> <name>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 4 && 'access-list'.startsWith(tokens[1].toLowerCase())) {
+      const aclType = tokens[2].toLowerCase();
+      const aclName = tokens[3];
+      if (aclType === 'standard' || aclType === 'extended') {
+        const target = device as Router | Switch;
+        if (!target.namedAccessLists) target.namedAccessLists = new Map();
+        if (!target.namedAccessLists.has(aclName)) {
+          target.namedAccessLists.set(aclName, { name: aclName, type: aclType as any, remarks: [], rules: [] });
+        }
+        return {
+          output: '',
+          newMode: aclType === 'standard' ? 'std-nacl-config' : 'ext-nacl-config',
+          contextUpdates: {
+            targetAclName: aclName,
+            targetAclType: aclType as any
+          }
+        };
+      }
+    }
+
+    // ip local policy route-map <name>
+    if ('ip'.startsWith(cmd0) && tokens.length >= 5 && 'local'.startsWith(tokens[1].toLowerCase()) && 'policy'.startsWith(tokens[2].toLowerCase()) && 'route-map'.startsWith(tokens[3].toLowerCase())) {
+      const target = device as Router | Switch;
+      target.ipLocalPolicyRouteMap = tokens[4];
+      return { output: '' };
+    }
+
+    // no ip local policy route-map
+    if (cmd0 === 'no' && tokens.length >= 5 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'local'.startsWith(tokens[2].toLowerCase()) && 'policy'.startsWith(tokens[3].toLowerCase()) && 'route-map'.startsWith(tokens[4].toLowerCase())) {
+      const target = device as Router | Switch;
+      target.ipLocalPolicyRouteMap = undefined;
+      return { output: '' };
+    }
+
     // ip sla <id>
     if ('ip'.startsWith(cmd0) && tokens.length >= 3 && 'sla'.startsWith(tokens[1].toLowerCase()) && !tokens[1].toLowerCase().includes('schedule')) {
       const slaId = parseInt(tokens[2], 10);
@@ -1941,8 +2001,10 @@ export class IOSCommands {
         return { output: `% Invalid access-list syntax.` };
       }
 
-      if (device instanceof Router) {
-        const existing = device.accessLists.get(aclNum) || [];
+      if (device instanceof Router || device instanceof Switch) {
+        const target = device as Router | Switch;
+        if (!target.accessLists) target.accessLists = new Map();
+        const existing = target.accessLists.get(aclNum) || [];
         if (aclNum <= 99) {
           // Standard ACL: access-list <num> permit|deny <source-ip> [wildcard]
           existing.push({
@@ -1963,7 +2025,7 @@ export class IOSCommands {
             destWildcard: tokens[7]
           });
         }
-        device.accessLists.set(aclNum, existing);
+        target.accessLists.set(aclNum, existing);
         return { output: '' };
       }
     }
@@ -3098,6 +3160,31 @@ export class IOSCommands {
               targetAfType: 'bgp'
             }
           };
+        } else if (proto === 'ospfv3' || (_context.targetRoutingProcess && _context.targetRoutingProcess.startsWith('ospfv3')) || (target.ospfv3Config && proto === 'ospf')) {
+          if (!target.ospfv3Config) {
+            target.ospfv3Config = {
+              enabled: true,
+              processId: _context.targetProcessId || 1,
+              passiveInterfaces: []
+            };
+          }
+          if (!target.ospfv3Config.addressFamilies) {
+            target.ospfv3Config.addressFamilies = new Map();
+          }
+          if (!target.ospfv3Config.addressFamilies.has(afProto)) {
+            target.ospfv3Config.addressFamilies.set(afProto, {
+              passiveInterfaces: [],
+              redistributions: []
+            });
+          }
+          return {
+            output: '',
+            newMode: 'router-af-config',
+            contextUpdates: {
+              targetAfProto: afProto,
+              targetAfType: 'ospfv3'
+            }
+          };
         }
       }
     }
@@ -3140,23 +3227,34 @@ export class IOSCommands {
       }
     }
 
-    // distribute-list prefix <name> out [iface]
-    if ('distribute-list'.startsWith(cmd0) && tokens.length >= 4 && 'prefix'.startsWith(tokens[1].toLowerCase())) {
-      const prefixName = tokens[2];
-      const direction = tokens[3].toLowerCase() as 'in' | 'out';
-      const ifaceNorm = tokens.length >= 5 ? CliLexer.normalizeInterfaceName(tokens[4]) : undefined;
+    // distribute-list <acl | prefix <name>> <in|out> [iface]
+    if ('distribute-list'.startsWith(cmd0) && tokens.length >= 3) {
+      let acl: number | string | undefined;
+      let prefixName: string | undefined;
+      let dirIdx = 2;
+      if ('prefix'.startsWith(tokens[1].toLowerCase()) && tokens.length >= 4) {
+        prefixName = tokens[2];
+        dirIdx = 3;
+      } else {
+        const parsedAcl = parseInt(tokens[1], 10);
+        acl = !isNaN(parsedAcl) ? parsedAcl : tokens[1];
+      }
+
+      const direction = (tokens[dirIdx]?.toLowerCase() === 'in' ? 'in' : 'out') as 'in' | 'out';
+      const ifaceNorm = tokens.length > dirIdx + 1 ? CliLexer.normalizeInterfaceName(tokens[dirIdx + 1]) : undefined;
       if (target.eigrpConfig) {
         if (!target.eigrpConfig.distributeLists) target.eigrpConfig.distributeLists = [];
-        target.eigrpConfig.distributeLists.push({ prefixList: prefixName, direction, interfaceName: ifaceNorm });
+        target.eigrpConfig.distributeLists.push({ acl, prefixList: prefixName, direction, interfaceName: ifaceNorm });
       }
       return { output: '' };
     }
 
     // no distribute-list prefix <name> [out] [iface]
-    if (cmd0 === 'no' && tokens.length >= 4 && 'distribute-list'.startsWith(tokens[1].toLowerCase()) && 'prefix'.startsWith(tokens[2].toLowerCase())) {
-      const prefixName = tokens[3];
+    if (cmd0 === 'no' && tokens.length >= 3 && 'distribute-list'.startsWith(tokens[1].toLowerCase())) {
+      const isPrefix = tokens.length >= 4 && 'prefix'.startsWith(tokens[2].toLowerCase());
+      const listIdentifier = isPrefix ? tokens[3] : tokens[2];
       if (target.eigrpConfig && target.eigrpConfig.distributeLists) {
-        target.eigrpConfig.distributeLists = target.eigrpConfig.distributeLists.filter(dl => dl.prefixList !== prefixName);
+        target.eigrpConfig.distributeLists = target.eigrpConfig.distributeLists.filter(dl => dl.prefixList !== listIdentifier && String(dl.acl) !== listIdentifier);
       }
       return { output: '' };
     }
@@ -3643,6 +3741,12 @@ export class IOSCommands {
       let metricType: 'type-1' | 'type-2' | undefined;
       let routeMap: string | undefined;
       let subnets = false;
+      let bandwidth: number | undefined;
+      let delay: number | undefined;
+      let reliability: number | undefined;
+      let load: number | undefined;
+      let mtu: number | undefined;
+      let includeConnected = false;
 
       let idx = 2;
       // If next token is numeric (AS or Process ID for ospf, eigrp, bgp)
@@ -3656,7 +3760,7 @@ export class IOSCommands {
         if ('subnets'.startsWith(t)) {
           subnets = true;
           idx++;
-        } else if ('metric-type'.startsWith(t) && idx + 1 < tokens.length) {
+        } else if ((t === 'metric-type' || t.startsWith('metric-t')) && idx + 1 < tokens.length) {
           const mt = tokens[idx + 1].toLowerCase();
           if (mt === '1' || mt === 'type-1') metricType = 'type-1';
           else if (mt === '2' || mt === 'type-2') metricType = 'type-2';
@@ -3664,12 +3768,24 @@ export class IOSCommands {
         } else if ('metric'.startsWith(t) && idx + 1 < tokens.length) {
           metric = parseInt(tokens[idx + 1], 10);
           idx += 2;
+          const metricVals: number[] = [metric];
           while (idx < tokens.length && !isNaN(parseInt(tokens[idx], 10))) {
+            metricVals.push(parseInt(tokens[idx], 10));
             idx++;
+          }
+          if (metricVals.length >= 5) {
+            bandwidth = metricVals[0];
+            delay = metricVals[1];
+            reliability = metricVals[2];
+            load = metricVals[3];
+            mtu = metricVals[4];
           }
         } else if ('route-map'.startsWith(t) && idx + 1 < tokens.length) {
           routeMap = tokens[idx + 1];
           idx += 2;
+        } else if ('include-connected'.startsWith(t)) {
+          includeConnected = true;
+          idx++;
         } else {
           idx++;
         }
@@ -3681,9 +3797,21 @@ export class IOSCommands {
         metric,
         metricType,
         routeMap,
-        subnets
+        subnets,
+        bandwidth,
+        delay,
+        reliability,
+        load,
+        mtu,
+        includeConnected
       };
 
+      if (target.ospfv3Config && (proto === 'ospfv3' || _context.targetRoutingProcess?.startsWith('ospfv3'))) {
+        if (!target.ospfv3Config.redistributions) target.ospfv3Config.redistributions = [];
+        target.ospfv3Config.redistributions = target.ospfv3Config.redistributions.filter(r => r.protocol !== redisProto);
+        target.ospfv3Config.redistributions.push(redisEntry);
+        return { output: '' };
+      }
       if (target.ospfConfig && (proto === 'ospf' || (!target.eigrpConfig && !target.bgpConfig))) {
         if (!target.ospfConfig.redistributions) target.ospfConfig.redistributions = [];
         target.ospfConfig.redistributions = target.ospfConfig.redistributions.filter(r => r.protocol !== redisProto);
@@ -3707,6 +3835,9 @@ export class IOSCommands {
     // no redistribute <protocol> [asOrPid]
     if (cmd0 === 'no' && tokens.length >= 3 && 'redistribute'.startsWith(tokens[1].toLowerCase())) {
       const redisProto = tokens[2].toLowerCase();
+      if (target.ospfv3Config && target.ospfv3Config.redistributions) {
+        target.ospfv3Config.redistributions = target.ospfv3Config.redistributions.filter(r => r.protocol !== redisProto);
+      }
       if (target.ospfConfig && target.ospfConfig.redistributions) {
         target.ospfConfig.redistributions = target.ospfConfig.redistributions.filter(r => r.protocol !== redisProto);
       }
@@ -3862,19 +3993,23 @@ export class IOSCommands {
       rm.clauses.push(clause);
     }
 
+    // description <text>
+    if ('description'.startsWith(cmd0) && tokens.length >= 2) {
+      clause.description = tokens.slice(1).join(' ');
+      return { output: '' };
+    }
+
     // match ip address prefix-list <name>
     if ('match'.startsWith(cmd0) && tokens.length >= 5 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase()) && 'prefix-list'.startsWith(tokens[3].toLowerCase())) {
       clause.matchPrefixList = tokens[4];
       return { output: '' };
     }
 
-    // match ip address <acl-id>
-    if ('match'.startsWith(cmd0) && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase())) {
+    // match ip address <acl-id | acl-name>
+    if ('match'.startsWith(cmd0) && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'address'.startsWith(tokens[2].toLowerCase()) && !'prefix-list'.startsWith(tokens[3].toLowerCase())) {
       const aclId = parseInt(tokens[3], 10);
-      if (!isNaN(aclId)) {
-        clause.matchAcl = aclId;
-        return { output: '' };
-      }
+      clause.matchAcl = !isNaN(aclId) ? aclId : tokens[3];
+      return { output: '' };
     }
 
     // match tag <tag>
@@ -3896,7 +4031,7 @@ export class IOSCommands {
     }
 
     // set metric-type <type-1 | type-2 | 1 | 2>
-    if ('set'.startsWith(cmd0) && tokens.length >= 3 && 'metric-type'.startsWith(tokens[1].toLowerCase())) {
+    if ('set'.startsWith(cmd0) && tokens.length >= 3 && (tokens[1].toLowerCase() === 'metric-type' || tokens[1].toLowerCase().startsWith('metric-t'))) {
       const mt = tokens[2].toLowerCase();
       clause.setMetricType = (mt === 'type-1' || mt === '1') ? 'type-1' : 'type-2';
       return { output: '' };
@@ -3921,6 +4056,12 @@ export class IOSCommands {
       }
       clause.setIpNextHopTrack = { nextHop, trackId };
       clause.setIpNextHop = nextHop;
+      return { output: '' };
+    }
+
+    // set ip next-hop <ip>
+    if ('set'.startsWith(cmd0) && tokens.length >= 4 && 'ip'.startsWith(tokens[1].toLowerCase()) && 'next-hop'.startsWith(tokens[2].toLowerCase()) && !'verify-availability'.startsWith(tokens[3].toLowerCase())) {
+      clause.setIpNextHop = tokens[3];
       return { output: '' };
     }
 
@@ -3986,6 +4127,129 @@ export class IOSCommands {
         clause.setIpNextHopTrack = undefined;
         return { output: '' };
       }
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== STANDARD NAMED ACL CONFIG MODE =====================
+  private static execStdNaclConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+    const aclName = context.targetAclName || '';
+    if (!target.namedAccessLists) target.namedAccessLists = new Map();
+    let nacl = target.namedAccessLists.get(aclName);
+    if (!nacl) {
+      nacl = { name: aclName, type: 'standard', remarks: [], rules: [] };
+      target.namedAccessLists.set(aclName, nacl);
+    }
+
+    if (cmd0 === 'exit') return { output: '', newMode: 'global-config' };
+    if (cmd0 === 'end') return { output: '', newMode: 'priv-exec' };
+
+    // remark <text>
+    if ('remark'.startsWith(cmd0) && tokens.length > 1) {
+      if (!nacl.remarks) nacl.remarks = [];
+      nacl.remarks.push(tokens.slice(1).join(' '));
+      return { output: '' };
+    }
+
+    // permit / deny <source> [wildcard]
+    if (cmd0 === 'permit' || cmd0 === 'deny') {
+      const action = cmd0 as 'permit' | 'deny';
+      let sourceIp = tokens[1] || 'any';
+      let wildcard = tokens[2];
+      if (sourceIp === 'host' && tokens.length >= 3) {
+        sourceIp = tokens[2];
+        wildcard = '0.0.0.0';
+      }
+      nacl.rules.push({
+        number: aclName,
+        action,
+        sourceIp,
+        sourceWildcard: wildcard
+      });
+      return { output: '' };
+    }
+
+    return { output: `% Invalid input detected at '^' marker.` };
+  }
+
+  // ===================== EXTENDED NAMED ACL CONFIG MODE =====================
+  private static execExtNaclConfigMode(
+    tokens: string[],
+    _raw: string,
+    context: CliContext,
+    device: Device
+  ): CliExecutionResult {
+    const cmd0 = tokens[0].toLowerCase();
+    const target = device as Router | Switch;
+    const aclName = context.targetAclName || '';
+    if (!target.namedAccessLists) target.namedAccessLists = new Map();
+    let nacl = target.namedAccessLists.get(aclName);
+    if (!nacl) {
+      nacl = { name: aclName, type: 'extended', remarks: [], rules: [] };
+      target.namedAccessLists.set(aclName, nacl);
+    }
+
+    if (cmd0 === 'exit') return { output: '', newMode: 'global-config' };
+    if (cmd0 === 'end') return { output: '', newMode: 'priv-exec' };
+
+    // remark <text>
+    if ('remark'.startsWith(cmd0) && tokens.length > 1) {
+      if (!nacl.remarks) nacl.remarks = [];
+      nacl.remarks.push(tokens.slice(1).join(' '));
+      return { output: '' };
+    }
+
+    // permit / deny <protocol> <source> <source-wildcard> <dest> <dest-wildcard>
+    // e.g. permit ip any 192.168.1.0 0.0.0.255
+    if (cmd0 === 'permit' || cmd0 === 'deny') {
+      const action = cmd0 as 'permit' | 'deny';
+      const protocol = (tokens[1]?.toLowerCase() || 'ip') as any;
+      let sourceIp = tokens[2] || 'any';
+      let sourceWildcard: string | undefined;
+      let destIp: string | undefined;
+      let destWildcard: string | undefined;
+
+      let idx = 3;
+      if (sourceIp !== 'any' && sourceIp !== 'host' && idx < tokens.length && /^\d+\.\d+\.\d+\.\d+$/.test(tokens[idx])) {
+        sourceWildcard = tokens[idx];
+        idx++;
+      } else if (sourceIp === 'host' && idx < tokens.length) {
+        sourceIp = tokens[idx];
+        sourceWildcard = '0.0.0.0';
+        idx++;
+      }
+
+      if (idx < tokens.length) {
+        destIp = tokens[idx];
+        idx++;
+        if (destIp === 'host' && idx < tokens.length) {
+          destIp = tokens[idx];
+          destWildcard = '0.0.0.0';
+          idx++;
+        } else if (destIp !== 'any' && idx < tokens.length && /^\d+\.\d+\.\d+\.\d+$/.test(tokens[idx])) {
+          destWildcard = tokens[idx];
+          idx++;
+        }
+      }
+
+      nacl.rules.push({
+        number: aclName,
+        action,
+        protocol,
+        sourceIp,
+        sourceWildcard,
+        destIp,
+        destWildcard
+      });
+      return { output: '' };
     }
 
     return { output: `% Invalid input detected at '^' marker.` };
@@ -4900,8 +5164,69 @@ export class IOSCommands {
         target.eigrpV6Config.passiveInterfaces.push(norm);
       } else if (target.eigrpConfig) {
         target.eigrpConfig.passiveInterfaces.push(norm);
+      } else if (target.ospfv3Config && target.ospfv3Config.addressFamilies) {
+        const af = (context.targetAfProto as 'ipv4' | 'ipv6') || 'ipv4';
+        const afCfg = target.ospfv3Config.addressFamilies.get(af);
+        if (afCfg && !afCfg.passiveInterfaces.includes(norm)) {
+          afCfg.passiveInterfaces.push(norm);
+        }
       }
       return { output: '' };
+    }
+
+    // redistribute in router-af-config (e.g. under ospfv3 AF)
+    if ('redistribute'.startsWith(cmd0) && tokens.length >= 2) {
+      const redisProto = tokens[1].toLowerCase();
+      let asOrPid: number | undefined;
+      let metric: number | undefined;
+      let metricType: 'type-1' | 'type-2' | undefined;
+      let routeMap: string | undefined;
+      let includeConnected = false;
+
+      let idx = 2;
+      if (idx < tokens.length && !isNaN(parseInt(tokens[idx], 10))) {
+        asOrPid = parseInt(tokens[idx], 10);
+        idx++;
+      }
+      while (idx < tokens.length) {
+        const t = tokens[idx].toLowerCase();
+        if ((t === 'metric-type' || t.startsWith('metric-t')) && idx + 1 < tokens.length) {
+          const mt = tokens[idx + 1].toLowerCase();
+          metricType = (mt === '1' || mt === 'type-1') ? 'type-1' : 'type-2';
+          idx += 2;
+        } else if ('metric'.startsWith(t) && idx + 1 < tokens.length) {
+          metric = parseInt(tokens[idx + 1], 10);
+          idx += 2;
+        } else if ('route-map'.startsWith(t) && idx + 1 < tokens.length) {
+          routeMap = tokens[idx + 1];
+          idx += 2;
+        } else if ('include-connected'.startsWith(t)) {
+          includeConnected = true;
+          idx++;
+        } else {
+          idx++;
+        }
+      }
+
+      if (context.targetAfType === 'ospfv3' && target.ospfv3Config) {
+        const af = (context.targetAfProto as 'ipv4' | 'ipv6') || 'ipv4';
+        if (!target.ospfv3Config.addressFamilies) target.ospfv3Config.addressFamilies = new Map();
+        if (!target.ospfv3Config.addressFamilies.has(af)) {
+          target.ospfv3Config.addressFamilies.set(af, { passiveInterfaces: [], redistributions: [] });
+        }
+        const afCfg = target.ospfv3Config.addressFamilies.get(af)!;
+        if (!afCfg.redistributions) afCfg.redistributions = [];
+        afCfg.redistributions = afCfg.redistributions.filter(r => r.protocol !== redisProto);
+        afCfg.redistributions.push({
+          protocol: redisProto as any,
+          asOrProcessId: asOrPid,
+          metric,
+          metricType,
+          routeMap,
+          includeConnected
+        });
+        return { output: '' };
+      }
     }
 
     // topology base
@@ -4942,6 +5267,119 @@ export class IOSCommands {
     }
     if (cmd0 === 'end') {
       return { output: '', newMode: 'priv-exec' };
+    }
+
+    // default-metric <bw> <delay> <rel> <load> <mtu>
+    if ('default-metric'.startsWith(cmd0) && tokens.length >= 6) {
+      const bw = parseInt(tokens[1], 10);
+      const delay = parseInt(tokens[2], 10);
+      const rel = parseInt(tokens[3], 10);
+      const load = parseInt(tokens[4], 10);
+      const mtu = parseInt(tokens[5], 10);
+      const dMetric = { bandwidth: bw, delay, reliability: rel, load, mtu };
+      if (context.targetAfProto === 'ipv6' && target.eigrpV6Config) {
+        target.eigrpV6Config.defaultMetric = dMetric;
+      } else if (target.eigrpConfig) {
+        target.eigrpConfig.defaultMetric = dMetric;
+      }
+      return { output: '' };
+    }
+
+    // distribute-list <acl | prefix <name>> <in|out> [iface]
+    if ('distribute-list'.startsWith(cmd0) && tokens.length >= 3) {
+      let acl: number | string | undefined;
+      let prefixName: string | undefined;
+      let dirIdx = 2;
+      if ('prefix'.startsWith(tokens[1].toLowerCase()) && tokens.length >= 4) {
+        prefixName = tokens[2];
+        dirIdx = 3;
+      } else {
+        const parsedAcl = parseInt(tokens[1], 10);
+        acl = !isNaN(parsedAcl) ? parsedAcl : tokens[1];
+      }
+
+      const direction = (tokens[dirIdx]?.toLowerCase() === 'in' ? 'in' : 'out') as 'in' | 'out';
+      const ifaceNorm = tokens.length > dirIdx + 1 ? CliLexer.normalizeInterfaceName(tokens[dirIdx + 1]) : undefined;
+      const cfg = context.targetAfProto === 'ipv6' ? target.eigrpV6Config : target.eigrpConfig;
+      if (cfg) {
+        if (!cfg.distributeLists) cfg.distributeLists = [];
+        cfg.distributeLists.push({ acl, prefixList: prefixName, direction, interfaceName: ifaceNorm });
+      }
+      return { output: '' };
+    }
+
+    // redistribute in topology base
+    if ('redistribute'.startsWith(cmd0) && tokens.length >= 2) {
+      const redisProto = tokens[1].toLowerCase();
+      let asOrPid: number | undefined;
+      let metric: number | undefined;
+      let bandwidth: number | undefined;
+      let delay: number | undefined;
+      let reliability: number | undefined;
+      let load: number | undefined;
+      let mtu: number | undefined;
+      let metricType: 'type-1' | 'type-2' | undefined;
+      let routeMap: string | undefined;
+      let includeConnected = false;
+
+      let idx = 2;
+      if (idx < tokens.length && !isNaN(parseInt(tokens[idx], 10))) {
+        asOrPid = parseInt(tokens[idx], 10);
+        idx++;
+      }
+      while (idx < tokens.length) {
+        const t = tokens[idx].toLowerCase();
+        if ((t === 'metric-type' || t.startsWith('metric-t')) && idx + 1 < tokens.length) {
+          const mt = tokens[idx + 1].toLowerCase();
+          metricType = (mt === '1' || mt === 'type-1') ? 'type-1' : 'type-2';
+          idx += 2;
+        } else if ('metric'.startsWith(t) && idx + 1 < tokens.length) {
+          metric = parseInt(tokens[idx + 1], 10);
+          idx += 2;
+          const metricVals: number[] = [metric];
+          while (idx < tokens.length && !isNaN(parseInt(tokens[idx], 10))) {
+            metricVals.push(parseInt(tokens[idx], 10));
+            idx++;
+          }
+          if (metricVals.length >= 5) {
+            bandwidth = metricVals[0];
+            delay = metricVals[1];
+            reliability = metricVals[2];
+            load = metricVals[3];
+            mtu = metricVals[4];
+          }
+        } else if ('route-map'.startsWith(t) && idx + 1 < tokens.length) {
+          routeMap = tokens[idx + 1];
+          idx += 2;
+        } else if ('include-connected'.startsWith(t)) {
+          includeConnected = true;
+          idx++;
+        } else {
+          idx++;
+        }
+      }
+
+      const redisEntry: RedistributionConfig = {
+        protocol: redisProto as any,
+        asOrProcessId: asOrPid,
+        metric,
+        metricType,
+        routeMap,
+        bandwidth,
+        delay,
+        reliability,
+        load,
+        mtu,
+        includeConnected
+      };
+
+      const cfg = context.targetAfProto === 'ipv6' ? target.eigrpV6Config : target.eigrpConfig;
+      if (cfg) {
+        if (!cfg.redistributions) cfg.redistributions = [];
+        cfg.redistributions = cfg.redistributions.filter(r => r.protocol !== redisProto);
+        cfg.redistributions.push(redisEntry);
+      }
+      return { output: '' };
     }
 
     // variance <num>
@@ -5598,20 +6036,37 @@ tcp  203.0.113.1:49201      192.168.1.10:49201     198.51.100.5:80        198.51
   }
 
   private static renderAccessLists(device: Device): string {
-    if (!(device instanceof Router)) return `% No access lists.`;
-
+    const target = device as Router | Switch;
     const lines: string[] = [];
-    for (const [num, rules] of device.accessLists.entries()) {
-      const type = num <= 99 ? 'Standard' : 'Extended';
-      lines.push(`${type} IP access list ${num}`);
-      let seq = 10;
-      for (const r of rules) {
-        if (num <= 99) {
-          lines.push(`    ${seq} ${r.action} ${r.sourceIp} ${r.sourceWildcard || ''}`.trim());
-        } else {
-          lines.push(`    ${seq} ${r.action} ${r.protocol || 'ip'} ${r.sourceIp} ${r.sourceWildcard || ''} ${r.destIp || ''} ${r.destWildcard || ''}`.trim());
+    if (target.accessLists) {
+      for (const [num, rules] of target.accessLists.entries()) {
+        const type = typeof num === 'number' && num <= 99 ? 'Standard' : 'Extended';
+        lines.push(`${type} IP access list ${num}`);
+        let seq = 10;
+        for (const r of rules) {
+          if (typeof num === 'number' && num <= 99) {
+            lines.push(`    ${seq} ${r.action} ${r.sourceIp} ${r.sourceWildcard || ''}`.trim());
+          } else {
+            lines.push(`    ${seq} ${r.action} ${r.protocol || 'ip'} ${r.sourceIp} ${r.sourceWildcard || ''} ${r.destIp || ''} ${r.destWildcard || ''}`.trim());
+          }
+          seq += 10;
         }
-        seq += 10;
+      }
+    }
+
+    if (target.namedAccessLists) {
+      for (const [name, nacl] of target.namedAccessLists.entries()) {
+        const typeStr = nacl.type === 'standard' ? 'Standard' : 'Extended';
+        lines.push(`${typeStr} IP access list ${name}`);
+        let seq = 10;
+        for (const r of nacl.rules) {
+          if (nacl.type === 'standard') {
+            lines.push(`    ${seq} ${r.action} ${r.sourceIp} ${r.sourceWildcard || ''}`.trim());
+          } else {
+            lines.push(`    ${seq} ${r.action} ${r.protocol || 'ip'} ${r.sourceIp} ${r.sourceWildcard || ''} ${r.destIp || ''} ${r.destWildcard || ''}`.trim());
+          }
+          seq += 10;
+        }
       }
     }
 

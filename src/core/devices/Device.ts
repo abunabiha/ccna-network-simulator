@@ -162,6 +162,10 @@ export abstract class Device {
         return `${host}(config-router-af-interface)#`;
       case 'router-af-topology-config':
         return `${host}(config-router-af-topology)#`;
+      case 'std-nacl-config':
+        return `${host}(config-std-nacl)#`;
+      case 'ext-nacl-config':
+        return `${host}(config-ext-nacl)#`;
       default:
         return `${host}>`;
     }

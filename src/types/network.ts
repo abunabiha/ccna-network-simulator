@@ -459,16 +459,23 @@ export interface OspfConfig {
   redistributions?: RedistributionConfig[];
 }
 
+export interface OspfV3AddressFamilyConfig {
+  passiveInterfaces: string[];
+  redistributions?: RedistributionConfig[];
+}
+
 export interface OspfV3Config {
   enabled: boolean;
   processId: number;
   routerId?: string;
   areaTypes?: Record<number, 'stub' | 'totally-stubby' | 'nssa' | 'totally-nssa'>;
   passiveInterfaces: string[];
+  redistributions?: RedistributionConfig[];
+  addressFamilies?: Map<'ipv4' | 'ipv6', OspfV3AddressFamilyConfig>;
 }
 
 export interface RedistributionConfig {
-  protocol: 'ospf' | 'eigrp' | 'bgp' | 'static' | 'connected';
+  protocol: 'ospf' | 'ospfv3' | 'eigrp' | 'bgp' | 'static' | 'connected';
   asOrProcessId?: number;
   metric?: number;
   metricType?: '1' | '2' | 'type-1' | 'type-2';
@@ -479,6 +486,7 @@ export interface RedistributionConfig {
   load?: number;
   mtu?: number;
   routeMap?: string;
+  includeConnected?: boolean;
 }
 
 export interface KeyChainKey {
@@ -510,7 +518,14 @@ export interface EigrpConfig {
   autoSummary?: boolean;
   variance?: number;
   stub?: EigrpStubConfig;
-  distributeLists?: Array<{ prefixList: string; direction: 'in' | 'out'; interfaceName?: string }>;
+  distributeLists?: Array<{ acl?: number | string; prefixList?: string; direction: 'in' | 'out'; interfaceName?: string }>;
+  defaultMetric?: {
+    bandwidth: number;
+    delay: number;
+    reliability: number;
+    load: number;
+    mtu: number;
+  };
   redistributions?: RedistributionConfig[];
 }
 
@@ -523,6 +538,14 @@ export interface EigrpV6Config {
   passiveInterfaces: string[];
   passiveInterfaceDefault?: boolean;
   variance?: number;
+  distributeLists?: Array<{ acl?: number | string; prefixList?: string; direction: 'in' | 'out'; interfaceName?: string }>;
+  defaultMetric?: {
+    bandwidth: number;
+    delay: number;
+    reliability: number;
+    load: number;
+    mtu: number;
+  };
   redistributions?: RedistributionConfig[];
 }
 
@@ -605,7 +628,8 @@ export interface AsPathAcl {
 export interface RouteMapClause {
   sequence: number;
   action: 'permit' | 'deny';
-  matchAcl?: number;
+  description?: string;
+  matchAcl?: number | string;
   matchPrefixList?: string;
   matchIpv6AddressPrefixList?: string;
   matchAsPath?: number;
@@ -658,7 +682,7 @@ export interface TrackObject {
 }
 
 export interface AclRule {
-  number: number;              // 1-99 Standard, 100-199 Extended
+  number: number | string;     // 1-99 Standard, 100-199 Extended, or named
   action: 'permit' | 'deny';
   protocol?: 'ip' | 'icmp' | 'tcp' | 'udp';
   sourceIp: string;            // 'any', 'host 1.2.3.4', or '192.168.1.0'
@@ -666,6 +690,13 @@ export interface AclRule {
   destIp?: string;
   destWildcard?: string;
   destPort?: number | string;  // e.g. 80, 22, 23
+}
+
+export interface NamedAcl {
+  name: string;
+  type: 'standard' | 'extended';
+  remarks?: string[];
+  rules: AclRule[];
 }
 
 export interface DhcpPool {

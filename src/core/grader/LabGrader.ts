@@ -178,17 +178,23 @@ export class LabGrader {
     }
 
     // Check OSPF Configuration
-    if (prop === 'ospf_configured' && device instanceof Router) {
-      const ospf = device.ospfConfig;
-      const passed = !!(ospf && ospf.enabled && ospf.networks.length > 0);
+    if (prop === 'ospf_configured' && (device instanceof Router || (device instanceof Switch && device.isLayer3))) {
+      const dev = device as Router;
+      const ospf = dev.ospfConfig;
+      let passed = !!(ospf && ospf.enabled);
+      if (passed && typeof expected === 'number') {
+        passed = ospf!.processId === expected;
+      } else if (passed && expected === true) {
+        passed = ospf!.networks.length > 0;
+      }
       return {
         taskId: task.id,
         passed,
         earnedPoints: passed ? task.points : 0,
         maxPoints: task.points,
         diagnostic: passed
-          ? `Proses OSPF aktif dengan ${ospf?.networks.length} network statement.`
-          : `OSPF belum aktif atau belum memiliki statement network.`
+          ? `Proses OSPF ${ospf?.processId || ''} aktif pada ${device.hostname}.`
+          : `OSPF belum aktif atau belum memiliki statement network pada ${device.hostname}.`
       };
     }
 
@@ -685,11 +691,13 @@ export class LabGrader {
         const clauses = exp.sequence ? rm.clauses.filter(c => c.sequence === exp.sequence) : rm.clauses;
         passed = clauses.some(c => {
           if (exp.action && c.action !== exp.action) return false;
-          if (exp.matchAcl !== undefined && c.matchAcl !== exp.matchAcl) return false;
+          if (exp.matchAcl !== undefined && String(c.matchAcl) !== String(exp.matchAcl)) return false;
           if (exp.matchPrefixList !== undefined && c.matchPrefixList !== exp.matchPrefixList) return false;
           if (exp.matchIpv6AddressPrefixList !== undefined && c.matchIpv6AddressPrefixList !== exp.matchIpv6AddressPrefixList) return false;
           if (exp.matchAsPath !== undefined && c.matchAsPath !== exp.matchAsPath) return false;
           if (exp.setMetric !== undefined && c.setMetric !== exp.setMetric) return false;
+          if (exp.setMetricType !== undefined && c.setMetricType !== exp.setMetricType) return false;
+          if (exp.setIpNextHop !== undefined && c.setIpNextHop !== exp.setIpNextHop) return false;
           if (exp.setWeight !== undefined && c.setWeight !== exp.setWeight) return false;
           if (exp.setLocalPreference !== undefined && c.setLocalPreference !== exp.setLocalPreference) return false;
           if (exp.setAsPathPrepend !== undefined && c.setAsPathPrepend !== exp.setAsPathPrepend) return false;
@@ -704,6 +712,120 @@ export class LabGrader {
         diagnostic: passed
           ? `Route-map '${exp.name}' clause telah dikonfigurasi dengan benar pada ${device.hostname}.`
           : `Route-map '${exp?.name}' clause belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Redistribution check
+    if (prop === 'redistribution_configured' && (device instanceof Router || device instanceof Switch)) {
+      let passed = false;
+      const exp = expected as any;
+      if (exp && exp.protocol) {
+        let redisList: any[] = [];
+        if (exp.protocol === 'ospf' && device.ospfConfig) {
+          redisList = device.ospfConfig.redistributions || [];
+        } else if (exp.protocol === 'ospfv3' && device.ospfv3Config) {
+          if (exp.af && device.ospfv3Config.addressFamilies && device.ospfv3Config.addressFamilies.has(exp.af)) {
+            redisList = device.ospfv3Config.addressFamilies.get(exp.af)!.redistributions || [];
+          } else {
+            redisList = device.ospfv3Config.redistributions || [];
+            if (device.ospfv3Config.addressFamilies) {
+              for (const afCfg of device.ospfv3Config.addressFamilies.values()) {
+                if (afCfg.redistributions) redisList = redisList.concat(afCfg.redistributions);
+              }
+            }
+          }
+        } else if (exp.protocol === 'eigrp' && device.eigrpConfig) {
+          redisList = device.eigrpConfig.redistributions || [];
+        } else if (exp.protocol === 'eigrp-v6' && device.eigrpV6Config) {
+          redisList = device.eigrpV6Config.redistributions || [];
+        }
+
+        passed = redisList.some(r => {
+          if (exp.redisProtocol && r.protocol !== exp.redisProtocol) return false;
+          if (exp.asOrProcessId !== undefined && r.asOrProcessId !== exp.asOrProcessId) return false;
+          if (exp.metric !== undefined && r.metric !== exp.metric && r.bandwidth !== exp.metric) return false;
+          if (exp.metricType && r.metricType !== exp.metricType) return false;
+          if (exp.routeMap && r.routeMap !== exp.routeMap) return false;
+          return true;
+        });
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Redistribusi '${exp.redisProtocol}' ke dalam '${exp.protocol}' terkonfigurasi pada ${device.hostname}.`
+          : `Redistribusi '${exp?.redisProtocol}' ke dalam '${exp?.protocol}' belum terkonfigurasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Distribute-list check
+    if (prop === 'distribute_list' && (device instanceof Router || device instanceof Switch)) {
+      let passed = false;
+      const exp = expected as any;
+      const cfg = exp.protocol === 'eigrp-v6' ? device.eigrpV6Config : device.eigrpConfig;
+      if (cfg && cfg.distributeLists) {
+        passed = cfg.distributeLists.some(dl => {
+          if (exp.direction && dl.direction !== exp.direction) return false;
+          if (exp.prefixList && dl.prefixList !== exp.prefixList) return false;
+          if (exp.acl && String(dl.acl) !== String(exp.acl)) return false;
+          if (exp.interfaceName && dl.interfaceName && dl.interfaceName.toLowerCase() !== exp.interfaceName.toLowerCase()) return false;
+          return true;
+        });
+      }
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Distribute-list telah terkonfigurasi pada ${device.hostname}.`
+          : `Distribute-list belum sesuai spesifikasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: PBR Interface Policy check
+    if (prop === 'pbr_interface_policy' && (device instanceof Router || device instanceof Switch)) {
+      const iface = task.targetInterface ? device.getInterface(task.targetInterface) : undefined;
+      const passed = iface ? iface.ipPolicyRouteMap === String(expected) : false;
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `PBR policy route-map '${expected}' aktif pada interface ${task.targetInterface} di ${device.hostname}.`
+          : `PBR policy route-map '${expected}' belum terpasang pada interface ${task.targetInterface} di ${device.hostname}.`
+      };
+    }
+
+    // CCNP: PBR Local Policy check
+    if (prop === 'pbr_local_policy' && (device instanceof Router || device instanceof Switch)) {
+      const passed = (device as any).ipLocalPolicyRouteMap === String(expected);
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Local PBR policy route-map '${expected}' telah terkonfigurasi pada ${device.hostname}.`
+          : `Local PBR policy route-map '${expected}' belum terkonfigurasi pada ${device.hostname}.`
+      };
+    }
+
+    // CCNP: Named ACL existence
+    if (prop === 'named_acl_exists' && (device instanceof Router || device instanceof Switch)) {
+      const nacls = (device as any).namedAccessLists as Map<string, any>;
+      const passed = !!(nacls && nacls.has(String(expected)));
+      return {
+        taskId: task.id,
+        passed,
+        earnedPoints: passed ? task.points : 0,
+        maxPoints: task.points,
+        diagnostic: passed
+          ? `Named access-list '${expected}' telah terkonfigurasi pada ${device.hostname}.`
+          : `Named access-list '${expected}' belum ditemukan pada ${device.hostname}.`
       };
     }
 

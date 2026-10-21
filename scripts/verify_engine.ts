@@ -1982,7 +1982,211 @@ const runCfgBgpR1 = r1Bgp1.getRunningConfig();
 console.log(`Running-config includes router bgp 65000: ${runCfgBgpR1.includes('router bgp 65000') ? 'PASS' : 'FAIL'}`);
 console.log(`Running-config includes ip as-path access-list 10: ${runCfgBgpR1.includes('ip as-path access-list 10 permit ^$') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, DAN 6 LAB BGP SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+// ==========================================
+// 21. CCNP ENTERPRISE: ROUTING MANIPULATION & PBR LABS
+// ==========================================
+console.log('\n======================================================');
+console.log('21. CCNP ENTERPRISE: ROUTING MANIPULATION & PBR LABS');
+console.log('======================================================');
+
+// --- 21.1 LAB 01: Configure Route Redistribution Between EIGRP and OSPF ---
+console.log('\n--- 21.1 Lab 01: Configure Route Redistribution Between EIGRP and OSPF ---');
+const ccnpRmLab1 = CCNP_LABS.find(l => l.id === 'lab-ccnp-rm-01-redistribution-eigrp-ospf')!;
+console.log(`Found Lab 01: ${ccnpRmLab1.title} (${ccnpRmLab1.tasks.length} tasks)`);
+
+const r1Rm1 = new Router('R1', 'R1', { x: 280, y: 220 });
+const r2Rm1 = new Router('R2', 'R2', { x: 460, y: 220 });
+const r3Rm1 = new Router('R3', 'R3', { x: 640, y: 220 });
+const d1Rm1 = new Switch('D1', 'D1', { x: 100, y: 220 }, true);
+const d2Rm1 = new Switch('D2', 'D2', { x: 820, y: 220 }, true);
+
+// Add loopback interfaces
+r1Rm1.interfaces.set('Loopback0', { id: 'Loopback0', name: 'Loopback0', shortName: 'Lo0', type: 'loopback', status: 'up' });
+r3Rm1.interfaces.set('Loopback0', { id: 'Loopback0', name: 'Loopback0', shortName: 'Lo0', type: 'loopback', status: 'up' });
+d1Rm1.interfaces.set('Loopback41', { id: 'Loopback41', name: 'Loopback41', shortName: 'Lo41', type: 'loopback', status: 'up' });
+d2Rm1.interfaces.set('Loopback0', { id: 'Loopback0', name: 'Loopback0', shortName: 'Lo0', type: 'loopback', status: 'up' });
+
+const rm1Devs = [d1Rm1, r1Rm1, r2Rm1, r3Rm1, d2Rm1];
+
+// R1 OSPFv3 config
+CliParser.execute('ipv6 unicast-routing', { deviceId: 'R1', mode: 'global-config' as const }, r1Rm1, rm1Devs);
+CliParser.execute('router ospfv3 1', { deviceId: 'R1', mode: 'global-config' as const }, r1Rm1, rm1Devs);
+CliParser.execute('router-id 1.1.1.1', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, r1Rm1, rm1Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, r1Rm1, rm1Devs);
+CliParser.execute('passive-interface Loopback0', { deviceId: 'R1', mode: 'router-af-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetAfType: 'ospfv3' as const, targetAfProto: 'ipv4' }, r1Rm1, rm1Devs);
+
+// D1 OSPFv3 config
+CliParser.execute('router ospfv3 1', { deviceId: 'D1', mode: 'global-config' as const }, d1Rm1, rm1Devs);
+CliParser.execute('router-id 11.11.11.11', { deviceId: 'D1', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, d1Rm1, rm1Devs);
+
+// R3 EIGRP Named config
+CliParser.execute('router eigrp CISCO', { deviceId: 'R3', mode: 'global-config' as const }, r3Rm1, rm1Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 64512', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'CISCO' }, r3Rm1, rm1Devs);
+CliParser.execute('eigrp router-id 3.3.3.3', { deviceId: 'R3', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAfType: 'eigrp' as const, targetAfProto: 'ipv4', targetAsNumber: 64512 }, r3Rm1, rm1Devs);
+
+// D2 EIGRP Named config
+CliParser.execute('router eigrp CISCO', { deviceId: 'D2', mode: 'global-config' as const }, d2Rm1, rm1Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 64512', { deviceId: 'D2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'CISCO' }, d2Rm1, rm1Devs);
+CliParser.execute('eigrp router-id 22.22.22.22', { deviceId: 'D2', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAfType: 'eigrp' as const, targetAfProto: 'ipv4', targetAsNumber: 64512 }, d2Rm1, rm1Devs);
+
+// R2 (ASBR) OSPFv3 & EIGRP Named configuration
+CliParser.execute('router ospfv3 1', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm1, rm1Devs);
+CliParser.execute('router-id 2.2.2.2', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, r2Rm1, rm1Devs);
+
+CliParser.execute('router eigrp CISCO', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm1, rm1Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 64512', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'CISCO' }, r2Rm1, rm1Devs);
+CliParser.execute('eigrp router-id 2.2.2.2', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAfType: 'eigrp' as const, targetAfProto: 'ipv4', targetAsNumber: 64512 }, r2Rm1, rm1Devs);
+
+// R2 EIGRP IPv4 redistribution: redistribute ospfv3 1 metric 1000000 10 255 1 1500
+CliParser.execute('topology base', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAfType: 'eigrp' as const, targetAfProto: 'ipv4', targetAsNumber: 64512 }, r2Rm1, rm1Devs);
+CliParser.execute('redistribute ospfv3 1 metric 1000000 10 255 1 1500', { deviceId: 'R2', mode: 'router-af-topology-config' as const, targetAfProto: 'ipv4' }, r2Rm1, rm1Devs);
+CliParser.execute('exit-af-topology', { deviceId: 'R2', mode: 'router-af-topology-config' as const }, r2Rm1, rm1Devs);
+CliParser.execute('exit-address-family', { deviceId: 'R2', mode: 'router-af-config' as const }, r2Rm1, rm1Devs);
+
+// R2 EIGRP IPv6 redistribution: default-metric 1000000 10 255 1 1500, redistribute ospf 1 include-connected
+CliParser.execute('address-family ipv6 unicast autonomous-system 64512', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'CISCO' }, r2Rm1, rm1Devs);
+CliParser.execute('topology base', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAfType: 'eigrp' as const, targetAfProto: 'ipv6', targetAsNumber: 64512 }, r2Rm1, rm1Devs);
+CliParser.execute('default-metric 1000000 10 255 1 1500', { deviceId: 'R2', mode: 'router-af-topology-config' as const, targetAfProto: 'ipv6' }, r2Rm1, rm1Devs);
+CliParser.execute('redistribute ospf 1 include-connected', { deviceId: 'R2', mode: 'router-af-topology-config' as const, targetAfProto: 'ipv6' }, r2Rm1, rm1Devs);
+CliParser.execute('exit-af-topology', { deviceId: 'R2', mode: 'router-af-topology-config' as const }, r2Rm1, rm1Devs);
+CliParser.execute('exit-address-family', { deviceId: 'R2', mode: 'router-af-config' as const }, r2Rm1, rm1Devs);
+
+// R2 OSPFv3 IPv4 redistribution: redistribute eigrp 64512 metric-type 1
+CliParser.execute('router ospfv3 1', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm1, rm1Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, r2Rm1, rm1Devs);
+CliParser.execute('redistribute eigrp 64512 metric-type 1', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetAfType: 'ospfv3' as const, targetAfProto: 'ipv4' }, r2Rm1, rm1Devs);
+CliParser.execute('exit-address-family', { deviceId: 'R2', mode: 'router-af-config' as const }, r2Rm1, rm1Devs);
+
+// R2 Route-map E2O & OSPFv3 IPv6 redistribution
+CliParser.execute('route-map E2O permit 10', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm1, rm1Devs);
+CliParser.execute('set metric-type type-1', { deviceId: 'R2', mode: 'route-map-config' as const, targetRouteMapName: 'E2O', targetRouteMapSeq: 10 }, r2Rm1, rm1Devs);
+CliParser.execute('router ospfv3 1', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm1, rm1Devs);
+CliParser.execute('address-family ipv6 unicast', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, r2Rm1, rm1Devs);
+CliParser.execute('redistribute eigrp 64512 route-map E2O include-connected', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetAfType: 'ospfv3' as const, targetAfProto: 'ipv6' }, r2Rm1, rm1Devs);
+
+const reportRm1 = LabGrader.grade(ccnpRmLab1, rm1Devs);
+console.log(`CCNP Routing Manipulation Lab 01 Auto-Grader Evaluation (100% Mastery): ${reportRm1.totalScore === 100 && reportRm1.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportRm1.totalScore}%)`);
+
+// --- 21.2 LAB 02: Manipulate Route Redistribution ---
+console.log('\n--- 21.2 Lab 02: Manipulate Route Redistribution ---');
+const ccnpRmLab2 = CCNP_LABS.find(l => l.id === 'lab-ccnp-rm-02-manipulate-redistribution')!;
+console.log(`Found Lab 02: ${ccnpRmLab2.title} (${ccnpRmLab2.tasks.length} tasks)`);
+
+const r2Rm2 = new Router('R2', 'R2', { x: 460, y: 220 });
+const rm2Devs = [r2Rm2];
+
+// Base EIGRP & OSPFv3 on R2
+CliParser.execute('router eigrp CISCO', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 64512', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'CISCO' }, r2Rm2, rm2Devs);
+CliParser.execute('router ospfv3 1', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, r2Rm2, rm2Devs);
+
+// Standard ACL 5 to filter 10.10.x.x networks from being advertised into EIGRP
+CliParser.execute('access-list 5 deny 10.10.41.0 0.0.0.255', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('access-list 5 deny 10.10.42.0 0.0.0.255', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('access-list 5 deny 10.10.43.0 0.0.0.255', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('access-list 5 deny 10.10.44.0 0.0.0.255', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('access-list 5 permit any', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+
+// Distribute-list 5 out GigabitEthernet0/0/1 under EIGRP topology base
+CliParser.execute('router eigrp CISCO', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('address-family ipv4 unicast autonomous-system 64512', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'eigrp' as const, targetEigrpName: 'CISCO' }, r2Rm2, rm2Devs);
+CliParser.execute('topology base', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'eigrp' as const, targetAfType: 'eigrp' as const, targetAfProto: 'ipv4', targetAsNumber: 64512 }, r2Rm2, rm2Devs);
+CliParser.execute('distribute-list 5 out GigabitEthernet0/0/1', { deviceId: 'R2', mode: 'router-af-topology-config' as const, targetAfProto: 'ipv4' }, r2Rm2, rm2Devs);
+
+// Prefix-list EIGRP_TO_OSPF
+CliParser.execute('ip prefix-list EIGRP_TO_OSPF seq 5 permit 172.16.0.0/16 le 24', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+
+// Route-map RED_TO_OSPF
+CliParser.execute('route-map RED_TO_OSPF permit 10', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('match ip address prefix-list EIGRP_TO_OSPF', { deviceId: 'R2', mode: 'route-map-config' as const, targetRouteMapName: 'RED_TO_OSPF', targetRouteMapSeq: 10 }, r2Rm2, rm2Devs);
+CliParser.execute('set metric 25', { deviceId: 'R2', mode: 'route-map-config' as const, targetRouteMapName: 'RED_TO_OSPF', targetRouteMapSeq: 10 }, r2Rm2, rm2Devs);
+
+// Apply route-map in OSPFv3 redistribution
+CliParser.execute('router ospfv3 1', { deviceId: 'R2', mode: 'global-config' as const }, r2Rm2, rm2Devs);
+CliParser.execute('address-family ipv4 unicast', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetProcessId: 1 }, r2Rm2, rm2Devs);
+CliParser.execute('redistribute eigrp 64512 metric-type 1 route-map RED_TO_OSPF', { deviceId: 'R2', mode: 'router-af-config' as const, targetRoutingProtocol: 'ospfv3' as const, targetAfType: 'ospfv3' as const, targetAfProto: 'ipv4' }, r2Rm2, rm2Devs);
+
+const reportRm2 = LabGrader.grade(ccnpRmLab2, rm2Devs);
+console.log(`CCNP Routing Manipulation Lab 02 Auto-Grader Evaluation (100% Mastery): ${reportRm2.totalScore === 100 && reportRm2.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportRm2.totalScore}%)`);
+
+// --- 21.3 LAB 03: Path Control Using Policy-Based Routing (PBR) ---
+console.log('\n--- 21.3 Lab 03: Path Control Using Policy-Based Routing (PBR) ---');
+const ccnpRmLab3 = CCNP_LABS.find(l => l.id === 'lab-ccnp-rm-03-path-control-pbr')!;
+console.log(`Found Lab 03: ${ccnpRmLab3.title} (${ccnpRmLab3.tasks.length} tasks)`);
+
+const r1Pbr = new Router('R1', 'R1', { x: 280, y: 220 });
+const r2Pbr = new Router('R2', 'R2', { x: 460, y: 150 });
+const r3Pbr = new Router('R3', 'R3', { x: 640, y: 220 });
+const rmPbrDevs = [r1Pbr, r2Pbr, r3Pbr];
+
+// OSPF 123 on R1, R2, R3
+CliParser.execute('router ospf 123', { deviceId: 'R1', mode: 'global-config' as const }, r1Pbr, rmPbrDevs);
+CliParser.execute('router-id 1.1.1.1', { deviceId: 'R1', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 123 }, r1Pbr, rmPbrDevs);
+
+CliParser.execute('router ospf 123', { deviceId: 'R2', mode: 'global-config' as const }, r2Pbr, rmPbrDevs);
+CliParser.execute('router-id 2.2.2.1', { deviceId: 'R2', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 123 }, r2Pbr, rmPbrDevs);
+
+CliParser.execute('router ospf 123', { deviceId: 'R3', mode: 'global-config' as const }, r3Pbr, rmPbrDevs);
+CliParser.execute('router-id 3.3.3.1', { deviceId: 'R3', mode: 'router-config' as const, targetRoutingProtocol: 'ospf' as const, targetProcessId: 123 }, r3Pbr, rmPbrDevs);
+
+// R1: Named Standard ACL Lo2-ACL
+CliParser.execute('ip access-list standard Lo2-ACL', { deviceId: 'R1', mode: 'global-config' as const }, r1Pbr, rmPbrDevs);
+CliParser.execute('remark ACL matches D1 Lo2 traffic', { deviceId: 'R1', mode: 'std-nacl-config' as const, targetAclName: 'Lo2-ACL', targetAclType: 'standard' }, r1Pbr, rmPbrDevs);
+CliParser.execute('permit 10.10.2.0 0.0.0.255', { deviceId: 'R1', mode: 'std-nacl-config' as const, targetAclName: 'Lo2-ACL', targetAclType: 'standard' }, r1Pbr, rmPbrDevs);
+
+// R1: Route-map R1-to-R3
+CliParser.execute('route-map R1-to-R3 permit 10', { deviceId: 'R1', mode: 'global-config' as const }, r1Pbr, rmPbrDevs);
+CliParser.execute('description RM to forward Lo2 traffic to R3', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'R1-to-R3', targetRouteMapSeq: 10 }, r1Pbr, rmPbrDevs);
+CliParser.execute('match ip address Lo2-ACL', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'R1-to-R3', targetRouteMapSeq: 10 }, r1Pbr, rmPbrDevs);
+CliParser.execute('set ip next-hop 172.16.2.2', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'R1-to-R3', targetRouteMapSeq: 10 }, r1Pbr, rmPbrDevs);
+
+// R1: Interface PBR
+CliParser.execute('interface GigabitEthernet0/0/1', { deviceId: 'R1', mode: 'global-config' as const }, r1Pbr, rmPbrDevs);
+CliParser.execute('ip policy route-map R1-to-R3', { deviceId: 'R1', mode: 'interface-config' as const, targetInterface: 'GigabitEthernet0/0/1' }, r1Pbr, rmPbrDevs);
+
+// R1: Named Extended ACL R1-TRAFFIC
+CliParser.execute('ip access-list extended R1-TRAFFIC', { deviceId: 'R1', mode: 'global-config' as const }, r1Pbr, rmPbrDevs);
+CliParser.execute('permit ip any 192.168.1.0 0.0.0.255', { deviceId: 'R1', mode: 'ext-nacl-config' as const, targetAclName: 'R1-TRAFFIC', targetAclType: 'extended' }, r1Pbr, rmPbrDevs);
+
+// R1: Route-map LOCAL-PBR
+CliParser.execute('route-map LOCAL-PBR permit 10', { deviceId: 'R1', mode: 'global-config' as const }, r1Pbr, rmPbrDevs);
+CliParser.execute('match ip address R1-TRAFFIC', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'LOCAL-PBR', targetRouteMapSeq: 10 }, r1Pbr, rmPbrDevs);
+CliParser.execute('set ip next-hop 172.16.2.2', { deviceId: 'R1', mode: 'route-map-config' as const, targetRouteMapName: 'LOCAL-PBR', targetRouteMapSeq: 10 }, r1Pbr, rmPbrDevs);
+
+// R1: Local PBR
+CliParser.execute('ip local policy route-map LOCAL-PBR', { deviceId: 'R1', mode: 'global-config' as const }, r1Pbr, rmPbrDevs);
+
+const reportRm3 = LabGrader.grade(ccnpRmLab3, rmPbrDevs);
+console.log(`CCNP Path Control PBR Lab 03 Auto-Grader Evaluation (100% Mastery): ${reportRm3.totalScore === 100 && reportRm3.isPassed ? 'PASS' : 'FAIL'} (Score: ${reportRm3.totalScore}%)`);
+
+// Test Show Commands & Running Config
+console.log('\n--- Test PBR & Redistribution Show Commands & Running Config ---');
+const showIpPolicyRes = CliParser.execute('show ip policy', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Pbr, rmPbrDevs);
+console.log(`show ip policy displays interface and local policies: ${showIpPolicyRes.output.includes('R1-to-R3') && showIpPolicyRes.output.includes('LOCAL-PBR') ? 'PASS' : 'FAIL'}`);
+
+const showRouteMapRes = CliParser.execute('show route-map', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Pbr, rmPbrDevs);
+console.log(`show route-map displays Lo2-ACL and set ip next-hop: ${showRouteMapRes.output.includes('Lo2-ACL') && showRouteMapRes.output.includes('172.16.2.2') ? 'PASS' : 'FAIL'}`);
+
+const showPrefixListDetail = CliParser.execute('show ip prefix-list detail', { deviceId: 'R2', mode: 'priv-exec' as const }, r2Rm2, rm2Devs);
+console.log(`show ip prefix-list detail executes cleanly: ${showPrefixListDetail.output.includes('EIGRP_TO_OSPF') ? 'PASS' : 'FAIL'}`);
+
+const showAclRes = CliParser.execute('show access-lists', { deviceId: 'R1', mode: 'priv-exec' as const }, r1Pbr, rmPbrDevs);
+console.log(`show access-lists displays standard and extended named ACLs: ${showAclRes.output.includes('Lo2-ACL') && showAclRes.output.includes('R1-TRAFFIC') ? 'PASS' : 'FAIL'}`);
+
+const runCfgR1Pbr = r1Pbr.getRunningConfig();
+console.log(`R1 running-config includes ip policy route-map: ${runCfgR1Pbr.includes('ip policy route-map R1-to-R3') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ip local policy route-map: ${runCfgR1Pbr.includes('ip local policy route-map LOCAL-PBR') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ip access-list standard Lo2-ACL: ${runCfgR1Pbr.includes('ip access-list standard Lo2-ACL') ? 'PASS' : 'FAIL'}`);
+console.log(`R1 running-config includes ip access-list extended R1-TRAFFIC: ${runCfgR1Pbr.includes('ip access-list extended R1-TRAFFIC') ? 'PASS' : 'FAIL'}`);
+
+const runCfgR2Rm2 = r2Rm2.getRunningConfig();
+console.log(`R2 running-config includes distribute-list 5 out: ${runCfgR2Rm2.includes('distribute-list 5 out GigabitEthernet0/0/1') ? 'PASS' : 'FAIL'}`);
+console.log(`R2 running-config includes ip prefix-list EIGRP_TO_OSPF: ${runCfgR2Rm2.includes('ip prefix-list EIGRP_TO_OSPF') ? 'PASS' : 'FAIL'}`);
+console.log(`R2 running-config includes route-map RED_TO_OSPF: ${runCfgR2Rm2.includes('route-map RED_TO_OSPF permit 10') ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, 6 LAB BGP, DAN 3 LAB ROUTING MANIPULATION & PBR SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+
 
 
 

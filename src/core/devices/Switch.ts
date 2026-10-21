@@ -1,5 +1,5 @@
 import { Device } from './Device';
-import { DevicePosition, VlanInfo, MacTableEntry, RouteEntry, DhcpPool, OspfConfig, OspfV3Config, EigrpConfig, EigrpV6Config, BgpConfig, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry } from '../../types/network';
+import { DevicePosition, VlanInfo, MacTableEntry, RouteEntry, DhcpPool, OspfConfig, OspfV3Config, EigrpConfig, EigrpV6Config, BgpConfig, RouteMap, IpPrefixList, IpSlaConfig, TrackObject, VrfConfig, MplsLabelEntry, AclRule, NamedAcl } from '../../types/network';
 import { CliContext, CliExecutionResult } from '../../types/cli';
 import { SubnetUtils } from '../network/Subnet';
 
@@ -20,6 +20,9 @@ export class Switch extends Device {
   defaultGateway?: string;
   dhcpPools: Map<string, DhcpPool> = new Map();
   dhcpExcludedAddresses: string[] = [];
+  accessLists: Map<number | string, AclRule[]> = new Map();
+  namedAccessLists: Map<string, NamedAcl> = new Map();
+  ipLocalPolicyRouteMap?: string;
   routeMaps: Map<string, RouteMap> = new Map();
   prefixLists: Map<string, IpPrefixList> = new Map();
   ipSlas: Map<number, IpSlaConfig> = new Map();
@@ -565,6 +568,27 @@ export class Switch extends Device {
     if (this.ospfv3Config && this.ospfv3Config.enabled) {
       lines.push(`router ospfv3 ${this.ospfv3Config.processId}`);
       if (this.ospfv3Config.routerId) lines.push(` router-id ${this.ospfv3Config.routerId}`);
+      if (this.ospfv3Config.addressFamilies) {
+        for (const [afName, afCfg] of this.ospfv3Config.addressFamilies.entries()) {
+          lines.push(` !`);
+          lines.push(` address-family ${afName} unicast`);
+          for (const p of afCfg.passiveInterfaces) {
+            lines.push(`  passive-interface ${p}`);
+          }
+          if (afCfg.redistributions) {
+            for (const r of afCfg.redistributions) {
+              let cmd = `  redistribute ${r.protocol}`;
+              if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+              if (r.metricType) cmd += ` metric-type ${r.metricType === 'type-1' ? '1' : r.metricType === 'type-2' ? '2' : r.metricType}`;
+              if (r.metric !== undefined) cmd += ` metric ${r.metric}`;
+              if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+              if (r.includeConnected) cmd += ` include-connected`;
+              lines.push(cmd);
+            }
+          }
+          lines.push(` exit-address-family`);
+        }
+      }
       lines.push('!');
     }
 
@@ -588,9 +612,40 @@ export class Switch extends Device {
             lines.push(`  passive-interface ${p}`);
           }
         }
-        if (this.eigrpConfig.variance) {
+        const hasTopology = this.eigrpConfig.variance || (this.eigrpConfig.distributeLists && this.eigrpConfig.distributeLists.length > 0) || this.eigrpConfig.defaultMetric || (this.eigrpConfig.redistributions && this.eigrpConfig.redistributions.length > 0);
+        if (hasTopology) {
           lines.push(`  topology base`);
-          lines.push(`   variance ${this.eigrpConfig.variance}`);
+          if (this.eigrpConfig.distributeLists) {
+            for (const dl of this.eigrpConfig.distributeLists) {
+              if (dl.prefixList) {
+                lines.push(`   distribute-list prefix ${dl.prefixList} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+              } else if (dl.acl) {
+                lines.push(`   distribute-list ${dl.acl} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+              }
+            }
+          }
+          if (this.eigrpConfig.variance) {
+            lines.push(`   variance ${this.eigrpConfig.variance}`);
+          }
+          if (this.eigrpConfig.defaultMetric) {
+            const dm = this.eigrpConfig.defaultMetric;
+            lines.push(`   default-metric ${dm.bandwidth} ${dm.delay} ${dm.reliability} ${dm.load} ${dm.mtu}`);
+          }
+          if (this.eigrpConfig.redistributions) {
+            for (const r of this.eigrpConfig.redistributions) {
+              let cmd = `   redistribute ${r.protocol}`;
+              if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+              if (r.bandwidth && r.delay) {
+                cmd += ` metric ${r.bandwidth} ${r.delay} ${r.reliability || 255} ${r.load || 1} ${r.mtu || 1500}`;
+              } else if (r.metric) {
+                cmd += ` metric ${r.metric}`;
+              }
+              if (r.metricType) cmd += ` metric-type ${r.metricType}`;
+              if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+              if (r.includeConnected) cmd += ` include-connected`;
+              lines.push(cmd);
+            }
+          }
           lines.push(`  exit-af-topology`);
         }
         if (this.eigrpConfig.stub && this.eigrpConfig.stub.enabled) {
@@ -624,21 +679,26 @@ export class Switch extends Device {
         }
         if (this.eigrpConfig.distributeLists) {
           for (const dl of this.eigrpConfig.distributeLists) {
-            lines.push(` distribute-list prefix ${dl.prefixList} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+            if (dl.prefixList) {
+              lines.push(` distribute-list prefix ${dl.prefixList} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+            } else if (dl.acl) {
+              lines.push(` distribute-list ${dl.acl} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+            }
           }
         }
-      }
-      if (this.eigrpConfig.redistributions) {
-        for (const r of this.eigrpConfig.redistributions) {
-          let cmd = ` redistribute ${r.protocol}`;
-          if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
-          if (r.bandwidth && r.delay) {
-            cmd += ` metric ${r.bandwidth} ${r.delay} ${r.reliability || 255} ${r.load || 1} ${r.mtu || 1500}`;
-          } else if (r.metric) {
-            cmd += ` metric ${r.metric}`;
+        if (this.eigrpConfig.redistributions) {
+          for (const r of this.eigrpConfig.redistributions) {
+            let cmd = ` redistribute ${r.protocol}`;
+            if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+            if (r.bandwidth && r.delay) {
+              cmd += ` metric ${r.bandwidth} ${r.delay} ${r.reliability || 255} ${r.load || 1} ${r.mtu || 1500}`;
+            } else if (r.metric) {
+              cmd += ` metric ${r.metric}`;
+            }
+            if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+            if (r.includeConnected) cmd += ` include-connected`;
+            lines.push(cmd);
           }
-          if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
-          lines.push(cmd);
         }
       }
       lines.push('!');
@@ -655,9 +715,40 @@ export class Switch extends Device {
           const opts = this.eigrpV6Config.stub.options?.length ? ' ' + this.eigrpV6Config.stub.options.join(' ') : '';
           lines.push(`  eigrp stub${opts}`);
         }
-        if (this.eigrpV6Config.variance) {
+        const hasV6Topology = this.eigrpV6Config.variance || (this.eigrpV6Config.distributeLists && this.eigrpV6Config.distributeLists.length > 0) || this.eigrpV6Config.defaultMetric || (this.eigrpV6Config.redistributions && this.eigrpV6Config.redistributions.length > 0);
+        if (hasV6Topology) {
           lines.push(`  topology base`);
-          lines.push(`   variance ${this.eigrpV6Config.variance}`);
+          if (this.eigrpV6Config.distributeLists) {
+            for (const dl of this.eigrpV6Config.distributeLists) {
+              if (dl.prefixList) {
+                lines.push(`   distribute-list prefix ${dl.prefixList} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+              } else if (dl.acl) {
+                lines.push(`   distribute-list ${dl.acl} ${dl.direction}${dl.interfaceName ? ' ' + dl.interfaceName : ''}`);
+              }
+            }
+          }
+          if (this.eigrpV6Config.variance) {
+            lines.push(`   variance ${this.eigrpV6Config.variance}`);
+          }
+          if (this.eigrpV6Config.defaultMetric) {
+            const dm = this.eigrpV6Config.defaultMetric;
+            lines.push(`   default-metric ${dm.bandwidth} ${dm.delay} ${dm.reliability} ${dm.load} ${dm.mtu}`);
+          }
+          if (this.eigrpV6Config.redistributions) {
+            for (const r of this.eigrpV6Config.redistributions) {
+              let cmd = `   redistribute ${r.protocol}`;
+              if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+              if (r.bandwidth && r.delay) {
+                cmd += ` metric ${r.bandwidth} ${r.delay} ${r.reliability || 255} ${r.load || 1} ${r.mtu || 1500}`;
+              } else if (r.metric) {
+                cmd += ` metric ${r.metric}`;
+              }
+              if (r.metricType) cmd += ` metric-type ${r.metricType}`;
+              if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+              if (r.includeConnected) cmd += ` include-connected`;
+              lines.push(cmd);
+            }
+          }
           lines.push(`  exit-af-topology`);
         }
         lines.push(` exit-address-family`);
@@ -676,6 +767,20 @@ export class Switch extends Device {
         }
         if (this.eigrpV6Config.variance) {
           lines.push(` variance ${this.eigrpV6Config.variance}`);
+        }
+        if (this.eigrpV6Config.redistributions) {
+          for (const r of this.eigrpV6Config.redistributions) {
+            let cmd = ` redistribute ${r.protocol}`;
+            if (r.asOrProcessId) cmd += ` ${r.asOrProcessId}`;
+            if (r.bandwidth && r.delay) {
+              cmd += ` metric ${r.bandwidth} ${r.delay} ${r.reliability || 255} ${r.load || 1} ${r.mtu || 1500}`;
+            } else if (r.metric) {
+              cmd += ` metric ${r.metric}`;
+            }
+            if (r.routeMap) cmd += ` route-map ${r.routeMap}`;
+            if (r.includeConnected) cmd += ` include-connected`;
+            lines.push(cmd);
+          }
         }
       }
       lines.push('!');
@@ -812,6 +917,7 @@ export class Switch extends Device {
     for (const rm of this.routeMaps.values()) {
       for (const c of rm.clauses) {
         lines.push(`route-map ${rm.name} ${c.action} ${c.sequence}`);
+        if (c.description) lines.push(` description ${c.description}`);
         if (c.matchAcl) lines.push(` match ip address ${c.matchAcl}`);
         if (c.matchPrefixList) lines.push(` match ip address prefix-list ${c.matchPrefixList}`);
         if (c.matchIpv6AddressPrefixList) lines.push(` match ipv6 address prefix-list ${c.matchIpv6AddressPrefixList}`);
@@ -821,13 +927,17 @@ export class Switch extends Device {
         if (c.setMetric !== undefined) lines.push(` set metric ${c.setMetric}`);
         if (c.setMetricType) lines.push(` set metric-type ${c.setMetricType}`);
         if (c.setTag !== undefined) lines.push(` set tag ${c.setTag}`);
-        if (c.setIpNextHop) lines.push(` set ip next-hop ${c.setIpNextHop}`);
+        if (c.setIpNextHop && !c.setIpNextHopTrack) lines.push(` set ip next-hop ${c.setIpNextHop}`);
         if (c.setIpNextHopTrack) lines.push(` set ip next-hop verify-availability ${c.setIpNextHopTrack.nextHop} 1 track ${c.setIpNextHopTrack.trackId}`);
         if (c.setWeight !== undefined) lines.push(` set weight ${c.setWeight}`);
         if (c.setLocalPreference !== undefined) lines.push(` set local-preference ${c.setLocalPreference}`);
         if (c.setAsPathPrepend) lines.push(` set as-path prepend ${c.setAsPathPrepend}`);
         lines.push('!');
       }
+    }
+
+    if (this.ipLocalPolicyRouteMap) {
+      lines.push(`ip local policy route-map ${this.ipLocalPolicyRouteMap}`);
     }
 
     // IP SLA & Track
@@ -856,6 +966,37 @@ export class Switch extends Device {
           const next = route.nextHop || route.exitInterface;
           lines.push(`ip route vrf ${vrf.name} ${route.network} ${route.mask} ${next}`);
         }
+      }
+    }
+
+    // Access lists
+    for (const [num, rules] of this.accessLists.entries()) {
+      for (const r of rules) {
+        if (typeof num === 'number' && num <= 99) {
+          lines.push(`access-list ${num} ${r.action} ${r.sourceIp} ${r.sourceWildcard || ''}`.trim());
+        } else {
+          lines.push(`access-list ${num} ${r.action} ${r.protocol || 'ip'} ${r.sourceIp} ${r.sourceWildcard || ''} ${r.destIp || ''} ${r.destWildcard || ''}`.trim());
+        }
+      }
+    }
+
+    // Named Access Lists
+    if (this.namedAccessLists) {
+      for (const nacl of this.namedAccessLists.values()) {
+        lines.push(`ip access-list ${nacl.type} ${nacl.name}`);
+        if (nacl.remarks) {
+          for (const rem of nacl.remarks) {
+            lines.push(` remark ${rem}`);
+          }
+        }
+        for (const r of nacl.rules) {
+          if (nacl.type === 'standard') {
+            lines.push(` ${r.action} ${r.sourceIp}${r.sourceWildcard ? ' ' + r.sourceWildcard : ''}`);
+          } else {
+            lines.push(` ${r.action} ${r.protocol || 'ip'} ${r.sourceIp}${r.sourceWildcard ? ' ' + r.sourceWildcard : ''}${r.destIp ? ' ' + r.destIp : ''}${r.destWildcard ? ' ' + r.destWildcard : ''}`.trim());
+          }
+        }
+        lines.push('!');
       }
     }
 

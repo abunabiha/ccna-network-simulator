@@ -79,8 +79,19 @@ export class PolicyEngine {
       // 2. match ip address (ACL)
       if (matches && clause.matchAcl !== undefined) {
         let aclMatched = false;
-        if (device instanceof Router) {
-          const rules = device.accessLists.get(clause.matchAcl) || [];
+        if (device instanceof Router || device instanceof Switch) {
+          const target = device as Router | Switch;
+          let rules: any[] = [];
+          if (typeof clause.matchAcl === 'number') {
+            rules = target.accessLists.get(clause.matchAcl) || [];
+          } else {
+            const numAcl = parseInt(String(clause.matchAcl), 10);
+            if (!isNaN(numAcl)) {
+              rules = target.accessLists.get(numAcl) || [];
+            } else if (target.namedAccessLists && target.namedAccessLists.has(String(clause.matchAcl))) {
+              rules = target.namedAccessLists.get(String(clause.matchAcl))!.rules;
+            }
+          }
           for (const r of rules) {
             if (r.sourceIp === 'any') {
               aclMatched = r.action === 'permit';

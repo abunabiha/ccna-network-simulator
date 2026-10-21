@@ -1491,5 +1491,359 @@ export const CCNP_LABS: LabDefinition[] = [
         { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
       ]
     }
+  },
+
+  // ==========================================
+  // ROUTING MANIPULATION & PBR LABS
+  // ==========================================
+  {
+    id: 'lab-ccnp-rm-01-redistribution-eigrp-ospf',
+    title: 'CCNP Enterprise: Configure Route Redistribution Between EIGRP and OSPF',
+    track: 'CCNP',
+    category: 'Routing Manipulation & PBR',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 60,
+    difficulty: 'Advanced',
+    scenario: 'Perusahaan multinasional sedang mengintegrasikan domain routing OSPFv3 dan EIGRP Named Mode pada ASBR Router R2. Anda ditugaskan mengonfigurasi redistribusi dua arah (two-way redistribution) untuk IPv4 dan IPv6 antara OSPFv3 Process 1 dan EIGRP CISCO AS 64512 dengan seed metric yang tepat dan include-connected, sehingga seluruh host dan loopback di kedua domain routing dapat saling berkomunikasi secara penuh.',
+    objectives: [
+      'Konfigurasi routing OSPFv3 Process 1 pada Router R1, Switch D1, dan Router R2 (Area 0 dan Area 11).',
+      'Konfigurasi EIGRP Named Mode (CISCO, AS 64512) pada Router R2, Router R3, dan Switch D2 untuk IPv4 dan IPv6.',
+      'Konfigurasi redistribusi OSPFv3 ke EIGRP pada ASBR R2 dengan seed metric 1000000 10 255 1 1500 (IPv4) dan default-metric include-connected (IPv6).',
+      'Konfigurasi redistribusi EIGRP ke OSPFv3 pada ASBR R2 dengan metric-type 1 (IPv4) dan route-map E2O include-connected (IPv6).',
+      'Verifikasi tabel routing dan konektivitas end-to-end IPv4 dan IPv6 di seluruh topologi.'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-rm1-1',
+        description: 'Pastikan OSPFv3 Process 1 aktif pada Router R1 dengan passive-interface Loopback0',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ospfv3_enabled',
+        expectedValue: 1,
+        hint: 'router ospfv3 1 -> address-family ipv4 unicast -> passive-interface Loopback0'
+      },
+      {
+        id: 'task-ccnp-rm1-2',
+        description: 'Pastikan OSPFv3 Process 1 aktif pada Switch D1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'D1',
+        expectedProperty: 'ospfv3_enabled',
+        expectedValue: 1,
+        hint: 'router ospfv3 1 -> router-id 11.11.11.11'
+      },
+      {
+        id: 'task-ccnp-rm1-3',
+        description: 'Pastikan EIGRP Named Mode CISCO AS 64512 IPv4 dan IPv6 aktif pada Router R3',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: 64512,
+        hint: 'router eigrp CISCO -> address-family ipv4 unicast autonomous-system 64512'
+      },
+      {
+        id: 'task-ccnp-rm1-4',
+        description: 'Pastikan EIGRP Named Mode CISCO AS 64512 aktif pada Switch D2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'D2',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: 64512,
+        hint: 'router eigrp CISCO -> address-family ipv4 unicast autonomous-system 64512'
+      },
+      {
+        id: 'task-ccnp-rm1-5',
+        description: 'Konfigurasi OSPFv3 Process 1 pada ASBR Router R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'ospfv3_enabled',
+        expectedValue: 1,
+        hint: 'router ospfv3 1 -> router-id 2.2.2.2'
+      },
+      {
+        id: 'task-ccnp-rm1-6',
+        description: 'Konfigurasi EIGRP Named Mode CISCO AS 64512 pada ASBR Router R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'eigrp_configured',
+        expectedValue: 64512,
+        hint: 'router eigrp CISCO -> address-family ipv4 unicast autonomous-system 64512'
+      },
+      {
+        id: 'task-ccnp-rm1-7',
+        description: 'Konfigurasi redistribusi OSPFv3 ke EIGRP IPv4 pada R2 dengan seed metric 1000000 10 255 1 1500',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'redistribution_configured',
+        expectedValue: { protocol: 'eigrp', redisProtocol: 'ospfv3', asOrProcessId: 1, metric: 1000000 },
+        hint: 'router eigrp CISCO -> address-family ipv4 unicast autonomous-system 64512 -> topology base -> redistribute ospfv3 1 metric 1000000 10 255 1 1500'
+      },
+      {
+        id: 'task-ccnp-rm1-8',
+        description: 'Konfigurasi redistribusi OSPF ke EIGRP IPv6 pada R2 dengan default-metric dan include-connected',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'redistribution_configured',
+        expectedValue: { protocol: 'eigrp-v6', redisProtocol: 'ospf', asOrProcessId: 1 },
+        hint: 'address-family ipv6 unicast autonomous-system 64512 -> topology base -> default-metric 1000000 10 255 1 1500 -> redistribute ospf 1 include-connected'
+      },
+      {
+        id: 'task-ccnp-rm1-9',
+        description: 'Konfigurasi redistribusi EIGRP 64512 ke OSPFv3 IPv4 pada R2 dengan metric-type 1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'redistribution_configured',
+        expectedValue: { protocol: 'ospfv3', af: 'ipv4', redisProtocol: 'eigrp', asOrProcessId: 64512, metricType: 'type-1' },
+        hint: 'router ospfv3 1 -> address-family ipv4 unicast -> redistribute eigrp 64512 metric-type 1'
+      },
+      {
+        id: 'task-ccnp-rm1-10',
+        description: 'Konfigurasi route-map E2O dan redistribusi EIGRP ke OSPFv3 IPv6 pada R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'redistribution_configured',
+        expectedValue: { protocol: 'ospfv3', af: 'ipv6', redisProtocol: 'eigrp', asOrProcessId: 64512, routeMap: 'E2O' },
+        hint: 'route-map E2O permit 10 -> set metric-type type-1; router ospfv3 1 -> address-family ipv6 unicast -> redistribute eigrp 64512 route-map E2O include-connected'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 100, y: 220 },
+        { id: 'R1', hostname: 'R1', type: 'router', x: 280, y: 220 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 460, y: 220 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 640, y: 220 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 820, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'D1', sourcePort: 'GigabitEthernet1/0/11', targetDeviceId: 'R1', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-rm-02-manipulate-redistribution',
+    title: 'CCNP Enterprise: Manipulate Route Redistribution',
+    track: 'CCNP',
+    category: 'Routing Manipulation & PBR',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 60,
+    difficulty: 'Advanced',
+    scenario: 'Setelah redistribusi dua arah berjalan, tim arsitek jaringan menerapkan kebijakan kontrol rute untuk mencegah perutean suboptimal dan menghemat tabel routing. Anda diminta memfilter subnet 10.10.x.x dari OSPF agar tidak masuk ke domain EIGRP menggunakan distribute-list dengan ACL standard pada Router R2. Selanjutnya, gunakan prefix-list dan route-map RED_TO_OSPF pada R2 untuk hanya mengizinkan prefix 172.16.0.0/16 (le 24) dari EIGRP yang diredistribusikan ke OSPF dengan metric yang dimodifikasi menjadi 25.',
+    objectives: [
+      'Verifikasi redistribusi dasar antara OSPFv3 dan EIGRP pada ASBR Router R2.',
+      'Konfigurasi standard access-list 5 pada R2 untuk memblokir subnet 10.10.41.0/24 - 10.10.44.0/24 dan mengizinkan lainnya.',
+      'Terapkan distribute-list 5 out GigabitEthernet0/0/1 di bawah EIGRP topology base pada R2.',
+      'Konfigurasi ip prefix-list EIGRP_TO_OSPF pada R2 untuk mencocokkan subnet 172.16.0.0/16 le 24.',
+      'Buat route-map RED_TO_OSPF yang mencocokkan prefix-list tersebut dan menyetel metric menjadi 25.',
+      'Terapkan route-map RED_TO_OSPF pada redistribusi EIGRP ke OSPFv3 IPv4 di Router R2.',
+      'Verifikasi tabel routing pada Switch D1 dan Switch D2 untuk memastikan rute terfilter sesuai kebijakan.'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-rm2-1',
+        description: 'Konfigurasi standard access-list 5 pada R2 untuk deny 10.10.41.0-44.0/24 dan permit any',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'access_list',
+        expectedValue: 5,
+        hint: 'access-list 5 deny 10.10.41.0 0.0.0.255 ... access-list 5 permit any'
+      },
+      {
+        id: 'task-ccnp-rm2-2',
+        description: 'Terapkan distribute-list 5 out GigabitEthernet0/0/1 pada EIGRP topology base di R2',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'distribute_list',
+        expectedValue: { protocol: 'eigrp', acl: 5, direction: 'out', interfaceName: 'GigabitEthernet0/0/1' },
+        hint: 'router eigrp CISCO -> address-family ipv4 unicast autonomous-system 64512 -> topology base -> distribute-list 5 out GigabitEthernet0/0/1'
+      },
+      {
+        id: 'task-ccnp-rm2-3',
+        description: 'Konfigurasi ip prefix-list EIGRP_TO_OSPF seq 5 permit 172.16.0.0/16 le 24 pada R2',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'prefix_list_exists',
+        expectedValue: 'EIGRP_TO_OSPF',
+        hint: 'ip prefix-list EIGRP_TO_OSPF seq 5 permit 172.16.0.0/16 le 24'
+      },
+      {
+        id: 'task-ccnp-rm2-4',
+        description: 'Konfigurasi route-map RED_TO_OSPF dengan match prefix-list dan set metric 25 pada R2',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'RED_TO_OSPF', sequence: 10, matchPrefixList: 'EIGRP_TO_OSPF', setMetric: 25 },
+        hint: 'route-map RED_TO_OSPF permit 10 -> match ip address prefix-list EIGRP_TO_OSPF -> set metric 25'
+      },
+      {
+        id: 'task-ccnp-rm2-5',
+        description: 'Terapkan route-map RED_TO_OSPF pada redistribusi EIGRP ke OSPFv3 IPv4 di R2',
+        points: 20,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'redistribution_configured',
+        expectedValue: { protocol: 'ospfv3', af: 'ipv4', redisProtocol: 'eigrp', asOrProcessId: 64512, routeMap: 'RED_TO_OSPF' },
+        hint: 'router ospfv3 1 -> address-family ipv4 unicast -> redistribute eigrp 64512 metric-type 1 route-map RED_TO_OSPF'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 100, y: 220 },
+        { id: 'R1', hostname: 'R1', type: 'router', x: 280, y: 220 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 460, y: 220 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 640, y: 220 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 820, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'D1', sourcePort: 'GigabitEthernet1/0/11', targetDeviceId: 'R1', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
+  },
+  {
+    id: 'lab-ccnp-rm-03-path-control-pbr',
+    title: 'CCNP Enterprise: Path Control Using Policy-Based Routing (PBR)',
+    track: 'CCNP',
+    category: 'Routing Manipulation & PBR',
+    domain: 'CCNP Enterprise: Advanced Routing & Services',
+    estimatedMinutes: 60,
+    difficulty: 'Advanced',
+    scenario: 'Dalam topologi dual-path redundan perusahaan, OSPF Area 0 memilih tautan GigabitEthernet berkecepatan tinggi melalui Router R2 sebagai jalur optimal menuju Switch D2, sedangkan tautan Serial R1-R3 hanya menjadi jalur cadangan karena memiliki cost OSPF yang lebih tinggi. Untuk mendistribusikan beban trafik (load-sharing) dan memprioritaskan paket tertentu, Anda diminta mengonfigurasi Policy-Based Routing (PBR) pada Router R1. Gunakan named standard ACL Lo2-ACL dan route-map R1-to-R3 untuk mengarahkan trafik asal D1 Loopback 2 (10.10.2.0/24) langsung melewati tautan Serial ke next-hop R3 172.16.2.2. Selanjutnya, konfigurasi Local PBR menggunakan named extended ACL R1-TRAFFIC dan route-map LOCAL-PBR untuk mengarahkan trafik ICMP / IP yang dibangkitkan secara lokal oleh Router R1 menuju 192.168.1.0/24 ke jalur Serial tersebut.',
+    objectives: [
+      'Konfigurasi pengalamatan IP dan OSPF 123 Area 0 dengan auto-cost reference-bandwidth 1000 pada seluruh router dan switch.',
+      'Verifikasi jalur normal OSPF dari D1 menuju subnet Loopback D2 melalui GigabitEthernet R1 -> R2 -> R3.',
+      'Buat standard named ACL Lo2-ACL pada R1 untuk mencocokkan trafik dari 10.10.2.0/24.',
+      'Buat route-map R1-to-R3 pada R1 yang mengarahkan trafik matching ke set ip next-hop 172.16.2.2.',
+      'Terapkan PBR pada interface R1 GigabitEthernet0/0/1 menggunakan perintah ip policy route-map R1-to-R3.',
+      'Buat extended named ACL R1-TRAFFIC pada R1 untuk mencocokkan trafik lokal IP menuju 192.168.1.0/24.',
+      'Buat route-map LOCAL-PBR pada R1 dengan set ip next-hop 172.16.2.2.',
+      'Terapkan Local PBR pada Router R1 menggunakan ip local policy route-map LOCAL-PBR.',
+      'Verifikasi keberhasilan PBR dan pencocokan paket menggunakan show route-map dan show ip policy.'
+    ],
+    tasks: [
+      {
+        id: 'task-ccnp-pbr-1',
+        description: 'Konfigurasi OSPF 123 Process pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'ospf_configured',
+        expectedValue: 123,
+        hint: 'router ospf 123 -> router-id 1.1.1.1'
+      },
+      {
+        id: 'task-ccnp-pbr-2',
+        description: 'Konfigurasi OSPF 123 Process pada Router R2',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R2',
+        expectedProperty: 'ospf_configured',
+        expectedValue: 123,
+        hint: 'router ospf 123 -> router-id 2.2.2.1'
+      },
+      {
+        id: 'task-ccnp-pbr-3',
+        description: 'Konfigurasi OSPF 123 Process pada Router R3',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R3',
+        expectedProperty: 'ospf_configured',
+        expectedValue: 123,
+        hint: 'router ospf 123 -> router-id 3.3.3.1'
+      },
+      {
+        id: 'task-ccnp-pbr-4',
+        description: 'Konfigurasi named standard ACL Lo2-ACL pada Router R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'named_acl_exists',
+        expectedValue: 'Lo2-ACL',
+        hint: 'ip access-list standard Lo2-ACL -> permit 10.10.2.0 0.0.0.255'
+      },
+      {
+        id: 'task-ccnp-pbr-5',
+        description: 'Konfigurasi route-map R1-to-R3 match Lo2-ACL dan set ip next-hop 172.16.2.2 pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'R1-to-R3', sequence: 10, matchAcl: 'Lo2-ACL', setIpNextHop: '172.16.2.2' },
+        hint: 'route-map R1-to-R3 permit 10 -> match ip address Lo2-ACL -> set ip next-hop 172.16.2.2'
+      },
+      {
+        id: 'task-ccnp-pbr-6',
+        description: 'Terapkan PBR route-map R1-to-R3 pada interface R1 GigabitEthernet0/0/1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        targetInterface: 'GigabitEthernet0/0/1',
+        expectedProperty: 'pbr_interface_policy',
+        expectedValue: 'R1-to-R3',
+        hint: 'interface GigabitEthernet0/0/1 -> ip policy route-map R1-to-R3'
+      },
+      {
+        id: 'task-ccnp-pbr-7',
+        description: 'Konfigurasi named extended ACL R1-TRAFFIC pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'named_acl_exists',
+        expectedValue: 'R1-TRAFFIC',
+        hint: 'ip access-list extended R1-TRAFFIC -> permit ip any 192.168.1.0 0.0.0.255'
+      },
+      {
+        id: 'task-ccnp-pbr-8',
+        description: 'Konfigurasi route-map LOCAL-PBR match R1-TRAFFIC dan set ip next-hop 172.16.2.2 pada R1',
+        points: 15,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'route_map_clause',
+        expectedValue: { name: 'LOCAL-PBR', sequence: 10, matchAcl: 'R1-TRAFFIC', setIpNextHop: '172.16.2.2' },
+        hint: 'route-map LOCAL-PBR permit 10 -> match ip address R1-TRAFFIC -> set ip next-hop 172.16.2.2'
+      },
+      {
+        id: 'task-ccnp-pbr-9',
+        description: 'Terapkan Local PBR route-map LOCAL-PBR secara global pada Router R1',
+        points: 10,
+        type: 'config_check',
+        targetDevice: 'R1',
+        expectedProperty: 'pbr_local_policy',
+        expectedValue: 'LOCAL-PBR',
+        hint: 'ip local policy route-map LOCAL-PBR'
+      }
+    ],
+    initialTopology: {
+      devices: [
+        { id: 'D1', hostname: 'D1', type: 'switch-l3', x: 100, y: 220 },
+        { id: 'R1', hostname: 'R1', type: 'router', x: 280, y: 220 },
+        { id: 'R2', hostname: 'R2', type: 'router', x: 460, y: 150 },
+        { id: 'R3', hostname: 'R3', type: 'router', x: 640, y: 220 },
+        { id: 'D2', hostname: 'D2', type: 'switch-l3', x: 820, y: 220 }
+      ],
+      links: [
+        { id: 'l1', sourceDeviceId: 'D1', sourcePort: 'GigabitEthernet1/0/11', targetDeviceId: 'R1', targetPort: 'GigabitEthernet0/0/1', cableType: 'straight' },
+        { id: 'l2', sourceDeviceId: 'R1', sourcePort: 'GigabitEthernet0/0/0', targetDeviceId: 'R2', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l3', sourceDeviceId: 'R2', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'R3', targetPort: 'GigabitEthernet0/0/0', cableType: 'straight' },
+        { id: 'l4', sourceDeviceId: 'R1', sourcePort: 'Serial0/1/0', targetDeviceId: 'R3', targetPort: 'Serial0/1/0', cableType: 'serial' },
+        { id: 'l5', sourceDeviceId: 'R3', sourcePort: 'GigabitEthernet0/0/1', targetDeviceId: 'D2', targetPort: 'GigabitEthernet1/0/11', cableType: 'straight' }
+      ]
+    }
   }
 ];
