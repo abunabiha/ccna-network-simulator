@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CCNA_EXAM_QUESTIONS } from '../../data/pearsonVueExam';
+import { EXAM_SUITES } from '../../data/pearsonVueExam';
 import { ExamQuestion, CandidateAnswer, PearsonVueScoreReport, DomainScore } from '../../types/exam';
-import { CcnaDomain } from '../../types/lab';
 import { Router } from '../../core/devices/Router';
 import { Switch } from '../../core/devices/Switch';
 import { CliParser } from '../../core/cli/Parser';
@@ -32,9 +31,15 @@ interface PearsonVueExamModalProps {
 
 export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen, onClose }) => {
   const userName = useNetworkStore((state) => state.userName);
+  const selectedTrack = useNetworkStore((state) => state.selectedTrack);
+
+  const [selectedSuiteId, setSelectedSuiteId] = useState<string>(() => {
+    return selectedTrack === 'CCNP' ? 'exam-ccnp-350-401-encor' : 'exam-ccna-200-301';
+  });
+
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, CandidateAnswer>>({});
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(120 * 60); // 120 minutes
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(120 * 60); // default 120 mins
   const [isTimerPaused, setIsTimerPaused] = useState<boolean>(false);
   const [isExhibitOpen, setIsExhibitOpen] = useState<boolean>(false);
   const [isReviewScreen, setIsReviewScreen] = useState<boolean>(false);
@@ -54,12 +59,42 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
   const simletDraftRef = useRef<string>('');
   const simletInputRef = useRef<HTMLInputElement>(null);
 
-  const currentQ: ExamQuestion = CCNA_EXAM_QUESTIONS[currentIndex];
-  const userAns = answers[currentQ.id] || { questionId: currentQ.id, selectedOptions: [], isMarkedForReview: false };
+  // Keep suite synced with active track when opened fresh
+  useEffect(() => {
+    if (Object.keys(answers).length === 0) {
+      if (selectedTrack === 'CCNP' && selectedSuiteId === 'exam-ccna-200-301') {
+        const encor = EXAM_SUITES.find(s => s.id === 'exam-ccnp-350-401-encor') || EXAM_SUITES[0];
+        setSelectedSuiteId(encor.id);
+        setSecondsRemaining(encor.timeLimitMinutes * 60);
+      } else if (selectedTrack === 'CCNA' && selectedSuiteId.includes('ccnp')) {
+        const ccna = EXAM_SUITES.find(s => s.id === 'exam-ccna-200-301') || EXAM_SUITES[0];
+        setSelectedSuiteId(ccna.id);
+        setSecondsRemaining(ccna.timeLimitMinutes * 60);
+      }
+    }
+  }, [selectedTrack, isOpen]);
+
+  const currentSuite = EXAM_SUITES.find(s => s.id === selectedSuiteId) || EXAM_SUITES[0];
+  const questions = currentSuite.questions;
+  const currentQ: ExamQuestion = questions[currentIndex] || questions[0];
+  const userAns = answers[currentQ?.id] || { questionId: currentQ?.id, selectedOptions: [], isMarkedForReview: false };
+
+  // Switch exam suite
+  const handleSwitchExamSuite = (suiteId: string) => {
+    const target = EXAM_SUITES.find(s => s.id === suiteId);
+    if (!target) return;
+    setSelectedSuiteId(suiteId);
+    setCurrentIndex(0);
+    setAnswers({});
+    setScoreReport(null);
+    setIsReviewScreen(false);
+    setShowRationales(false);
+    setSecondsRemaining(target.timeLimitMinutes * 60);
+  };
 
   // Initialize simlet when current question is simlet
   useEffect(() => {
-    if (currentQ.type === 'simlet' && currentQ.simlet) {
+    if (currentQ?.type === 'simlet' && currentQ.simlet) {
       const hostname = currentQ.simlet.deviceHostname;
       const dev = currentQ.simlet.deviceType === 'router'
         ? new Router('SIM_R', hostname, { x: 100, y: 100 })
@@ -71,14 +106,14 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
       setSimletLines([
         `Cisco IOS Software, IOS-XE Software (X86_64_LINUX_IOSD-UNIVERSALK9-M)`,
         `Technical Support: http://www.cisco.com/techsupport`,
-        `Compiled for Pearson VUE CCNA 200-301 Examination Simulator`,
+        `Compiled for Pearson VUE ${currentSuite.code} Examination Simulator`,
         `\nPress Enter to begin configuration...\n`
       ]);
     } else {
       setSimletDevice(null);
       setSelectedDragItemId(null);
     }
-  }, [currentIndex, currentQ.type]);
+  }, [currentIndex, currentQ?.type, selectedSuiteId]);
 
   // Timer countdown
   useEffect(() => {
@@ -289,16 +324,15 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
   // Grade & End Exam
   const handleFinishExam = () => {
     let totalCorrect = 0;
-    const domainMap: Record<CcnaDomain, { correct: number; total: number }> = {
-      '1. Network Fundamentals': { correct: 0, total: 0 },
-      '2. Network Access': { correct: 0, total: 0 },
-      '3. IP Connectivity': { correct: 0, total: 0 },
-      '4. IP Services': { correct: 0, total: 0 },
-      '5. Security Fundamentals': { correct: 0, total: 0 },
-      '6. Automation & Programmability': { correct: 0, total: 0 }
-    };
+    const domainMap: Record<string, { correct: number; total: number }> = {};
+    for (const d of currentSuite.domains) {
+      domainMap[d] = { correct: 0, total: 0 };
+    }
 
-    for (const q of CCNA_EXAM_QUESTIONS) {
+    for (const q of questions) {
+      if (!domainMap[q.domain]) {
+        domainMap[q.domain] = { correct: 0, total: 0 };
+      }
       domainMap[q.domain].total++;
       const ans = answers[q.id];
       let isCorrect = false;
@@ -326,27 +360,28 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
     }
 
     const domainScores: DomainScore[] = Object.entries(domainMap).map(([dom, stats]) => ({
-      domain: dom as CcnaDomain,
+      domain: dom,
       correctCount: stats.correct,
       totalCount: stats.total,
       percentage: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0
     }));
 
-    // Cisco scale 300 - 1000, passing score 825
-    const ratio = totalCorrect / CCNA_EXAM_QUESTIONS.length;
+    // Cisco scale 300 - 1000, passing score configured per suite (default 825)
+    const ratio = questions.length > 0 ? totalCorrect / questions.length : 0;
     const scaledScore = Math.round(300 + ratio * 700);
-    const verdict: 'PASS' | 'FAIL' = scaledScore >= 825 ? 'PASS' : 'FAIL';
+    const passingScore = currentSuite.passingScore || 825;
+    const verdict: 'PASS' | 'FAIL' = scaledScore >= passingScore ? 'PASS' : 'FAIL';
 
     setScoreReport({
-      candidateName: userName ? `${userName} / CCNA Candidate` : 'Peserta CCNA / CCNA Candidate',
-      examCode: '200-301 CCNA v1.1',
+      candidateName: userName ? `${userName} / Candidate` : 'Peserta Ujian / Cisco Candidate',
+      examCode: `${currentSuite.code}: ${currentSuite.title}`,
       examDate: new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }),
-      passingScore: 825,
+      passingScore,
       candidateScore: scaledScore,
       verdict,
       domainScores,
       totalCorrect,
-      totalQuestions: CCNA_EXAM_QUESTIONS.length
+      totalQuestions: questions.length
     });
 
     setIsReviewScreen(false);
@@ -356,7 +391,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
     setAnswers({});
     setCurrentIndex(0);
     setScoreReport(null);
-    setSecondsRemaining(120 * 60);
+    setSecondsRemaining(currentSuite.timeLimitMinutes * 60);
     setIsReviewScreen(false);
     setShowRationales(false);
   };
@@ -370,11 +405,26 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
             PEARSON VUE
           </div>
           <div>
-            <div className="text-xs font-bold text-slate-200">
-              Cisco Certified Network Associate (CCNA 200-301 v1.1)
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedSuiteId}
+                onChange={(e) => handleSwitchExamSuite(e.target.value)}
+                disabled={Boolean(scoreReport) || Object.keys(answers).length > 0}
+                title={Object.keys(answers).length > 0 ? "Reset atau selesaikan ujian sebelum berganti paket sertifikasi" : "Pilih Sertifikasi Cisco"}
+                className="bg-[#001f3b] text-slate-100 font-bold text-xs border border-blue-700/80 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer disabled:cursor-not-allowed disabled:opacity-90 max-w-sm truncate"
+              >
+                {EXAM_SUITES.map((suite) => (
+                  <option key={suite.id} value={suite.id} className="bg-slate-900 text-white">
+                    {suite.code} - {suite.title}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-900/80 text-amber-300 border border-amber-500/30 shrink-0">
+                {currentSuite.track} Track
+              </span>
             </div>
             <div className="text-[11px] text-slate-300">
-              Candidate: <span className="font-semibold text-amber-300">{userName || 'Peserta CCNA'}</span> | Registration: <span className="font-mono">CSCO1492048</span>
+              Candidate: <span className="font-semibold text-amber-300">{userName || 'Cisco Candidate'}</span> | Registration: <span className="font-mono">CSCO1492048</span>
             </div>
           </div>
         </div>
@@ -416,7 +466,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
                 Official Pearson VUE Cisco Examination Score Report
               </div>
               <h1 className="text-2xl font-black text-white">
-                Exam 200-301: Implementing and Administering Cisco Solutions (CCNA)
+                Exam {currentSuite.code}: {currentSuite.title}
               </h1>
               <div className="text-xs text-slate-400">
                 Candidate: {scoreReport.candidateName} | Date: {scoreReport.examDate}
@@ -442,7 +492,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
             {/* Section Analysis Breakdown */}
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
               <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Section Performance Analysis (CCNA 200-301 v1.1 Blueprint):
+                Section Performance Analysis ({currentSuite.code} Blueprint):
               </div>
               <div className="space-y-2">
                 {scoreReport.domainScores.map(ds => (
@@ -499,7 +549,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
               <div>
                 <h2 className="text-base font-bold text-white">Item Review Screen</h2>
                 <p className="text-xs text-slate-400">
-                  Periksa status jawaban semua tipe soal (Pilihan Ganda, Drag & Drop, dan Simlet).
+                  Periksa status jawaban semua tipe soal ({currentSuite.code}: Pilihan Ganda, Drag & Drop, dan Simlet).
                 </p>
               </div>
               <button
@@ -511,7 +561,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-              {CCNA_EXAM_QUESTIONS.map((q, idx) => {
+              {questions.map((q, idx) => {
                 const ans = answers[q.id];
                 const isMarked = ans?.isMarkedForReview;
                 const isAnswered = ans && (
@@ -566,7 +616,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2.5">
                   <span className="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-800 px-2.5 py-1 rounded-lg">
-                    Question {currentIndex + 1} of {CCNA_EXAM_QUESTIONS.length}
+                    Question {currentIndex + 1} of {questions.length}
                   </span>
                   <span className="text-[11px] font-semibold text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                     {currentQ.domain}
@@ -788,7 +838,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
                         <Terminal className="w-3.5 h-3.5 text-cyan-400" />
                         <span className="font-bold text-white">{currentQ.simlet.deviceHostname} - Cisco IOS Console</span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono">CCNA Live Simlet Engine</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{currentSuite.code} Live Simlet Engine</span>
                     </div>
 
                     <div
@@ -836,7 +886,7 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
                 <div className="bg-slate-950 border border-emerald-500/40 rounded-2xl p-4 space-y-1.5 text-xs">
                   <div className="flex items-center gap-1.5 text-emerald-400 font-bold uppercase tracking-wider">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Official CCNA Rationale & Explanation:</span>
+                    <span>Official {currentSuite.code} Rationale & Explanation:</span>
                   </div>
                   <p className="text-slate-300 leading-relaxed whitespace-pre-wrap">
                     {currentQ.explanation}
@@ -863,9 +913,9 @@ export const PearsonVueExamModal: React.FC<PearsonVueExamModalProps> = ({ isOpen
                 Item Review Screen
               </button>
 
-              {currentIndex < CCNA_EXAM_QUESTIONS.length - 1 ? (
+              {currentIndex < questions.length - 1 ? (
                 <button
-                  onClick={() => setCurrentIndex(prev => Math.min(CCNA_EXAM_QUESTIONS.length - 1, prev + 1))}
+                  onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))}
                   className="flex items-center gap-1.5 px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-950/50 transition-all"
                 >
                   <span>Next</span>

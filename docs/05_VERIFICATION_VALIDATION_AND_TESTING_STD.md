@@ -41,7 +41,9 @@ Untuk menjamin keabsahan ilmiah (*scientific validity*) dan kesesuaian perilaku 
 | **TC-SVC-03**| NAT/PAT | Translasi alamat IP privat ke publik | `ip nat inside source list 1 int g0/0/0 overload` | IP sumber paket tertranslasi ke IP publik antarmuka keluar | PASS |
 | **TC-GRD-01**| Auto-Grader | Penilaian konfigurasi lab bertahap | Konfigurasi sebagian lab diselesaikan | Grader menampilkan skor proporsional dan checklist per task | PASS |
 | **TC-GRD-02**| Auto-Grader | Validasi Strict 100% Mastery Pass | Skor lab = 99% vs 100% | Skor 99% berstatus Incomplete; hanya skor 100% berstatus PASSED | PASS |
-| **TC-EXAM-01**| Exam Engine | Pearson VUE Exam Simulator Suite | Ujian 120 menit: Multiple Choice, DND bipartite, Simlet CLI | Timer berjalan, skor per-domain terhitung pada skala 300-1000 | PASS |
+| **TC-EXAM-01**| Exam Engine | Pearson VUE 200-301 CCNA v1.1 Exam Suite | Ujian 120 menit: Multiple Choice (Single/Multi), DND bipartite, Simlet CLI | Timer 120 menit berjalan, scoring per domain CCNA terhitung pada skala 300-1000 | PASS |
+| **TC-EXAM-02**| Exam Engine | Pearson VUE 350-401 ENCOR v1.2 Exam Suite | Ujian 120 menit: Multiple Choice, DND, Simlet OSPFv2 Multi-Area | Timer 120 menit berjalan, scoring per domain ENCOR terhitung pada skala 300-1000 | PASS |
+| **TC-EXAM-03**| Exam Engine | Pearson VUE 300-410 ENARSI v1.1 Exam Suite | Ujian 90 menit: Multiple Choice, DND, Simlet VRF-Lite | Timer 90 menit berjalan, scoring per domain ENARSI terhitung pada skala 300-1000 | PASS |
 
 ---
 

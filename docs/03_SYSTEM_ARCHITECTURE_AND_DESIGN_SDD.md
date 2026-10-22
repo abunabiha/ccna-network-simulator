@@ -355,8 +355,15 @@ Mesin penilai otomatis (*Lab Auto-Grader*) mengevaluasi keberhasilan praktikum s
 3. **Pengujian Matriks Konektivitas Data Plane**: Mengeksekusi pengiriman ping virtual antar simpul endpoint untuk membuktikan bahwa jalur data fisik dan logis berfungsi optimal.
 4. **Aturan Kelulusan Penguasaan Penuh (*Strict 100% Mastery Rule*)**: Siswa hanya dinyatakan lulus jika nilai akhir mencapai $100\%$ tanpa ada kriteria yang terlewati.
 
-### 6.2 Integrasi Pearson VUE Exam Engine
-Subsistem ujian mengimplementasikan tiga model soal resmi Pearson VUE:
-1. **Multiple Choice (Single/Multi Answer)**: Pertanyaan konsep teoritis dengan validasi biner.
-2. **Drag-and-Drop Concept Matching**: Pemetaan item sumber ke target klasifikasi berbasis relasi graf bipartit.
-3. **Simlet Performance-Based CLI Lab**: Jendela lab interaktif di mana kandidat mengonfigurasi perangkat virtual dalam konteks ujian berbatas waktu 120 menit.
+### 6.2 Integrasi Pearson VUE Multi-Certification Exam Engine
+Subsistem ujian mengimplementasikan tiga suite blueprint ujian sertifikasi resmi Cisco:
+1. **200-301 CCNA v1.1** (23 Soal, 6 Domain, Timer 120 Menit, Passing Score 825)
+2. **350-401 ENCOR v1.2** (21 Soal, 6 Domain, Timer 120 Menit, Passing Score 825)
+3. **300-410 ENARSI v1.1** (19 Soal, 4 Domain, Timer 90 Menit, Passing Score 825)
+
+Setiap suite mengimplementasikan empat model soal otentik Pearson VUE:
+1. **Multiple Choice (Single Answer)**: Pertanyaan konsep teoritis dengan validasi pilihan tunggal.
+2. **Multiple Choice (Multiple Answer)**: Pertanyaan multi-kriteria dengan pembatasan jumlah opsi yang dipilih (*Choose N options*).
+3. **Drag-and-Drop Concept Matching**: Pemetaan item sumber ke target klasifikasi berbasis relasi graf bipartit.
+4. **Simlet Performance-Based CLI Lab**: Jendela lab interaktif di mana kandidat mengonfigurasi perangkat virtual Cisco IOS-XE dalam konteks ujian berbatas waktu, dilengkapi verifikasi objektif bertahap (*Simlet Configuration Objectives*).
+5. **Skor Berskala Cisco (300–1000)**: Formulasi penilaian resmi $\text{Score} = 300 + \left(\frac{N_{\text{correct}}}{N_{\text{total}}}\right) \times 700$, dilengkapi ringkasan capaian per domain kurikulum (*Section Performance Analysis*) dan telaah pembahasan resmi (*Review Rationales*).

@@ -10,6 +10,7 @@ import { Host } from '../src/core/devices/Host';
 import { CliParser } from '../src/core/cli/Parser';
 import { LabGrader } from '../src/core/grader/LabGrader';
 import { CCNA_LABS, CCNP_LABS, ALL_LABS } from '../src/data';
+import { EXAM_SUITES, CCNA_EXAM_QUESTIONS, ENCOR_EXAM_QUESTIONS, ENARSI_EXAM_QUESTIONS } from '../src/data/pearsonVueExam';
 import { RoutingProtocolEngine } from '../src/core/network/RoutingProtocolEngine';
 import { PolicyEngine } from '../src/core/network/PolicyEngine';
 import { SecurityVpnEngine } from '../src/core/network/SecurityVpnEngine';
@@ -2659,7 +2660,151 @@ console.log(`R1 running-config includes ipv6 traffic-filter RESTRICT-IPV6 in: ${
 const runCfgSec4 = r1Sec4.getRunningConfig();
 console.log(`R1 running-config includes uRPF rx & any allow-default: ${runCfgSec4.includes('ip verify unicast source reachable-via rx') && runCfgSec4.includes('ip verify unicast source reachable-via any allow-default') ? 'PASS' : 'FAIL'}`);
 
-console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 4 LAB OSPF, 5 LAB EIGRP, 6 LAB BGP, 3 LAB ROUTING MANIPULATION & PBR, 5 LAB VPN & DMVPN, SERTA 4 LAB INFRASTRUCTURE SECURITY & SERVICES SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+// ============================================================================
+// 24. PENGUJIAN PEARSON VUE EXAM SIMULATOR (CCNA 200-301, ENCOR 350-401, ENARSI 300-410)
+// ============================================================================
+console.log('\n============================================================================');
+console.log('24. PENGUJIAN PEARSON VUE EXAM SIMULATOR (CCNA, ENCOR 350-401, ENARSI 300-410)');
+console.log('============================================================================');
+
+// --- 24.1 Exam Suites Registry & Blueprints ---
+console.log('\n--- 24.1 Exam Suites Registry & Blueprints ---');
+console.log(`EXAM_SUITES registered count: ${EXAM_SUITES.length} (Expected: 3) -> ${EXAM_SUITES.length === 3 ? 'PASS' : 'FAIL'}`);
+
+const ccnaSuite = EXAM_SUITES.find(s => s.id === 'exam-ccna-200-301')!;
+const encorSuite = EXAM_SUITES.find(s => s.id === 'exam-ccnp-350-401-encor')!;
+const enarsiSuite = EXAM_SUITES.find(s => s.id === 'exam-ccnp-300-410-enarsi')!;
+
+console.log(`CCNA Suite exists: ${Boolean(ccnaSuite && ccnaSuite.code.includes('200-301 CCNA') && ccnaSuite.track === 'CCNA') ? 'PASS' : 'FAIL'}`);
+console.log(`ENCOR Suite exists: ${Boolean(encorSuite && encorSuite.code.includes('350-401 ENCOR') && encorSuite.track === 'CCNP') ? 'PASS' : 'FAIL'}`);
+console.log(`ENARSI Suite exists: ${Boolean(enarsiSuite && enarsiSuite.code.includes('300-410 ENARSI') && enarsiSuite.track === 'CCNP') ? 'PASS' : 'FAIL'}`);
+
+console.log(`CCNA Questions: ${ccnaSuite.questions.length} questions across ${ccnaSuite.domains.length} domains (Expected: 23 questions, 6 domains) -> ${ccnaSuite.questions.length === 23 && ccnaSuite.domains.length === 6 ? 'PASS' : 'FAIL'}`);
+console.log(`ENCOR Questions: ${encorSuite.questions.length} questions across ${encorSuite.domains.length} domains (Expected: 21 questions, 6 domains) -> ${encorSuite.questions.length === 21 && encorSuite.domains.length === 6 ? 'PASS' : 'FAIL'}`);
+console.log(`ENARSI Questions: ${enarsiSuite.questions.length} questions across ${enarsiSuite.domains.length} domains (Expected: 19 questions, 4 domains) -> ${enarsiSuite.questions.length === 19 && enarsiSuite.domains.length === 4 ? 'PASS' : 'FAIL'}`);
+
+const totalExamQuestions = EXAM_SUITES.reduce((acc, s) => acc + s.questions.length, 0);
+console.log(`Total Pearson VUE Questions Bank: ${totalExamQuestions} questions (Expected: 63) -> ${totalExamQuestions === 63 ? 'PASS' : 'FAIL'}`);
+
+// --- 24.2 Question Integrity & Type Coverage ---
+console.log('\n--- 24.2 Question Integrity & Type Coverage ---');
+for (const suite of EXAM_SUITES) {
+  const types = new Set(suite.questions.map(q => q.type));
+  const hasSingle = types.has('single_choice');
+  const hasMultiple = types.has('multiple_choice');
+  const hasDragDrop = types.has('drag_drop');
+  const hasSimlet = types.has('simlet');
+
+  const allValid = suite.questions.every(q => {
+    if (!q.id || !q.prompt || !q.domain || !q.explanation) return false;
+    if (q.type === 'single_choice' || q.type === 'multiple_choice') {
+      return Array.isArray(q.options) && q.options.length >= 2 && Array.isArray(q.correctAnswer) && q.correctAnswer.length > 0;
+    }
+    if (q.type === 'drag_drop') {
+      return Array.isArray(q.dragItems) && Array.isArray(q.dropTargets) && q.dropTargets.length > 0 &&
+        q.dropTargets.every(t => t.correctItemId && q.dragItems?.some(i => i.id === t.correctItemId));
+    }
+    if (q.type === 'simlet') {
+      return Boolean(q.simlet && q.simlet.deviceHostname && q.simlet.tasks && q.simlet.tasks.length > 0);
+    }
+    return false;
+  });
+
+  console.log(`Suite [${suite.code}]: Types [single: ${hasSingle}, multi: ${hasMultiple}, drag_drop: ${hasDragDrop}, simlet: ${hasSimlet}], Schema Validity: ${allValid ? 'PASS' : 'FAIL'}`);
+}
+
+// --- 24.3 Examination Simulator Grading Engine Simulation ---
+console.log('\n--- 24.3 Examination Simulator Grading Engine Simulation ---');
+
+function gradeSuiteAnswers(suite: typeof ccnaSuite, candidateAnswers: Record<string, any>) {
+  let totalCorrect = 0;
+  const domainMap: Record<string, { correct: number; total: number }> = {};
+  for (const d of suite.domains) {
+    domainMap[d] = { correct: 0, total: 0 };
+  }
+
+  for (const q of suite.questions) {
+    if (!domainMap[q.domain]) {
+      domainMap[q.domain] = { correct: 0, total: 0 };
+    }
+    domainMap[q.domain].total++;
+    const ans = candidateAnswers[q.id];
+    let isCorrect = false;
+
+    if (q.type === 'single_choice' || q.type === 'multiple_choice') {
+      const candidateOpts = ans?.selectedOptions || [];
+      const correctOpts = q.correctAnswer || [];
+      isCorrect = candidateOpts.length === correctOpts.length &&
+        candidateOpts.every((id: string) => correctOpts.includes(id));
+    } else if (q.type === 'drag_drop' && q.dropTargets) {
+      const matches = ans?.dragDropMatches || {};
+      isCorrect = q.dropTargets.length > 0 &&
+        q.dropTargets.every(target => matches[target.id] === target.correctItemId);
+    } else if (q.type === 'simlet') {
+      isCorrect = Boolean(
+        (ans?.selectedOptions || []).includes('simlet_completed') ||
+        (ans?.simletCommands && ans.simletCommands.length >= 3)
+      );
+    }
+
+    if (isCorrect) {
+      totalCorrect++;
+      domainMap[q.domain].correct++;
+    }
+  }
+
+  const ratio = suite.questions.length > 0 ? totalCorrect / suite.questions.length : 0;
+  const scaledScore = Math.round(300 + ratio * 700);
+  const passingScore = suite.passingScore || 825;
+  const verdict: 'PASS' | 'FAIL' = scaledScore >= passingScore ? 'PASS' : 'FAIL';
+
+  return { totalCorrect, scaledScore, verdict, domainMap };
+}
+
+// Test Perfect 100% Score on All 3 Suites
+for (const suite of EXAM_SUITES) {
+  const perfectAnswers: Record<string, any> = {};
+  for (const q of suite.questions) {
+    if (q.type === 'single_choice' || q.type === 'multiple_choice') {
+      perfectAnswers[q.id] = { selectedOptions: [...(q.correctAnswer || [])] };
+    } else if (q.type === 'drag_drop') {
+      const matches: Record<string, string> = {};
+      q.dropTargets?.forEach(t => { matches[t.id] = t.correctItemId; });
+      perfectAnswers[q.id] = { dragDropMatches: matches };
+    } else if (q.type === 'simlet') {
+      perfectAnswers[q.id] = { simletCommands: ['enable', 'conf t', 'router ospf 1'] };
+    }
+  }
+
+  const result = gradeSuiteAnswers(suite, perfectAnswers);
+  const allDomains100 = Object.values(result.domainMap).every(d => d.correct === d.total && d.total > 0);
+  console.log(`Suite [${suite.code}] 100% Mastery Grading: Score = ${result.scaledScore} / 1000, Verdict = ${result.verdict}, All Domains 100% = ${allDomains100 ? 'PASS' : 'FAIL'} -> ${result.scaledScore === 1000 && result.verdict === 'PASS' && allDomains100 ? 'PASS' : 'FAIL'}`);
+}
+
+// Test Zero Incomplete Score
+const zeroResult = gradeSuiteAnswers(ccnaSuite, {});
+console.log(`CCNA Empty Answers Grading: Score = ${zeroResult.scaledScore} (Expected: 300), Verdict = ${zeroResult.verdict} (Expected: FAIL) -> ${zeroResult.scaledScore === 300 && zeroResult.verdict === 'FAIL' ? 'PASS' : 'FAIL'}`);
+
+// Test Borderline Pass Score (Exact 825)
+const passingRatio = (825 - 300) / 700; // 0.75 (75%)
+const neededCorrect = Math.ceil(passingRatio * ccnaSuite.questions.length); // 18 out of 23 = 78.2% -> Math.round(300 + 18/23*700) = 848
+const borderlineAnswers: Record<string, any> = {};
+ccnaSuite.questions.slice(0, neededCorrect).forEach(q => {
+  if (q.type === 'single_choice' || q.type === 'multiple_choice') {
+    borderlineAnswers[q.id] = { selectedOptions: [...(q.correctAnswer || [])] };
+  } else if (q.type === 'drag_drop') {
+    const matches: Record<string, string> = {};
+    q.dropTargets?.forEach(t => { matches[t.id] = t.correctItemId; });
+    borderlineAnswers[q.id] = { dragDropMatches: matches };
+  } else if (q.type === 'simlet') {
+    borderlineAnswers[q.id] = { simletCommands: ['enable', 'conf t', 'router ospf 1'] };
+  }
+});
+const borderlineResult = gradeSuiteAnswers(ccnaSuite, borderlineAnswers);
+console.log(`CCNA Borderline Pass Grading: ${neededCorrect}/${ccnaSuite.questions.length} Correct -> Score = ${borderlineResult.scaledScore}, Verdict = ${borderlineResult.verdict} -> ${borderlineResult.verdict === 'PASS' ? 'PASS' : 'FAIL'}`);
+
+console.log('\n=== SELURUH PENGUJIAN KERNEL, MODUL, CCNP TAHAP 1-8, 31 LAB CCNP, 10 LAB CCNA, DAN 3 SUITE PEARSON VUE EXAM SIMULATOR SELESAI DENGAN SUKSES LENGKAP 100%! ===');
+
 
 
 

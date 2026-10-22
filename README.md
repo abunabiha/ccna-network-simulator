@@ -62,9 +62,75 @@ Mengacu langsung pada kurikulum resmi *Cisco Networking Academy CCNP Enterprise 
 - **Network Virtualization (VRF-Lite)**: Isolasi tabel perutean dan tabel ARP multi-tenant per antarmuka pada Router C8200L dan Switch C9300L dengan subnet IP yang tumpang tindih (*overlapping*).
 
 ### 🎯 4. Evaluasi Pedagogis & Ujian Pearson VUE
-- **Automated Lab Grader**: Mengaudit konfigurasi aktif (*AST inspection*), status protokol operasional, dan matriks ping konektivitas data plane dengan aturan kelulusan ketat 100% (*Strict Mastery Criteria*).
+- **Automated Lab Grader**: Mengaudit konfigurasi aktif (*AST inspection*), status protokol operasional, dan matriks ping konektivitas data plane dengan aturan kelulusan ketat 100% (*Strict Mastery Criteria*) pada seluruh 41 lab terpandu (10 CCNA + 31 CCNP Enterprise).
 - **OSI 7-Layer PDU Inspector**: Mode simulasi langkah-demi-langkah (Play, Step Forward) untuk melihat de-enkapsulasi frame L2 MAC, paket IP L3, dan segmen L4 (*In-Layers vs Out-Layers*).
-- **Pearson VUE Exam Simulator Engine**: Simulator ujian sertifikasi resmi dengan antarmuka otentik Pearson VUE, timer 120 menit, Multiple Choice, Drag-and-Drop graf bipartit, dan Simlet performance lab interaktif.
+- **Pearson VUE Multi-Certification Exam Simulator Engine**: Simulator ujian sertifikasi resmi dengan antarmuka otentik Pearson VUE, timer adaptif, score report berskala Cisco 300–1000 (passing score 825), analisis performa per domain, review screen, dan pembahasan resmi (*official rationales*):
+  1. **200-301 CCNA v1.1** (23 Soal, 6 Domain, 120 Menit) — Network Fundamentals, Network Access, IP Connectivity, IP Services, Security Fundamentals, Automation & Programmability.
+  2. **350-401 ENCOR v1.2** (21 Soal, 6 Domain, 120 Menit) — Architecture, Virtualization, Infrastructure, Network Assurance, Security, Automation.
+  3. **300-410 ENARSI v1.1** (19 Soal, 4 Domain, 90 Menit) — Layer 3 Technologies, VPN Technologies, Infrastructure Security, Infrastructure Services.
+- **Tipe Soal Pearson VUE Otentik**: Multiple Choice Single Answer, Multiple Choice Multiple Answer, Drag-and-Drop Matching (bipartite graph), dan Live Interactive Cisco IOS CLI Simlet labs.
+
+---
+
+## 📚 Katalog Lab Terpandu (41 Lab Resmi CCNA & CCNP Enterprise)
+
+### 🟢 Jalur CCNA 200-301 (10 Lab Fondasi)
+1. **Lab 01**: Dasar Konfigurasi Router & Switch Cisco IOS (Hostname, Banner, Passwords, SSH, Interface IP)
+2. **Lab 02**: VLAN & 802.1Q Trunking pada Access & Distribution Switches
+3. **Lab 03**: Inter-VLAN Routing (Router-on-a-Stick subinterfaces & L3 Switch SVI)
+4. **Lab 04**: Static & Default Routing (IPv4 & IPv6 Floating Static Routes)
+5. **Lab 05**: Single-Area OSPFv2 (Router-ID, Network statements, Passive-interface)
+6. **Lab 06**: Standard & Extended IPv4 Access Control Lists (ACL)
+7. **Lab 07**: Network Address Translation (Static NAT, Dynamic NAT, PAT / NAT Overload)
+8. **Lab 08**: DHCP Server & Relay Agent pada Cisco IOS
+9. **Lab 09**: Network Device Management (NTP, Syslog, SNMP, CDP/LLDP)
+10. **Lab 10**: CCNA Comprehensive Capstone Challenge
+
+### 🔴 Jalur CCNP Enterprise v9 (31 Lab Lanjutan Berdasarkan Standar Instruktur)
+- **Modul 1: OSPF (4 Lab)**
+  - `lab-ccnp-ospf-01-single-area`: Implement Single-Area OSPFv2 (Point-to-Point, Broadcast DR/BDR, Priority, Cost, MD5 Auth)
+  - `lab-ccnp-ospf-02-multiarea`: Configure Multi-Area OSPFv2 (ABR, Stub, Totally Stub, NSSA, Totally NSSA, Route Summarization)
+  - `lab-ccnp-ospf-03-multiarea-ospfv3`: Multi-Area OSPFv3 with Address Families (Unified IPv4 & IPv6 routing processes)
+  - `lab-ccnp-ospf-04-troubleshoot-ospfv3`: Troubleshoot OSPFv3 (Mismatched timers, MTU mismatch, passive interface, area ID issues)
+
+- **Modul 2: EIGRP (5 Lab)**
+  - `lab-ccnp-eigrp-01-ipv4`: Implement EIGRP for IPv4 (Classic & Named Mode, Router-ID, Unequal-Cost Load Balancing Variance)
+  - `lab-ccnp-eigrp-02-advanced`: Advanced EIGRP Features (Key Chain MD5/SHA authentication, Stub routing, Route Summarization)
+  - `lab-ccnp-eigrp-03-ipv6`: Implement EIGRP for IPv6 (Dual-stack routing, Link-local next-hop verification)
+  - `lab-ccnp-eigrp-04-troubleshoot-ipv4`: Troubleshoot EIGRP for IPv4 (K-values, AS number mismatch, split-horizon, passive interface)
+  - `lab-ccnp-eigrp-05-troubleshoot-ipv6`: Troubleshoot EIGRP for IPv6 (IPv6 unicast-routing, interface enable, shutdown states)
+
+- **Modul 3: BGP (6 Lab)**
+  - `lab-ccnp-bgp-01-ebgp-ibgp`: Implement BGP with EBGP & IBGP (Loopback update-source, ebgp-multihop, next-hop-self)
+  - `lab-ccnp-bgp-02-multihoming`: BGP Multi-Homing & Path Selection (Weight, Local Preference, AS-Path Prepending, MED)
+  - `lab-ccnp-bgp-03-mp-bgp`: MP-BGP with IPv4 & IPv6 Address Families (Dual-Stack BGP peering & community tags)
+  - `lab-ccnp-bgp-04-route-reflectors`: BGP Route Reflectors (Non-client / Client reflection, Cluster-ID, Loop prevention)
+  - `lab-ccnp-bgp-05-troubleshoot-bgp`: Troubleshoot BGP Neighbor Adjacencies (TCP 179 ACLs, Update-source, AS-number mismatches)
+  - `lab-ccnp-bgp-06-troubleshoot-mpbgp`: Troubleshoot MP-BGP (Address-family activation, next-hop-self IPv6, routing blackholes)
+
+- **Modul 4: Routing Manipulation & Path Control (3 Lab)**
+  - `lab-ccnp-redist-01-mutual`: Mutual Route Redistribution between OSPF and EIGRP (Default metrics, Seed metrics, Route-Maps)
+  - `lab-ccnp-redist-02-tagging`: Route Tagging & Loop Prevention (Tag allocation $\tau$, Deny tagged routes, Prefix-Lists)
+  - `lab-ccnp-redist-03-pbr-ipsla`: Policy-Based Routing (PBR) with IP SLA Tracking (Next-hop redirection with ICMP probe failover)
+
+- **Modul 5: VPN & DMVPN Technologies (5 Lab)**
+  - `lab-ccnp-vpn-01-vrf-lite`: VRF-Lite & Multi-Tenant Routing (Overlapping subnets, isolated routing tables & ARP per interface)
+  - `lab-ccnp-vpn-02-dmvpn-phase1`: Dynamic Multipoint VPN (DMVPN) Phase 1 (mGRE Hub, p2p Spoke, NHRP mapping)
+  - `lab-ccnp-vpn-03-dmvpn-phase2`: DMVPN Phase 2 (mGRE on Spokes, Dynamic Spoke-to-Spoke tunnels via NHRP resolution)
+  - `lab-ccnp-vpn-04-dmvpn-phase3`: DMVPN Phase 3 (NHRP Redirect on Hub, NHRP Shortcut on Spokes, hierarchical CEF install)
+  - `lab-ccnp-vpn-05-secure-dmvpn`: Secure DMVPN with IPsec (IKEv2 / ISAKMP, Transform-Set, IPsec profile, Tunnel protection)
+
+- **Modul 6: Infrastructure Security & Services (4 Lab)**
+  - `lab-ccnp-sec-01-dhcpv6`: Implement DHCPv6 (SLAAC, Stateless DHCPv6 with other-config-flag, Stateful DHCPv6 with managed-config-flag)
+  - `lab-ccnp-sec-02-troubleshoot-ipv4-acls`: Troubleshoot IPv4 ACLs (Extended named ACLs, Time-Range scheduling, VTY access-class)
+  - `lab-ccnp-sec-03-troubleshoot-ipv6-acls`: Troubleshoot IPv6 ACLs (Traffic-filter, ICMPv6 ND Router Solicitations/Advertisements rules)
+  - `lab-ccnp-sec-04-troubleshoot-urpf`: Troubleshoot Unicast Reverse Path Forwarding (uRPF Strict Mode vs Loose Mode with allow-default)
+
+- **Capstone Challenges (4 Lab)**
+  - `lab-ccnp-capstone-01`: Enterprise Core WAN Integration Capstone
+  - `lab-ccnp-capstone-02`: Advanced Routing Redistribution & Policy Enforcement Capstone
+  - `lab-ccnp-capstone-03`: Multi-Tenant VRF & Secure DMVPN Overlay Capstone
+  - `lab-ccnp-capstone-04`: Grand Master CCNP Enterprise Certification Challenge
 
 ---
 

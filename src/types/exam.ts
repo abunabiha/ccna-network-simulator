@@ -33,7 +33,7 @@ export interface SimletConfig {
 
 export interface ExamQuestion {
   id: string;
-  domain: CcnaDomain;
+  domain: string;
   type: QuestionType;
   prompt: string;
   options?: ExamOption[];
@@ -56,10 +56,21 @@ export interface CandidateAnswer {
 }
 
 export interface DomainScore {
-  domain: CcnaDomain;
+  domain: string;
   correctCount: number;
   totalCount: number;
   percentage: number;
+}
+
+export interface ExamSuite {
+  id: string;
+  code: string;
+  title: string;
+  track: 'CCNA' | 'CCNP';
+  timeLimitMinutes: number;
+  passingScore: number;
+  domains: string[];
+  questions: ExamQuestion[];
 }
 
 export interface PearsonVueScoreReport {

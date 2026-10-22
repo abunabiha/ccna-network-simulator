@@ -178,7 +178,7 @@ classDiagram
 | **FR-17** | Visual Host IP & Gateway GUI | Dialog grafis untuk mengatur IPv4/IPv6, Subnet Mask, Gateway, DNS, dan mode Static/DHCP pada PC tanpa CLI. |
 | **FR-18** | Free Sandbox Mode | Mode kanvas kosong bersih (*zero-state*) untuk perancangan topologi bebas dari nol. |
 | **FR-19** | Live Physical Device Connector | Jembatan ke antarmuka fisik lokal (Host NIC Bridging), direct SSH/Telnet ke hardware, dan live ICMP probe. |
-| **FR-20** | Pearson VUE CCNA Exam Engine | Simulator ujian resmi dengan timer 120 menit, Multiple Choice, Drag-and-Drop graf bipartit, dan Simlet CLI interaktif. |
+| **FR-20** | Pearson VUE Multi-Certification Exam Engine | Simulator ujian resmi dengan timer adaptif (90-120 menit), Multiple Choice (Single/Multi), Drag-and-Drop graf bipartit, dan Simlet CLI interaktif yang mendukung 3 blueprint sertifikasi: 200-301 CCNA v1.1, 350-401 ENCOR v1.2, dan 300-410 ENARSI v1.1 berskala skor Cisco 300–1000. |
 | **FR-21** | Command History Navigation | Navigasi riwayat perintah menggunakan panah atas/bawah (`ArrowUp`/`ArrowDown`) dan shortcut Emacs (`Ctrl+P`/`Ctrl+N`), preservasi draf pengetikan, dan kursor otomatis di akhir baris (*retyping*). |
 | **FR-22** | Cisco Discovery Protocol (CDP) | Simulasi penuh CDP v2 global (`cdp run`, `cdp timer/holdtime`), antarmuka (`cdp enable`), dan verifikasi (`show cdp neighbors [detail]`). |
 | **FR-23** | Layer 3 Switch Cisco IOS-XE 17.12.6+ | Emulasi Multilayer Switch Catalyst 9300L dengan image Cisco IOS-XE 17.12.6, SVI, routed ports (`no switchport`), dan routing LPM. |
